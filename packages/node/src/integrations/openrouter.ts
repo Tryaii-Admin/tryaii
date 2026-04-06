@@ -184,7 +184,7 @@ export class OpenRouterIntegration {
       throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as Record<string, any>;
     const content = data.choices?.[0]?.message?.content ?? '';
     const usage = data.usage ?? {};
 
@@ -194,7 +194,7 @@ export class OpenRouterIntegration {
       openrouterModel,
       routeReasoning: reasoning,
       usage,
-      rawResponse: data,
+      rawResponse: data as Record<string, unknown>,
     };
   }
 

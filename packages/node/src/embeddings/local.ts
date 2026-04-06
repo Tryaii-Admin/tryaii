@@ -65,7 +65,7 @@ export class LocalEmbeddingProvider extends BaseEmbeddingProvider {
     let pipelineFn: Function;
     try {
       const mod = await import('@xenova/transformers');
-      pipelineFn = mod.pipeline ?? mod.default?.pipeline;
+      pipelineFn = mod.pipeline ?? (mod as any).default?.pipeline;
     } catch {
       throw new Error(
         '@xenova/transformers is required for local embeddings. ' +
