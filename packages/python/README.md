@@ -18,11 +18,14 @@ print(result.best_reasoning) # "Quality: 0.94 on [HumanEval (93%), SWE-bench (87
 pip install tryaii-dre
 ```
 
-Optional extras:
+The base install includes local embeddings via `sentence-transformers` — no API keys needed.
+
+Optional extras for provider integrations:
 ```bash
-pip install tryaii-dre[openrouter]  # Active routing via OpenRouter
-pip install tryaii-dre[openai]      # Use OpenAI embeddings instead of local
-pip install tryaii-dre[all]         # Everything
+pip install tryaii-dre[openrouter]  # Route & call models via OpenRouter (adds httpx)
+pip install tryaii-dre[openai]      # Use OpenAI embeddings instead of local (adds openai)
+pip install tryaii-dre[redis]       # Redis-backed embedding cache (adds redis)
+pip install tryaii-dre[all]         # All optional integrations
 ```
 
 ## Quick Start

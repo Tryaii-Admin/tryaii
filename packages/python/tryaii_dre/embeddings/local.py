@@ -47,7 +47,7 @@ class LocalEmbeddingProvider(BaseEmbeddingProvider):
         except ImportError:
             raise ImportError(
                 "sentence-transformers is required for local embeddings. "
-                "Install it with: pip install tryaii-dre[embeddings]"
+                "Install it with: pip install sentence-transformers"
             )
 
         self._model = SentenceTransformer(self._model_name, device=self._device)

@@ -37,3 +37,38 @@ jobs:
 
       - name: Run tests
         run: pytest tests/ -v --tb=short
+
+  publish-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/python
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: pip install build twine
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Validate distributions
+        run: twine check dist/*
+
+      - name: Smoke test -- install wheel in clean env
+        run: |
+          python -m venv /tmp/smoke-env
+          /tmp/smoke-env/bin/pip install dist/*.whl
+          /tmp/smoke-env/bin/python -c "
+          from tryaii_dre import Router, Priorities
+          router = Router()
+          result = router.route('Write a Python function to merge sorted arrays')
+          assert result.best_model, 'No model returned'
+          print(f'Smoke test passed: best_model={result.best_model}')
+          "

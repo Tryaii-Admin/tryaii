@@ -1,7 +1,10 @@
 """Tests for the main Router class.
 
-Uses keyword-only routing to avoid requiring sentence-transformers in CI.
+Includes both keyword-only tests (fast, deterministic) and embedding-based
+tests that exercise the default Router() path advertised in the README.
 """
+
+import pytest
 
 from tryaii_dre import Priorities, Router
 from tryaii_dre.config import TryaiiDreConfig
@@ -108,3 +111,31 @@ class TestRouterCustomRegistry:
         )
         assert result.best_model == ""
         assert len(result.scores) == 0
+
+
+class TestRouterEmbedding:
+    """Test the default embedding-based routing path (the advertised README flow)."""
+
+    @pytest.fixture(autouse=True)
+    def _router(self):
+        # Default Router() -- uses local sentence-transformers embeddings
+        self.router = Router()
+
+    def test_default_route_returns_result(self):
+        """Smoke test: the README quickstart path must work out of the box."""
+        result = self.router.route("Write a Python function to merge sorted arrays")
+        assert result.best_model != ""
+        assert len(result.scores) > 0
+        assert result.classification is not None
+
+    def test_default_route_with_priorities(self):
+        result = self.router.route(
+            "Explain quantum entanglement simply",
+            priorities=Priorities(quality=5, cost=1, speed=2),
+        )
+        assert result.best_model != ""
+
+    def test_embedding_classification_has_confidence(self):
+        result = self.router.route("Debug this React component")
+        assert result.classification is not None
+        assert result.classification.confidence > 0
