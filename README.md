@@ -7,7 +7,7 @@
 | Package | Install | Description |
 |---------|---------|-------------|
 | [Python core](packages/python/) | `pip install tryaii-dre` | Routing engine for Python |
-| [Node core](packages/node/) | `npm install tryaii-dre` | TypeScript port (coming soon) |
+| [Node core](packages/node/) | `npm install tryaii-dre` | TypeScript routing engine |
 | [Python SDK](packages/sdk/python/) | `pip install tryaii-dre-sdk` | High-level client + middleware |
 | [Node SDK](packages/sdk/node/) | `npm install tryaii-dre-sdk` | Express/Next.js middleware (coming soon) |
 
@@ -55,7 +55,7 @@ tryaii-dre/
     centroids/             Pre-computed embedding centroids
   packages/
     python/                pip install tryaii-dre
-    node/                  npm install tryaii-dre (coming soon)
+    node/                  npm install tryaii-dre
     sdk/                   Higher-level wrappers
   scripts/                 Build and sync tooling
 ```

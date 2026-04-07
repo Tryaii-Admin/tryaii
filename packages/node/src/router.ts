@@ -13,7 +13,7 @@
 import { BenchmarkRegistry, BenchmarkDefinition } from './benchmarks/registry.js';
 import { NormalizationRange } from './scoring/benchmarks.js';
 import { CentroidLoader } from './centroids/loader.js';
-import { ClassificationResult } from './classifiers/base.js';
+import { BaseClassifier, ClassificationResult } from './classifiers/base.js';
 import { EmbeddingClassifier } from './classifiers/embedding.js';
 import { HybridClassifier } from './classifiers/hybrid.js';
 import { KeywordClassifier } from './classifiers/keyword.js';
@@ -86,7 +86,7 @@ export class Router {
   private _benchmarkRegistry: BenchmarkRegistry;
   private _scoringEngine: ScoringEngine;
   private _embeddingProvider: BaseEmbeddingProvider | null;
-  private _classifier: HybridClassifier | null = null;
+  private _classifier: BaseClassifier | null = null;
 
   constructor(opts?: {
     config?: Partial<TryaiiDreConfig>;
@@ -111,8 +111,15 @@ export class Router {
   }
 
   /** Lazy-initialize the classifier on first use. */
-  private _ensureClassifier(): HybridClassifier {
+  private _ensureClassifier(): BaseClassifier {
     if (this._classifier !== null) return this._classifier;
+
+    const keywordClassifier = new KeywordClassifier();
+
+    if (this._config.classifier === 'keyword') {
+      this._classifier = keywordClassifier;
+      return this._classifier;
+    }
 
     // Initialize embedding provider
     if (this._embeddingProvider === null) {
@@ -127,30 +134,20 @@ export class Router {
       centroidFilePath(this._config),
     );
 
-    // Build classifier based on config
-    const keywordClassifier = new KeywordClassifier();
-
-    if (this._config.classifier === 'keyword') {
-      this._classifier = new HybridClassifier(
-        null,
-        keywordClassifier,
-      );
-    } else {
-      const embeddingClassifier = new EmbeddingClassifier(
-        this._embeddingProvider,
-        centroidLoader,
-        {
-          embeddingCacheSize: this._config.cache.embeddingCacheSize,
-          classificationCacheSize: this._config.cache.classificationCacheSize,
-          ttlSeconds: this._config.cache.ttlSeconds,
-        },
-      );
-      this._classifier = new HybridClassifier(
-        embeddingClassifier,
-        keywordClassifier,
-        this._config.confidenceThreshold,
-      );
-    }
+    const embeddingClassifier = new EmbeddingClassifier(
+      this._embeddingProvider,
+      centroidLoader,
+      {
+        embeddingCacheSize: this._config.cache.embeddingCacheSize,
+        classificationCacheSize: this._config.cache.classificationCacheSize,
+        ttlSeconds: this._config.cache.ttlSeconds,
+      },
+    );
+    this._classifier = new HybridClassifier(
+      embeddingClassifier,
+      keywordClassifier,
+      this._config.confidenceThreshold,
+    );
 
     return this._classifier;
   }

@@ -1,8 +1,8 @@
 # tryaii-dre
 
-Embedding-based AI Model Router for Node.js / TypeScript.
+AI model router for Node.js and TypeScript.
 
-Understands your prompt semantically and routes to the best AI model based on benchmarks, cost, speed, and quality priorities.
+Ranks models using benchmark performance, pricing, latency, and your quality/cost/speed priorities.
 
 ## Installation
 
@@ -10,57 +10,33 @@ Understands your prompt semantically and routes to the best AI model based on be
 npm install tryaii-dre
 ```
 
-For local embedding support (optional):
-
-```bash
-npm install tryaii-dre @xenova/transformers
-```
-
 ## Quick Start
 
 ```typescript
-import { Router, Priorities } from 'tryaii-dre';
+import { Priorities, Router } from 'tryaii-dre';
 
-// Create a router (loads 35+ models with benchmark data)
+// Default startup is keyword-based and requires no extra dependencies.
 const router = new Router();
 
-// Route using keyword classification (fast, no external deps)
-const result = router.routeKeywordOnly('Write a Python function to sort an array');
+const result = router.route('Write a Python function to sort an array');
 console.log(result.bestModel);     // e.g., "gpt-5.2"
 console.log(result.scores[0]);     // Full scoring breakdown
 
 // Route with custom priorities
-const budgetResult = router.routeKeywordOnly(
+const budgetResult = router.route(
   'Explain quantum computing',
   { priorities: Priorities.budget() }  // Favor cheaper models
 );
 ```
 
-## Classification Strategies
+## Default Behavior
 
-### Keyword (default, zero deps)
+`Router` defaults to keyword classification so an npm install works immediately with no model downloads or API keys.
 
-Uses pattern matching for instant classification. No model download needed.
+If you want full control, you can also call `routeKeywordOnly()` directly:
 
 ```typescript
 const result = router.routeKeywordOnly('Debug my Python code');
-```
-
-### Embedding (semantic understanding)
-
-Uses `@xenova/transformers` for cosine-similarity-based classification against benchmark centroids.
-
-```typescript
-const router = new Router({ config: { classifier: 'embedding' } });
-const result = router.route('Optimize this recursive algorithm');
-```
-
-### Hybrid (recommended)
-
-Tries embedding first, falls back to keyword if confidence is low.
-
-```typescript
-const router = new Router({ config: { classifier: 'hybrid' } });
 ```
 
 ## Priorities
@@ -124,8 +100,7 @@ router.route('prompt', { filterCapability: 'vision' });
 Route prompts and call the selected model through OpenRouter:
 
 ```typescript
-import { Router } from 'tryaii-dre';
-import { OpenRouterIntegration } from 'tryaii-dre/integrations';
+import { OpenRouterIntegration, Router } from 'tryaii-dre';
 
 const router = new Router();
 const openrouter = new OpenRouterIntegration(router, {
@@ -156,7 +131,6 @@ User Prompt
 
 - Node.js >= 18.0.0
 - TypeScript >= 5.3 (for development)
-- `@xenova/transformers` (optional, for embedding classification)
 
 ## License
 

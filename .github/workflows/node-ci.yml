@@ -37,3 +37,32 @@ jobs:
 
       - name: Run tests
         run: npx vitest run
+
+  publish-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/node
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify dist artifacts
+        run: npm run verify:dist
+
+      - name: Pack and check tarball
+        run: |
+          npm pack
+          tar tzf tryaii-dre-*.tgz | head -20
+          echo "Pack succeeded"

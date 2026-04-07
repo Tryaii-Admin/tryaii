@@ -30,7 +30,6 @@ export interface CacheConfig {
  * Main configuration object.
  *
  * Can be passed to Router() to override defaults.
- * Reads from process.env if not set explicitly.
  */
 export interface TryaiiDreConfig {
   /** Embedding model name (sentence-transformers / HuggingFace model). */
@@ -58,12 +57,12 @@ export interface TryaiiDreConfig {
   openrouterApiKey: string | undefined;
 }
 
-/** Create a TryaiiDreConfig with defaults, reading from process.env. */
+/** Create a TryaiiDreConfig with safe defaults. */
 export function createDefaultConfig(overrides?: Partial<TryaiiDreConfig>): TryaiiDreConfig {
   return {
-    embeddingModel: process.env.TRYAII_DRE_EMBEDDING_MODEL ?? DEFAULT_EMBEDDING_MODEL,
-    dataDir: process.env.TRYAII_DRE_DATA_DIR ?? DEFAULT_DATA_DIR,
-    classifier: 'hybrid',
+    embeddingModel: DEFAULT_EMBEDDING_MODEL,
+    dataDir: DEFAULT_DATA_DIR,
+    classifier: 'keyword',
     confidenceThreshold: 0.05,
     cache: {
       embeddingCacheSize: 300,
@@ -71,8 +70,8 @@ export function createDefaultConfig(overrides?: Partial<TryaiiDreConfig>): Tryai
       ttlSeconds: 300,
     },
     strategy: 'balanced',
-    openaiApiKey: process.env.OPENAI_API_KEY,
-    openrouterApiKey: process.env.OPENROUTER_API_KEY,
+    openaiApiKey: undefined,
+    openrouterApiKey: undefined,
     ...overrides,
   };
 }

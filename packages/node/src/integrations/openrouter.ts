@@ -117,8 +117,14 @@ export class OpenRouterIntegration {
     },
   ) {
     this._router = router;
-    this._apiKey = opts?.apiKey ?? process.env.OPENROUTER_API_KEY ?? '';
+    this._apiKey = opts?.apiKey ?? '';
     this._appName = opts?.appName ?? 'tryaii-dre';
+  }
+
+  private _ensureApiKey(): void {
+    if (!this._apiKey) {
+      throw new Error('OpenRouterIntegration requires an explicit apiKey');
+    }
   }
 
   /** Convert TryAii-DRE model ID to OpenRouter slug. */
@@ -134,6 +140,8 @@ export class OpenRouterIntegration {
    * @returns OpenRouterResponse with content and routing info.
    */
   async chat(prompt: string, opts?: OpenRouterChatOptions): Promise<OpenRouterResponse> {
+    this._ensureApiKey();
+
     let modelId: string;
     let reasoning: string;
 
@@ -204,6 +212,8 @@ export class OpenRouterIntegration {
    * Yields content chunks as they arrive.
    */
   async *stream(prompt: string, opts?: OpenRouterChatOptions): AsyncGenerator<string> {
+    this._ensureApiKey();
+
     let modelId: string;
 
     if (opts?.overrideModel) {

@@ -16,6 +16,9 @@
 // Core router
 export { Router, RouteResult, RouteOptions, routeResultTopK, routeResultBestScore, routeResultBestReasoning } from './router.js';
 
+// Integrations
+export { OpenRouterIntegration, OpenRouterResponse, OpenRouterChatOptions, MODEL_ID_TO_OPENROUTER } from './integrations/index.js';
+
 // Configuration
 export { TryaiiDreConfig, CacheConfig, createDefaultConfig, DEFAULT_DATA_DIR, DEFAULT_EMBEDDING_MODEL } from './config.js';
 

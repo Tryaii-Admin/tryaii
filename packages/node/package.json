@@ -1,7 +1,7 @@
 {
   "name": "tryaii-dre",
   "version": "0.1.0",
-  "description": "Embedding-based AI Model Router - understands your prompt semantically and routes to the best model",
+  "description": "AI model router for Node.js and TypeScript with benchmark, cost, and speed-based ranking",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,17 +9,22 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./integrations": {
+      "import": "./dist/integrations/index.js",
+      "types": "./dist/integrations/index.d.ts"
     }
   },
   "files": [
     "dist",
-    "src/registry/presets/*.json",
-    "src/centroids/data/*.json"
+    "SECURITY.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node ./scripts/copy-assets.mjs",
+    "prepack": "npm run build && npm run verify:dist",
     "test": "vitest run",
     "test:watch": "vitest",
+    "verify:dist": "node ./scripts/verify-dist.mjs",
     "lint": "eslint src/ --ext .ts"
   },
   "keywords": [
@@ -31,6 +36,15 @@
   ],
   "author": "TryAii",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tamirblu/tryaii-dre.git",
+    "directory": "packages/node"
+  },
+  "homepage": "https://github.com/tamirblu/tryaii-dre/tree/main/packages/node#readme",
+  "bugs": {
+    "url": "https://github.com/tamirblu/tryaii-dre/issues"
+  },
   "dependencies": {},
   "optionalDependencies": {
     "@xenova/transformers": "^2.17.0"
