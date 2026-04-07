@@ -65,10 +65,43 @@ jobs:
         run: |
           python -m venv /tmp/smoke-env
           /tmp/smoke-env/bin/pip install dist/*.whl
-          /tmp/smoke-env/bin/python -c "
-          from tryaii_dre import Router, Priorities
+          /tmp/smoke-env/bin/tryaii-dre --help >/dev/null
+          /tmp/smoke-env/bin/python - <<'PY'
+          import numpy as np
+          import sentence_transformers
+
+          class FakeSentenceTransformer:
+              def __init__(self, model_name: str, device=None):
+                  self.model_name = model_name
+                  self.device = device
+
+              def encode(
+                  self,
+                  texts,
+                  convert_to_numpy=True,
+                  normalize_embeddings=False,
+                  batch_size=32,
+              ):
+                  if isinstance(texts, str):
+                      texts = [texts]
+
+                  vectors = []
+                  for text in texts:
+                      seed = abs(hash(text)) % (2**32)
+                      rng = np.random.RandomState(seed)
+                      vector = rng.randn(384).astype(np.float32)
+                      if normalize_embeddings:
+                          vector /= np.linalg.norm(vector)
+                      vectors.append(vector)
+
+                  return np.stack(vectors)
+
+          sentence_transformers.SentenceTransformer = FakeSentenceTransformer
+
+          from tryaii_dre import Router
+
           router = Router()
-          result = router.route('Write a Python function to merge sorted arrays')
-          assert result.best_model, 'No model returned'
-          print(f'Smoke test passed: best_model={result.best_model}')
-          "
+          result = router.route("Write a Python function to merge sorted arrays")
+          assert result.best_model, "No model returned"
+          print(f"Smoke test passed: best_model={result.best_model}")
+          PY

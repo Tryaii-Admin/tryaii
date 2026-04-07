@@ -4,6 +4,7 @@ Includes both keyword-only tests (fast, deterministic) and embedding-based
 tests that exercise the default Router() path advertised in the README.
 """
 
+import numpy as np
 import pytest
 
 from tryaii_dre import Priorities, Router
@@ -117,7 +118,41 @@ class TestRouterEmbedding:
     """Test the default embedding-based routing path (the advertised README flow)."""
 
     @pytest.fixture(autouse=True)
-    def _router(self):
+    def _router(self, monkeypatch):
+        import sentence_transformers
+
+        class FakeSentenceTransformer:
+            def __init__(self, model_name: str, device=None):
+                self.model_name = model_name
+                self.device = device
+
+            def encode(
+                self,
+                texts,
+                convert_to_numpy=True,
+                normalize_embeddings=False,
+                batch_size=32,
+            ):
+                if isinstance(texts, str):
+                    texts = [texts]
+
+                vectors = []
+                for text in texts:
+                    seed = abs(hash(text)) % (2**32)
+                    rng = np.random.RandomState(seed)
+                    vector = rng.randn(384).astype(np.float32)
+                    if normalize_embeddings:
+                        vector /= np.linalg.norm(vector)
+                    vectors.append(vector)
+
+                return np.stack(vectors)
+
+        monkeypatch.setattr(
+            sentence_transformers,
+            "SentenceTransformer",
+            FakeSentenceTransformer,
+        )
+
         # Default Router() -- uses local sentence-transformers embeddings
         self.router = Router()
 

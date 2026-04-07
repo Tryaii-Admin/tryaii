@@ -18,9 +18,10 @@ print(result.best_reasoning) # "Quality: 0.94 on [HumanEval (93%), SWE-bench (87
 pip install tryaii-dre
 ```
 
-The base install includes local embeddings via `sentence-transformers` — no API keys needed.
+The base install includes local embeddings via `sentence-transformers` - no API keys needed.
 
 Optional extras for provider integrations:
+
 ```bash
 pip install tryaii-dre[openrouter]  # Route & call models via OpenRouter (adds httpx)
 pip install tryaii-dre[openai]      # Use OpenAI embeddings instead of local (adds openai)
@@ -64,6 +65,26 @@ openrouter = OpenRouterIntegration(router, api_key="sk-or-...")
 response = openrouter.chat("Write a quicksort implementation")
 print(response.model_used)  # Auto-selected best model
 print(response.content)     # Actual response
+```
+
+## OpenAI Embeddings
+
+```python
+from tryaii_dre import Router
+from tryaii_dre.embeddings import OpenAIEmbeddingProvider
+
+router = Router(
+    embedding_provider=OpenAIEmbeddingProvider(),
+)
+
+result = router.route("Summarize this architecture decision")
+print(result.best_model)
+```
+
+Install the OpenAI client first:
+
+```bash
+pip install tryaii-dre[openai]
 ```
 
 ## License
