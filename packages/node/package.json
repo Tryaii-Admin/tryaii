@@ -16,8 +16,7 @@
     }
   },
   "files": [
-    "dist",
-    "SECURITY.md"
+    "dist"
   ],
   "scripts": {
     "build": "tsc && node ./scripts/copy-assets.mjs",

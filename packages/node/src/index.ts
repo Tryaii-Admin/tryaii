@@ -8,7 +8,7 @@
  *   import { Router } from 'tryaii-dre';
  *
  *   const router = new Router();
- *   const result = router.routeKeywordOnly('Write a Python function to merge sorted arrays');
+ *   const result = await router.route('Write a Python function to merge sorted arrays');
  *   console.log(result.bestModel);
  *   console.log(result.scores);
  */
@@ -33,9 +33,7 @@ export { BenchmarkNormalizer, NormalizationRange, NORMALIZATION_RANGES } from '.
 
 // Classifiers
 export { BaseClassifier, ClassificationResult, emptyClassificationResult, topBenchmarks } from './classifiers/base.js';
-export { KeywordClassifier } from './classifiers/keyword.js';
 export { EmbeddingClassifier } from './classifiers/embedding.js';
-export { HybridClassifier } from './classifiers/hybrid.js';
 
 // Embeddings
 export { BaseEmbeddingProvider } from './embeddings/base.js';
@@ -50,4 +48,4 @@ export { BenchmarkRegistry, BenchmarkDefinition } from './benchmarks/registry.js
 export { STANDARD_BENCHMARKS } from './benchmarks/standard.js';
 
 // Types
-export type { LatencyTier, ClassifierStrategy, ScoringStrategy, ModelData, ModelsJson, CentroidsJson, TrainingQueriesJson } from './types.js';
+export type { LatencyTier, ScoringStrategy, ModelData, ModelsJson, CentroidsJson, TrainingQueriesJson } from './types.js';

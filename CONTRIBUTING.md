@@ -10,7 +10,7 @@ pip install -e ".[dev]"
 pytest tests/ -v
 ```
 
-### Node package (coming soon)
+### Node package
 
 ```bash
 cd packages/node
@@ -35,7 +35,7 @@ When you update shared data, run `python scripts/sync-shared.py` to copy it into
 cd packages/python
 pytest tests/ -v
 
-# Node (coming soon)
+# Node
 cd packages/node
 npm test
 ```

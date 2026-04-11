@@ -29,10 +29,7 @@ def cmd_route(args):
         speed=args.speed,
     )
 
-    if args.keyword_only:
-        result = router.route_keyword_only(args.prompt, priorities=priorities, top_k=args.top_k)
-    else:
-        result = router.route(args.prompt, priorities=priorities, top_k=args.top_k)
+    result = router.route(args.prompt, priorities=priorities, top_k=args.top_k)
 
     print(f"\nPrompt: {args.prompt}")
     print(f"Category: {result.classification.broad_category} > {result.classification.subcategory}")
@@ -165,7 +162,6 @@ def cli():
     route_parser.add_argument("--cost", type=int, default=3, help="Cost priority (1-5)")
     route_parser.add_argument("--speed", type=int, default=3, help="Speed priority (1-5)")
     route_parser.add_argument("--top-k", type=int, default=5, help="Number of recommendations")
-    route_parser.add_argument("--keyword-only", action="store_true", help="Use keyword classifier only")
 
     # setup
     setup_parser = subparsers.add_parser("setup", help="Initialize centroids")

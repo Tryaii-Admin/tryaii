@@ -5,18 +5,20 @@
  *   import { Router } from 'tryaii-dre';
  *
  *   const router = new Router();
- *   const result = router.route('Write a Python function to merge sorted arrays');
+ *   const result = await router.route('Write a Python function to merge sorted arrays');
  *   console.log(result.bestModel);   // e.g., "gpt-5.2"
  *   console.log(result.scores);      // Top models with scores and reasoning
+ *
+ * The default `LocalEmbeddingProvider` is async-only, so `route()` itself is
+ * async. Callers that have injected a sync embedding provider can use the
+ * niche `routeSync()` method for a blocking call.
  */
 
 import { BenchmarkRegistry, BenchmarkDefinition } from './benchmarks/registry.js';
 import { NormalizationRange } from './scoring/benchmarks.js';
 import { CentroidLoader } from './centroids/loader.js';
-import { BaseClassifier, ClassificationResult } from './classifiers/base.js';
+import { ClassificationResult } from './classifiers/base.js';
 import { EmbeddingClassifier } from './classifiers/embedding.js';
-import { HybridClassifier } from './classifiers/hybrid.js';
-import { KeywordClassifier } from './classifiers/keyword.js';
 import { TryaiiDreConfig, createDefaultConfig, centroidFilePath } from './config.js';
 import { BaseEmbeddingProvider } from './embeddings/base.js';
 import { LocalEmbeddingProvider } from './embeddings/local.js';
@@ -86,7 +88,8 @@ export class Router {
   private _benchmarkRegistry: BenchmarkRegistry;
   private _scoringEngine: ScoringEngine;
   private _embeddingProvider: BaseEmbeddingProvider | null;
-  private _classifier: BaseClassifier | null = null;
+  private _centroidLoader: CentroidLoader | null = null;
+  private _classifier: EmbeddingClassifier | null = null;
 
   constructor(opts?: {
     config?: Partial<TryaiiDreConfig>;
@@ -110,43 +113,47 @@ export class Router {
     this._embeddingProvider = opts?.embeddingProvider ?? null;
   }
 
-  /** Lazy-initialize the classifier on first use. */
-  private _ensureClassifier(): BaseClassifier {
-    if (this._classifier !== null) return this._classifier;
+  /**
+   * Lazy-initialize the embedding provider + centroid loader.
+   *
+   * The loader is stored on `this` so that `addBenchmark()` mutates the
+   * same instance the classifier reads from -- custom benchmarks added
+   * via the Router become visible to subsequent `route()` calls without
+   * re-instantiating anything.
+   */
+  private _ensureCentroidLoader(): CentroidLoader {
+    if (this._centroidLoader !== null) return this._centroidLoader;
 
-    const keywordClassifier = new KeywordClassifier();
-
-    if (this._config.classifier === 'keyword') {
-      this._classifier = keywordClassifier;
-      return this._classifier;
-    }
-
-    // Initialize embedding provider
     if (this._embeddingProvider === null) {
       this._embeddingProvider = new LocalEmbeddingProvider(
         `Xenova/${this._config.embeddingModel}`,
       );
     }
 
-    // Initialize centroid loader
-    const centroidLoader = new CentroidLoader(
+    this._centroidLoader = new CentroidLoader(
       this._embeddingProvider,
       centroidFilePath(this._config),
     );
 
-    const embeddingClassifier = new EmbeddingClassifier(
-      this._embeddingProvider,
+    return this._centroidLoader;
+  }
+
+  /** Lazy-initialize the embedding classifier on first use. */
+  private _ensureClassifier(): EmbeddingClassifier {
+    if (this._classifier !== null) return this._classifier;
+
+    const centroidLoader = this._ensureCentroidLoader();
+    // `_embeddingProvider` is non-null after _ensureCentroidLoader returns.
+    const provider = this._embeddingProvider as BaseEmbeddingProvider;
+
+    this._classifier = new EmbeddingClassifier(
+      provider,
       centroidLoader,
       {
         embeddingCacheSize: this._config.cache.embeddingCacheSize,
         classificationCacheSize: this._config.cache.classificationCacheSize,
         ttlSeconds: this._config.cache.ttlSeconds,
       },
-    );
-    this._classifier = new HybridClassifier(
-      embeddingClassifier,
-      keywordClassifier,
-      this._config.confidenceThreshold,
     );
 
     return this._classifier;
@@ -155,19 +162,50 @@ export class Router {
   /**
    * Route a prompt to the best AI model.
    *
+   * Async by default -- works with any embedding provider, including the
+   * default async `LocalEmbeddingProvider`. For a blocking call backed by a
+   * sync provider, see `routeSync()`.
+   *
    * @param prompt - The user's input text to classify and route.
    * @param opts - Routing options (priorities, filters, topK).
    * @returns RouteResult with the best model and full scoring breakdown.
    */
-  route(prompt: string, opts?: RouteOptions): RouteResult {
+  async route(prompt: string, opts?: RouteOptions): Promise<RouteResult> {
+    const classifier = this._ensureClassifier();
+    const classification = await classifier.classifyAsync(prompt);
+    return this._buildResult(classification, opts);
+  }
+
+  /**
+   * Synchronous version of `route()`.
+   *
+   * Requires the injected embedding provider to support sync calls
+   * (`supportsSync === true`). Throws otherwise -- the default
+   * `LocalEmbeddingProvider` is async-only, so calling `routeSync()` on a
+   * default `Router` will fail. Inject a sync provider (e.g. a custom
+   * cached provider) to use this path.
+   */
+  routeSync(prompt: string, opts?: RouteOptions): RouteResult {
+    const classifier = this._ensureClassifier();
+    if (this._embeddingProvider !== null && !this._embeddingProvider.supportsSync) {
+      throw new Error(
+        `routeSync() requires an embedding provider that supports sync calls. ` +
+          `${this._embeddingProvider.constructor.name} is async-only -- ` +
+          `use route() (async) instead, or inject a sync provider.`,
+      );
+    }
+    const classification = classifier.classify(prompt);
+    return this._buildResult(classification, opts);
+  }
+
+  /** Shared post-classification path: filter models, score, return RouteResult. */
+  private _buildResult(
+    classification: ClassificationResult,
+    opts?: RouteOptions,
+  ): RouteResult {
     const priorities = opts?.priorities ?? DEFAULT_PRIORITIES;
     const topK = opts?.topK ?? 5;
 
-    // 1. Classify the prompt
-    const classifier = this._ensureClassifier();
-    const classification = classifier.classify(prompt);
-
-    // 2. Get available models (with optional filters)
     let models = this._registry.allModels;
     if (opts?.filterProvider) {
       const providerLower = opts.filterProvider.toLowerCase();
@@ -191,39 +229,8 @@ export class Router {
       };
     }
 
-    // 3. Score and rank models
     const scores = this._scoringEngine.scoreModels(
       models,
-      classification.benchmarkScores,
-      priorities,
-      topK,
-    );
-
-    const best = scores[0]?.modelId ?? '';
-
-    return {
-      bestModel: best,
-      scores,
-      classification,
-      priorities,
-    };
-  }
-
-  /**
-   * Route using only the keyword classifier (no embeddings needed).
-   *
-   * Useful for environments without @xenova/transformers installed,
-   * or when you need instant results without model loading time.
-   */
-  routeKeywordOnly(prompt: string, opts?: { priorities?: Priorities; topK?: number }): RouteResult {
-    const priorities = opts?.priorities ?? DEFAULT_PRIORITIES;
-    const topK = opts?.topK ?? 5;
-
-    const keywordClassifier = new KeywordClassifier();
-    const classification = keywordClassifier.classify(prompt);
-
-    const scores = this._scoringEngine.scoreModels(
-      this._registry.allModels,
       classification.benchmarkScores,
       priorities,
       topK,
@@ -259,20 +266,67 @@ export class Router {
   /**
    * Add a custom benchmark to the routing system.
    *
+   * Async by default -- works with any embedding provider, including the
+   * async-only `LocalEmbeddingProvider`. The new centroid is generated
+   * immediately and added to the shared centroid loader, so subsequent
+   * `route()` calls see it without any restart.
+   *
+   * For sync-provider callers who want a blocking setup step, use
+   * `addBenchmarkSync()`.
+   *
    * @param name - Benchmark name (e.g., "CustomerSupportQA").
    * @param queries - Representative prompts for this benchmark (10-20 recommended).
    * @param description - Human-readable description.
    * @param minScore - Minimum score for normalization.
    * @param maxScore - Maximum score for normalization.
    */
-  addBenchmark(
+  async addBenchmark(
+    name: string,
+    queries: string[],
+    description = '',
+    minScore = 0,
+    maxScore = 100,
+  ): Promise<void> {
+    this._registerBenchmark(name, queries, description, minScore, maxScore);
+    const loader = this._ensureCentroidLoader();
+    await loader.addBenchmarkCentroidAsync(name, queries);
+  }
+
+  /**
+   * Synchronous version of `addBenchmark()`.
+   *
+   * Requires the injected embedding provider to support sync calls
+   * (`supportsSync === true`). The default `LocalEmbeddingProvider` is
+   * async-only, so calling `addBenchmarkSync()` on a default `Router`
+   * will throw.
+   */
+  addBenchmarkSync(
     name: string,
     queries: string[],
     description = '',
     minScore = 0,
     maxScore = 100,
   ): void {
-    // Register in benchmark registry
+    this._registerBenchmark(name, queries, description, minScore, maxScore);
+    const loader = this._ensureCentroidLoader();
+    if (this._embeddingProvider !== null && !this._embeddingProvider.supportsSync) {
+      throw new Error(
+        `addBenchmarkSync() requires an embedding provider that supports sync calls. ` +
+          `${this._embeddingProvider.constructor.name} is async-only -- ` +
+          `use addBenchmark() (async) instead, or inject a sync provider.`,
+      );
+    }
+    loader.addBenchmarkCentroid(name, queries);
+  }
+
+  /** Register a benchmark in the registry and rebuild the scoring normalizer. */
+  private _registerBenchmark(
+    name: string,
+    queries: string[],
+    description: string,
+    minScore: number,
+    maxScore: number,
+  ): void {
     const benchmark: BenchmarkDefinition = {
       name,
       description,
@@ -284,18 +338,8 @@ export class Router {
     };
     this._benchmarkRegistry.register(benchmark);
 
-    // Update scoring engine normalizer
     const normalizer = this._benchmarkRegistry.getNormalizer();
     this._scoringEngine = new ScoringEngine(normalizer);
-
-    // Generate centroid if classifier is initialized
-    if (this._classifier !== null && this._embeddingProvider !== null) {
-      const centroidLoader = new CentroidLoader(
-        this._embeddingProvider,
-        centroidFilePath(this._config),
-      );
-      centroidLoader.addBenchmarkCentroid(name, queries);
-    }
   }
 
   /** Access the model registry. */

@@ -15,28 +15,36 @@ npm install tryaii-dre
 ```typescript
 import { Priorities, Router } from 'tryaii-dre';
 
-// Default startup is keyword-based and requires no extra dependencies.
+// Embedding-based classifier using @xenova/transformers.
 const router = new Router();
 
-const result = router.route('Write a Python function to sort an array');
+const result = await router.route('Write a Python function to sort an array');
 console.log(result.bestModel);     // e.g., "gpt-5.2"
 console.log(result.scores[0]);     // Full scoring breakdown
 
 // Route with custom priorities
-const budgetResult = router.route(
+const budgetResult = await router.route(
   'Explain quantum computing',
   { priorities: Priorities.budget() }  // Favor cheaper models
 );
 ```
 
-## Default Behavior
+## Embedding Provider
 
-`Router` defaults to keyword classification so an npm install works immediately with no model downloads or API keys.
+`Router` uses semantic embeddings to classify prompts against benchmark centroids. The default provider is `LocalEmbeddingProvider` (backed by `@xenova/transformers`), which runs an ONNX MiniLM model locally with no API keys. You can supply a custom provider via the `embeddingProvider` option.
 
-If you want full control, you can also call `routeKeywordOnly()` directly:
+### Sync vs. async
+
+`router.route()` is **async** -- it works with any embedding provider, including the default `LocalEmbeddingProvider` (which is async-only because the underlying ONNX runtime is async).
+
+For the niche case where you have a sync embedding provider (e.g. a custom in-process provider that doesn't do I/O), `router.routeSync()` gives you a blocking call. Calling `routeSync()` with an async-only provider throws a clear error pointing you back to `route()`.
 
 ```typescript
-const result = router.routeKeywordOnly('Debug my Python code');
+// Default async path -- works with any provider
+const result = await router.route('Write a sorting algorithm');
+
+// Sync path -- requires a sync provider (e.g. injected via the constructor)
+const sync = router.routeSync('Write a sorting algorithm');
 ```
 
 ## Priorities
@@ -68,8 +76,10 @@ router.addModel({
 
 ## Adding Custom Benchmarks
 
+`addBenchmark()` is async -- it generates a centroid for the new benchmark using the configured embedding provider, which means it works with the default async `LocalEmbeddingProvider`. Subsequent `route()` calls immediately see the new benchmark.
+
 ```typescript
-router.addBenchmark(
+await router.addBenchmark(
   'CustomerSupportQA',
   [
     'How do I reset my password?',
@@ -82,17 +92,19 @@ router.addBenchmark(
 );
 ```
 
+For sync-provider setups there's a `router.addBenchmarkSync(...)` sibling that blocks on centroid generation.
+
 ## Filtering
 
 ```typescript
 // Only Anthropic models
-router.route('prompt', { filterProvider: 'anthropic' });
+await router.route('prompt', { filterProvider: 'anthropic' });
 
 // Only models under $0.01/1k input tokens
-router.route('prompt', { filterMaxCost: 0.01 });
+await router.route('prompt', { filterMaxCost: 0.01 });
 
 // Only models with specific capabilities
-router.route('prompt', { filterCapability: 'vision' });
+await router.route('prompt', { filterCapability: 'vision' });
 ```
 
 ## OpenRouter Integration

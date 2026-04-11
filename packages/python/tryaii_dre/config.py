@@ -59,12 +59,6 @@ class TryaiiDreConfig:
         )
     )
 
-    # Classifier strategy
-    classifier: Literal["hybrid", "embedding", "keyword"] = "hybrid"
-
-    # Confidence threshold -- below this, fall back to keyword classifier
-    confidence_threshold: float = 0.05
-
     # Cache settings
     cache: CacheConfig = field(default_factory=CacheConfig)
 

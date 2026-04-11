@@ -5,9 +5,6 @@
 /** Latency tier for a model. */
 export type LatencyTier = 'very fast' | 'fast' | 'medium' | 'slow' | 'very slow';
 
-/** Classifier strategy. */
-export type ClassifierStrategy = 'hybrid' | 'embedding' | 'keyword';
-
 /** Scoring strategy preset name. */
 export type ScoringStrategy = 'balanced' | 'performance' | 'cost' | 'speed';
 

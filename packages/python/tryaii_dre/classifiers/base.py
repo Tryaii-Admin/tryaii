@@ -1,8 +1,8 @@
 """
 Abstract base classifier.
 
-All classifiers (embedding, keyword, hybrid) implement this interface,
-so they can be swapped transparently.
+The embedding classifier implements this interface. The abstraction is
+kept so custom classifiers can be plugged in for tests or research.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ class ClassificationResult:
     confidence: float = 0.0
 
     # Metadata
-    classifier_used: str = ""  # "embedding", "keyword", "hybrid"
+    classifier_used: str = ""  # always "embedding" in the current system
     cache_hit: bool = False
     processing_time_ms: float = 0.0
 

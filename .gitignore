@@ -43,3 +43,6 @@ Thumbs.db
 
 # Claude Code
 .claude/
+
+# Local-only docs
+packages/python/CENTROIDS_AND_UPDATES.md

@@ -10,7 +10,7 @@ readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 authors = [
-    { name = "TryAii", email = "dev@tryaii.com" },
+    { name = "TryAii" },
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -40,5 +40,4 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/tamirblu/Tryaii-RE"
-Documentation = "https://docs.tryaii.com/dre/sdk"
 Repository = "https://github.com/tamirblu/Tryaii-RE"

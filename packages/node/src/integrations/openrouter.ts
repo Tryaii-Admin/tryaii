@@ -153,7 +153,7 @@ export class OpenRouterIntegration {
       const prio: Priorities | undefined = opts?.priorities
         ? Priorities.fromDict(opts.priorities)
         : undefined;
-      const routeResult = this._router.route(prompt, { priorities: prio });
+      const routeResult = await this._router.route(prompt, { priorities: prio });
       modelId = routeResult.bestModel;
       reasoning = routeResult.scores[0]?.reasoning ?? '';
     }
@@ -223,7 +223,7 @@ export class OpenRouterIntegration {
       const prio: Priorities | undefined = opts?.priorities
         ? Priorities.fromDict(opts.priorities)
         : undefined;
-      const routeResult = this._router.route(prompt, { priorities: prio });
+      const routeResult = await this._router.route(prompt, { priorities: prio });
       modelId = routeResult.bestModel;
     }
 

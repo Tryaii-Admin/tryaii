@@ -20,8 +20,6 @@ from tryaii_dre.benchmarks.registry import BenchmarkRegistry
 from tryaii_dre.centroids.loader import CentroidLoader
 from tryaii_dre.classifiers.base import MAX_PROMPT_LENGTH, ClassificationResult
 from tryaii_dre.classifiers.embedding import EmbeddingClassifier
-from tryaii_dre.classifiers.hybrid import HybridClassifier
-from tryaii_dre.classifiers.keyword import KeywordClassifier
 from tryaii_dre.config import TryaiiDreConfig
 from tryaii_dre.embeddings.local import LocalEmbeddingProvider
 from tryaii_dre.registry.models import ModelRegistry
@@ -108,10 +106,10 @@ class Router:
 
         # Embedding provider (lazy -- only initialized when needed)
         self._embedding_provider = embedding_provider
-        self._classifier: Optional[HybridClassifier] = None
+        self._classifier: Optional[EmbeddingClassifier] = None
 
-    def _ensure_classifier(self) -> HybridClassifier:
-        """Lazy-initialize the classifier on first use."""
+    def _ensure_classifier(self) -> EmbeddingClassifier:
+        """Lazy-initialize the embedding classifier on first use."""
         if self._classifier is not None:
             return self._classifier
 
@@ -127,25 +125,11 @@ class Router:
             embedding_provider=self._embedding_provider,
         )
 
-        # Build classifier based on config
-        keyword_classifier = KeywordClassifier()
-
-        if self._config.classifier == "keyword":
-            self._classifier = HybridClassifier(
-                embedding_classifier=None,
-                keyword_classifier=keyword_classifier,
-            )
-        else:
-            embedding_classifier = EmbeddingClassifier(
-                embedding_provider=self._embedding_provider,
-                centroid_loader=centroid_loader,
-                config=self._config,
-            )
-            self._classifier = HybridClassifier(
-                embedding_classifier=embedding_classifier,
-                keyword_classifier=keyword_classifier,
-                confidence_threshold=self._config.confidence_threshold,
-            )
+        self._classifier = EmbeddingClassifier(
+            embedding_provider=self._embedding_provider,
+            centroid_loader=centroid_loader,
+            config=self._config,
+        )
 
         return self._classifier
 
@@ -215,44 +199,6 @@ class Router:
 
         logger.info("Route completed best=%s category=%s confidence=%.3f top_k=%d",
                      best, classification.broad_category, classification.confidence, len(scores))
-
-        return RouteResult(
-            best_model=best,
-            scores=scores,
-            classification=classification,
-            priorities=priorities,
-        )
-
-    def route_keyword_only(
-        self,
-        prompt: str,
-        priorities: Optional[Priorities] = None,
-        top_k: int = 5,
-    ) -> RouteResult:
-        """
-        Route using only the keyword classifier (no embeddings needed).
-
-        Useful for environments without sentence-transformers installed,
-        or when you need instant results without model loading time.
-        """
-        if not prompt or not isinstance(prompt, str):
-            raise ValueError("prompt must be a non-empty string")
-        if len(prompt) > MAX_PROMPT_LENGTH:
-            prompt = prompt[:MAX_PROMPT_LENGTH]
-
-        priorities = priorities or DEFAULT_PRIORITIES
-
-        keyword_classifier = KeywordClassifier()
-        classification = keyword_classifier.classify(prompt)
-
-        scores = self._scoring_engine.score_models(
-            models=self._registry.all_models,
-            benchmark_similarities=classification.benchmark_scores,
-            priorities=priorities,
-            top_k=top_k,
-        )
-
-        best = scores[0].model_id if scores else ""
 
         return RouteResult(
             best_model=best,

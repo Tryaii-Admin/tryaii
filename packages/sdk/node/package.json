@@ -7,12 +7,12 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./middleware": {
-      "import": "./dist/middleware.js",
-      "types": "./dist/middleware.d.ts"
+      "types": "./dist/middleware.d.ts",
+      "import": "./dist/middleware.js"
     }
   },
   "scripts": {
@@ -30,7 +30,7 @@
     "tryaii",
     "dre"
   ],
-  "author": "TryAii <dev@tryaii.com>",
+  "author": "Tamir Blu",
   "license": "Apache-2.0",
   "dependencies": {
     "tryaii-dre": "^0.1.0"

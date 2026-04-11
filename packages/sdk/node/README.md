@@ -1,8 +1,13 @@
 # TryAii-DRE SDK (Node)
 
 High-level Node.js/TypeScript SDK for TryAii-DRE (Differential Routing Engine).
-Provides a unified `DREClient` that wraps the core Router and OpenRouter
-integration into a single interface with full async support and Express middleware.
+Provides a unified `DREClient` that wraps model selection and the OpenRouter
+API into a single interface with full async support and Express middleware.
+
+Selection in the SDK is task-agnostic: models are ranked by overall quality
+(mean of normalized benchmark scores), cost, and speed against the user's
+priorities -- the prompt itself is not classified. For prompt-aware semantic
+routing, use the [`tryaii-dre`](../../node) core package directly.
 
 ## Installation
 
@@ -70,9 +75,9 @@ app.use(dreMiddleware({ apiKey: "sk-or-..." }));
 
 | Method | Description |
 |---|---|
-| `chat(prompt, options?)` | Route to best model and return the response |
-| `stream(prompt, options?)` | Route and stream the response as chunks |
-| `route(prompt, options?)` | Route only -- returns RouteResult, no API call |
+| `chat(prompt, options?)` | Pick the best model for your priorities and return the response |
+| `stream(prompt, options?)` | Pick the best model and stream the response as chunks |
+| `route(prompt, options?)` | Pick the best model only -- returns RouteResult, no API call |
 
 ### Types
 
@@ -83,4 +88,4 @@ app.use(dreMiddleware({ apiKey: "sk-or-..." }));
 
 ## License
 
-MIT
+Apache 2.0

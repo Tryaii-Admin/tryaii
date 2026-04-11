@@ -5,7 +5,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import type { ClassifierStrategy, ScoringStrategy } from './types.js';
+import type { ScoringStrategy } from './types.js';
 
 /** Default data directory: ~/.tryaii_dre/ */
 export const DEFAULT_DATA_DIR = join(homedir(), '.tryaii_dre');
@@ -38,12 +38,6 @@ export interface TryaiiDreConfig {
   /** Where to store centroids, cached models, etc. */
   dataDir: string;
 
-  /** Classifier strategy. */
-  classifier: ClassifierStrategy;
-
-  /** Confidence threshold -- below this, fall back to keyword classifier. */
-  confidenceThreshold: number;
-
   /** Cache settings. */
   cache: CacheConfig;
 
@@ -62,8 +56,6 @@ export function createDefaultConfig(overrides?: Partial<TryaiiDreConfig>): Tryai
   return {
     embeddingModel: DEFAULT_EMBEDDING_MODEL,
     dataDir: DEFAULT_DATA_DIR,
-    classifier: 'keyword',
-    confidenceThreshold: 0.05,
     cache: {
       embeddingCacheSize: 300,
       classificationCacheSize: 150,

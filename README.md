@@ -9,7 +9,7 @@
 | [Python core](packages/python/) | `pip install tryaii-dre` | Routing engine for Python |
 | [Node core](packages/node/) | `npm install tryaii-dre` | TypeScript routing engine |
 | [Python SDK](packages/sdk/python/) | `pip install tryaii-dre-sdk` | High-level client + middleware |
-| [Node SDK](packages/sdk/node/) | `npm install tryaii-dre-sdk` | Express/Next.js middleware (coming soon) |
+| [Node SDK](packages/sdk/node/) | `npm install tryaii-dre-sdk` | Express/Next.js middleware |
 
 ## Quick Start (Python)
 

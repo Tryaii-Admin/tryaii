@@ -43,9 +43,3 @@ result = router.route(
     filter_provider="Anthropic",
 )
 print(f"Best Anthropic model for debugging: {result.best_model}")
-print()
-
-# Keyword-only mode (no embedding model needed, instant)
-result = router.route_keyword_only("Calculate compound interest")
-print(f"Keyword-only routing: {result.best_model}")
-print(f"Category: {result.classification.broad_category} > {result.classification.subcategory}")

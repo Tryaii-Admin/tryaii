@@ -52,11 +52,35 @@ export class CentroidLoader {
    * Get centroids, loading from best available source.
    *
    * Priority: memory > user cache > bundled static > generate fresh.
+   *
+   * Synchronous path -- if regeneration is needed (non-default model,
+   * first run) and the provider is async-only, this will throw. Async
+   * callers should use `getCentroidsAsync()` instead.
    */
   getCentroids(): Record<string, number[]> {
-    if (this._centroids !== null) {
-      return this._centroids;
-    }
+    const cached = this._tryLoadFromFiles();
+    if (cached !== null) return cached;
+    return this._regenerate();
+  }
+
+  /**
+   * Async version of `getCentroids`. Works with any embedding provider --
+   * if centroid regeneration is needed, routes through the provider's
+   * async path.
+   */
+  async getCentroidsAsync(): Promise<Record<string, number[]>> {
+    const cached = this._tryLoadFromFiles();
+    if (cached !== null) return cached;
+    return this._regenerateAsync();
+  }
+
+  /**
+   * Try memory / user cache / bundled centroid file. Returns null if none
+   * of these sources have a valid file for the current provider's model.
+   * Shared between the sync and async load paths.
+   */
+  private _tryLoadFromFiles(): Record<string, number[]> | null {
+    if (this._centroids !== null) return this._centroids;
 
     // 1. Try user's cached centroids
     if (this._userCachePath) {
@@ -75,8 +99,7 @@ export class CentroidLoader {
       return this._centroids;
     }
 
-    // 3. Generate fresh centroids (non-default model, first use)
-    return this._regenerate();
+    return null;
   }
 
   private _tryLoad(path: string): Record<string, number[]> | null {
@@ -110,6 +133,17 @@ export class CentroidLoader {
     return centroids;
   }
 
+  private async _regenerateAsync(): Promise<Record<string, number[]>> {
+    const centroids = await this._generator.generateAsync();
+
+    if (this._userCachePath) {
+      this._generator.save(centroids, this._userCachePath);
+    }
+
+    this._centroids = centroids;
+    return centroids;
+  }
+
   /**
    * Force regeneration of centroids.
    *
@@ -127,7 +161,11 @@ export class CentroidLoader {
   }
 
   /**
-   * Add a custom benchmark centroid to the existing set.
+   * Add a custom benchmark centroid to the existing set (sync).
+   *
+   * Requires a sync-capable embedding provider. Callers with async-only
+   * providers (e.g. LocalEmbeddingProvider) should use
+   * `addBenchmarkCentroidAsync()`.
    *
    * @param benchmarkName - Name of the new benchmark.
    * @param queries - Representative queries for this benchmark.
@@ -139,6 +177,23 @@ export class CentroidLoader {
     centroids[benchmarkName] = newCentroid;
 
     // Save updated centroids to user cache
+    if (this._userCachePath) {
+      this._generator.save(centroids, this._userCachePath);
+    }
+
+    return newCentroid;
+  }
+
+  /**
+   * Async version of `addBenchmarkCentroid`. Works with any provider.
+   * Mutates the in-memory centroid map so subsequent `getCentroids()` calls
+   * (including from classifiers sharing this loader) see the new benchmark.
+   */
+  async addBenchmarkCentroidAsync(benchmarkName: string, queries: string[]): Promise<number[]> {
+    const centroids = await this.getCentroidsAsync();
+    const newCentroid = await this._generator.generateFromCustomAsync(benchmarkName, queries);
+    centroids[benchmarkName] = newCentroid;
+
     if (this._userCachePath) {
       this._generator.save(centroids, this._userCachePath);
     }

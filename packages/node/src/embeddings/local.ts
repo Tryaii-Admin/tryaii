@@ -7,6 +7,12 @@
  * - ~50ms per embedding on average hardware
  *
  * @xenova/transformers is an optional dependency -- lazy-loaded on first use.
+ *
+ * This provider is async-only. The ONNX runtime exposed by
+ * @xenova/transformers returns Promises for both pipeline construction and
+ * per-call inference, so there is no honest way to offer a sync `embed()`.
+ * Use `Router.route()` (async) with this provider; `Router.routeSync()` will
+ * reject it via `supportsSync === false`.
  */
 
 import { BaseEmbeddingProvider } from './base.js';
@@ -23,7 +29,7 @@ type Pipeline = any;
  */
 export class LocalEmbeddingProvider extends BaseEmbeddingProvider {
   private _modelName: string;
-  private _pipeline: Pipeline | null = null;
+  private _extractor: Pipeline | null = null;
   private _dimension: number | null = null;
 
   constructor(modelName = 'Xenova/all-MiniLM-L6-v2') {
@@ -31,40 +37,19 @@ export class LocalEmbeddingProvider extends BaseEmbeddingProvider {
     this._modelName = modelName;
   }
 
-  private _ensureLoaded(): void {
-    if (this._pipeline !== null) return;
-
-    // Dynamic import to keep the dependency optional
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    let transformers: { pipeline: Function };
-    try {
-      // Use createRequire for ESM compatibility with dynamic optional deps
-      transformers = require('@xenova/transformers');
-    } catch {
-      throw new Error(
-        '@xenova/transformers is required for local embeddings. ' +
-          'Install it with: npm install @xenova/transformers',
-      );
-    }
-
-    // The pipeline will be stored as a promise that must be awaited
-    // Since this is a sync API, we initialize lazily using a sync-compatible pattern.
-    // For the first call we do a blocking-style initialization.
-    this._pipeline = transformers.pipeline;
-  }
-
   /**
    * Internal async initializer -- called once to set up the ONNX pipeline.
    * Returns the feature-extraction pipeline instance.
    */
   private async _getExtractor(): Promise<Pipeline> {
-    if (this._pipeline !== null && typeof this._pipeline !== 'function') {
-      return this._pipeline;
+    if (this._extractor !== null) {
+      return this._extractor;
     }
 
     let pipelineFn: Function;
     try {
       const mod = await import('@xenova/transformers');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       pipelineFn = mod.pipeline ?? (mod as any).default?.pipeline;
     } catch {
       throw new Error(
@@ -84,40 +69,22 @@ export class LocalEmbeddingProvider extends BaseEmbeddingProvider {
     // Determine dimension from a test embedding
     const testOutput = await extractor('test', { pooling: 'mean', normalize: true });
     this._dimension = testOutput.dims[testOutput.dims.length - 1];
-    this._pipeline = extractor;
+    this._extractor = extractor;
 
     return extractor;
   }
 
-  embed(text: string): number[] {
-    // Sync wrapper -- throws if not yet initialized.
-    // For first use, callers should use embedAsync() or embedBatchAsync().
-    throw new Error(
-      'LocalEmbeddingProvider.embed() is not available synchronously. ' +
-        'Use embedAsync() instead, or pre-initialize with init().',
-    );
-  }
-
-  embedBatch(texts: string[]): number[][] {
-    throw new Error(
-      'LocalEmbeddingProvider.embedBatch() is not available synchronously. ' +
-        'Use embedBatchAsync() instead, or pre-initialize with init().',
-    );
-  }
-
-  /** Initialize the model. Call this once before using embedAsync/embedBatchAsync. */
+  /** Pre-initialize the model. Optional -- the first embedAsync() call also triggers init. */
   async init(): Promise<void> {
     await this._getExtractor();
   }
 
-  /** Generate embedding for a single text (async). */
   async embedAsync(text: string): Promise<number[]> {
     const extractor = await this._getExtractor();
     const output = await extractor(text, { pooling: 'mean', normalize: true });
     return Array.from(output.data as Float32Array);
   }
 
-  /** Generate embeddings for multiple texts (async). */
   async embedBatchAsync(texts: string[]): Promise<number[][]> {
     const results: number[][] = [];
     for (const text of texts) {

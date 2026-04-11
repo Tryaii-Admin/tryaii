@@ -1,8 +1,8 @@
 /**
  * Abstract base classifier.
  *
- * All classifiers (embedding, keyword, hybrid) implement this interface,
- * so they can be swapped transparently.
+ * The embedding classifier implements this interface. The abstraction is
+ * kept so custom classifiers can be plugged in for tests or research.
  */
 
 /** Output of any classifier. */
@@ -19,7 +19,7 @@ export interface ClassificationResult {
   /** Confidence of the classification (0-1). */
   confidence: number;
 
-  /** Which classifier produced this result ("embedding", "keyword", "hybrid"). */
+  /** Which classifier produced this result (always "embedding" in the current system). */
   classifierUsed: string;
 
   /** Whether this result came from cache. */
@@ -57,12 +57,25 @@ export function topBenchmarks(result: ClassificationResult): Array<[string, numb
  */
 export abstract class BaseClassifier {
   /**
-   * Classify a prompt and return benchmark similarity scores.
+   * Classify a prompt synchronously.
+   *
+   * Implementations whose embedding backend is async-only should throw
+   * a clear error here -- callers should use `classifyAsync` instead.
    *
    * @param prompt - The user's input text.
    * @returns ClassificationResult with benchmarkScores populated.
    */
   abstract classify(prompt: string): ClassificationResult;
+
+  /**
+   * Classify a prompt asynchronously.
+   *
+   * Default implementation wraps `classify()` so sync classifiers work
+   * out of the box on the async path. Async-only classifiers must override.
+   */
+  async classifyAsync(prompt: string): Promise<ClassificationResult> {
+    return this.classify(prompt);
+  }
 
   /** Check if the classifier is initialized and ready to use. */
   abstract isReady(): boolean;

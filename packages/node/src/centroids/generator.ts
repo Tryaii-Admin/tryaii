@@ -64,6 +64,27 @@ export class CentroidGenerator {
   }
 
   /**
+   * Async version of `generate` -- routes through the provider's async path
+   * so it works with async-only providers like LocalEmbeddingProvider.
+   * Sync providers work too via the base class's default async fallback.
+   */
+  async generateAsync(trainingQueries?: Record<string, string[]>): Promise<Record<string, number[]>> {
+    if (!trainingQueries) {
+      trainingQueries = this._loadDefaultQueries();
+    }
+
+    const centroids: Record<string, number[]> = {};
+
+    for (const [benchmark, queries] of Object.entries(trainingQueries)) {
+      const embeddings = await this._provider.embedBatchAsync(queries);
+      const centroid = vectorNormalize(vectorMean(embeddings));
+      centroids[benchmark] = centroid;
+    }
+
+    return centroids;
+  }
+
+  /**
    * Generate a single centroid for a custom benchmark.
    *
    * @param benchmarkName - Name of the benchmark.
@@ -72,6 +93,15 @@ export class CentroidGenerator {
    */
   generateFromCustom(benchmarkName: string, queries: string[]): number[] {
     const embeddings = this._provider.embedBatch(queries);
+    return vectorNormalize(vectorMean(embeddings));
+  }
+
+  /**
+   * Async version of `generateFromCustom`. Works with any provider
+   * (sync via default fallback, async via its native async path).
+   */
+  async generateFromCustomAsync(benchmarkName: string, queries: string[]): Promise<number[]> {
+    const embeddings = await this._provider.embedBatchAsync(queries);
     return vectorNormalize(vectorMean(embeddings));
   }
 

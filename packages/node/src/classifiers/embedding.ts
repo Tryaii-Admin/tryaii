@@ -4,6 +4,10 @@
  * Classifies prompts by computing cosine similarity between the prompt's
  * embedding vector and pre-computed benchmark centroids. This gives a
  * semantic understanding of "what kind of task" a prompt represents.
+ *
+ * Exposes both sync (`classify`) and async (`classifyAsync`) entry points.
+ * The sync path requires an embedding provider whose `supportsSync` is true;
+ * the async path works with any provider.
  */
 
 import { createHash } from 'node:crypto';
@@ -69,27 +73,56 @@ export class EmbeddingClassifier extends BaseClassifier {
     );
   }
 
+  /**
+   * Synchronous classification. Requires the underlying provider to support
+   * `embed()` (`supportsSync === true`); otherwise the provider will throw.
+   */
   classify(prompt: string): ClassificationResult {
     const start = performance.now();
-
-    // Check classification cache
     const cacheKey = EmbeddingClassifier._hashPrompt(prompt);
-    const cached = this._classificationCache.get(cacheKey);
-    if (cached !== undefined) {
-      return {
-        ...cached,
-        cacheHit: true,
-        processingTimeMs: performance.now() - start,
-      };
-    }
 
-    // Ensure centroids are loaded
+    const cached = this._readCache(cacheKey, start);
+    if (cached !== null) return cached;
+
+    const embedding = this._getEmbeddingSync(prompt, cacheKey);
     const centroids = this._centroidLoader.getCentroids();
+    return this._scoreAndCache(cacheKey, embedding, centroids, start);
+  }
 
-    // Get prompt embedding (with caching)
-    const embedding = this._getEmbedding(prompt);
+  /**
+   * Asynchronous classification. Works with any embedding provider; sync
+   * providers route through their default async fallback in BaseEmbeddingProvider.
+   */
+  async classifyAsync(prompt: string): Promise<ClassificationResult> {
+    const start = performance.now();
+    const cacheKey = EmbeddingClassifier._hashPrompt(prompt);
 
-    // Calculate cosine similarity against each benchmark centroid
+    const cached = this._readCache(cacheKey, start);
+    if (cached !== null) return cached;
+
+    const embedding = await this._getEmbeddingAsync(prompt, cacheKey);
+    const centroids = await this._centroidLoader.getCentroidsAsync();
+    return this._scoreAndCache(cacheKey, embedding, centroids, start);
+  }
+
+  /** Try to return a cached classification result, stamped with fresh timing. */
+  private _readCache(cacheKey: string, start: number): ClassificationResult | null {
+    const cached = this._classificationCache.get(cacheKey);
+    if (cached === undefined) return null;
+    return {
+      ...cached,
+      cacheHit: true,
+      processingTimeMs: performance.now() - start,
+    };
+  }
+
+  /** Score an embedding against the given centroids, cache the result, and return it. */
+  private _scoreAndCache(
+    cacheKey: string,
+    embedding: number[],
+    centroids: Record<string, number[]>,
+    start: number,
+  ): ClassificationResult {
     const benchmarkScores: Record<string, number> = {};
     for (const [benchmarkName, centroid] of Object.entries(centroids)) {
       const similarity = cosineSimilarity(embedding, centroid);
@@ -97,7 +130,6 @@ export class EmbeddingClassifier extends BaseClassifier {
       benchmarkScores[benchmarkName] = Math.max(0.0, similarity);
     }
 
-    // Determine top category from highest-scoring benchmark
     let topBenchmark = '';
     let topScore = -1;
     for (const [name, score] of Object.entries(benchmarkScores)) {
@@ -119,18 +151,24 @@ export class EmbeddingClassifier extends BaseClassifier {
       processingTimeMs: performance.now() - start,
     };
 
-    // Cache the result
     this._classificationCache.set(cacheKey, result);
-
     return result;
   }
 
-  private _getEmbedding(text: string): number[] {
-    const cacheKey = EmbeddingClassifier._hashPrompt(text);
+  private _getEmbeddingSync(text: string, cacheKey: string): number[] {
     const cached = this._embeddingCache.get(cacheKey);
     if (cached !== undefined) return cached;
 
     const embedding = this._provider.embed(text);
+    this._embeddingCache.set(cacheKey, embedding);
+    return embedding;
+  }
+
+  private async _getEmbeddingAsync(text: string, cacheKey: string): Promise<number[]> {
+    const cached = this._embeddingCache.get(cacheKey);
+    if (cached !== undefined) return cached;
+
+    const embedding = await this._provider.embedAsync(text);
     this._embeddingCache.set(cacheKey, embedding);
     return embedding;
   }
