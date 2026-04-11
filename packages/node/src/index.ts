@@ -14,25 +14,30 @@
  */
 
 // Core router
-export { Router, RouteResult, RouteOptions, routeResultTopK, routeResultBestScore, routeResultBestReasoning } from './router.js';
+export { Router, routeResultTopK, routeResultBestScore, routeResultBestReasoning } from './router.js';
+export type { RouteResult, RouteOptions } from './router.js';
 
 // Integrations
-export { OpenRouterIntegration, OpenRouterResponse, OpenRouterChatOptions, MODEL_ID_TO_OPENROUTER } from './integrations/index.js';
+export { OpenRouterIntegration, MODEL_ID_TO_OPENROUTER } from './integrations/index.js';
+export type { OpenRouterResponse, OpenRouterChatOptions } from './integrations/index.js';
 
 // Configuration
-export { TryaiiDreConfig, CacheConfig, createDefaultConfig, DEFAULT_DATA_DIR, DEFAULT_EMBEDDING_MODEL } from './config.js';
+export { createDefaultConfig, DEFAULT_DATA_DIR, DEFAULT_EMBEDDING_MODEL } from './config.js';
+export type { TryaiiDreConfig, CacheConfig } from './config.js';
 
 // Registry
 export { ModelRegistry, ModelInfo, ModelPricing } from './registry/index.js';
 
 // Scoring
-export { ScoringEngine, ModelScore, SPEED_SCORES } from './scoring/engine.js';
+export { ScoringEngine, SPEED_SCORES } from './scoring/engine.js';
+export type { ModelScore } from './scoring/engine.js';
 export { Priorities, DEFAULT_PRIORITIES } from './scoring/priorities.js';
 export type { PrioritiesData } from './scoring/priorities.js';
 export { BenchmarkNormalizer, NormalizationRange, NORMALIZATION_RANGES } from './scoring/benchmarks.js';
 
 // Classifiers
-export { BaseClassifier, ClassificationResult, emptyClassificationResult, topBenchmarks } from './classifiers/base.js';
+export { BaseClassifier, emptyClassificationResult, topBenchmarks } from './classifiers/base.js';
+export type { ClassificationResult } from './classifiers/base.js';
 export { EmbeddingClassifier } from './classifiers/embedding.js';
 
 // Embeddings
@@ -44,7 +49,8 @@ export { CentroidGenerator } from './centroids/generator.js';
 export { CentroidLoader } from './centroids/loader.js';
 
 // Benchmarks
-export { BenchmarkRegistry, BenchmarkDefinition } from './benchmarks/registry.js';
+export { BenchmarkRegistry } from './benchmarks/registry.js';
+export type { BenchmarkDefinition } from './benchmarks/registry.js';
 export { STANDARD_BENCHMARKS } from './benchmarks/standard.js';
 
 // Types
