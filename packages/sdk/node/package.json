@@ -33,7 +33,7 @@
   "author": "TryAii <dev@tryaii.com>",
   "license": "Apache-2.0",
   "dependencies": {
-    "tryaii-dre": "file:../../node"
+    "tryaii-dre": "^0.1.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.0",
