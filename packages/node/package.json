@@ -7,12 +7,12 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./integrations": {
-      "import": "./dist/integrations/index.js",
-      "types": "./dist/integrations/index.d.ts"
+      "types": "./dist/integrations/index.d.ts",
+      "import": "./dist/integrations/index.js"
     }
   },
   "files": [
@@ -38,12 +38,12 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tamirblu/tryaii-dre.git",
+    "url": "git+https://github.com/tamirblu/Tryaii-RE.git",
     "directory": "packages/node"
   },
-  "homepage": "https://github.com/tamirblu/tryaii-dre/tree/main/packages/node#readme",
+  "homepage": "https://github.com/tamirblu/Tryaii-RE/tree/main/packages/node#readme",
   "bugs": {
-    "url": "https://github.com/tamirblu/tryaii-dre/issues"
+    "url": "https://github.com/tamirblu/Tryaii-RE/issues"
   },
   "dependencies": {},
   "optionalDependencies": {
