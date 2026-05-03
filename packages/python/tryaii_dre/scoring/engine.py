@@ -76,6 +76,13 @@ class ScoringEngine:
         Returns:
             Sorted list of ModelScore objects (highest score first).
         """
+        # TODO: parity with Node -- the TS engine in
+        # packages/node/src/scoring/engine.ts uses top-5 (not top-3) and
+        # imputes missing benchmark scores with the registry-wide median
+        # instead of silently skipping them. Without those changes, Python
+        # routing keeps the sparse-data-inflation bug documented in the
+        # repo-root CHANGELOG.md (Scoring v2 entry). Mirror when this
+        # package becomes a hot path again.
         # Use top 3 most relevant benchmarks for scoring
         top_benchmarks = sorted(
             benchmark_similarities.items(), key=lambda x: x[1], reverse=True

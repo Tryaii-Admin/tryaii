@@ -32,6 +32,51 @@ export const SPEED_SCORES: Record<string, number> = {
 };
 
 /**
+ * How many of the prompt's most-relevant benchmarks contribute to model scoring.
+ *
+ * History: was 3. Bumped to 5 alongside the median-imputation change so a
+ * single very-similar benchmark can't dominate the decision -- giving the
+ * scorer a wider, more stable view of what the prompt looks like.
+ */
+const TOP_BENCHMARKS_FOR_SCORING = 5;
+
+/**
+ * Compute the median raw benchmark score across the registry, per benchmark.
+ *
+ * Used to impute missing data: if a model has no score on a benchmark that
+ * the prompt cares about, we fill in the registry-wide median rather than
+ * silently dropping the benchmark. Dropping was the source of a real routing
+ * bug (sparse-data models inflated their own averages by erasing weak
+ * benchmarks instead of being penalised by them); imputing keeps things
+ * neutral instead of harsh.
+ *
+ * Benchmarks no model in the registry has are *omitted* from the result --
+ * the caller treats that as "truly unknown, skip" (preserves the long-standing
+ * behaviour of dropping models that don't intersect any of the prompt's top
+ * benchmarks).
+ */
+function computeBenchmarkMedians(
+  models: ModelInfo[],
+  benchmarkNames: string[],
+): Record<string, number> {
+  const medians: Record<string, number> = {};
+  for (const name of benchmarkNames) {
+    const values: number[] = [];
+    for (const m of models) {
+      const v = m.benchmarkScores[name];
+      if (v != null) values.push(v);
+    }
+    if (values.length === 0) continue; // omit -> caller skips this benchmark for this model
+    values.sort((a, b) => a - b);
+    const mid = Math.floor(values.length / 2);
+    medians[name] = values.length % 2 === 1
+      ? values[mid]
+      : (values[mid - 1] + values[mid]) / 2;
+  }
+  return medians;
+}
+
+/**
  * Scores models against a classified prompt.
  *
  * Takes benchmark similarity scores (from the classifier) and user priorities,
@@ -57,20 +102,31 @@ export class ScoringEngine {
     priorities: Priorities = DEFAULT_PRIORITIES,
     topK = 5,
   ): ModelScore[] {
-    // Use top 3 most relevant benchmarks for scoring
+    // Pick the prompt's most-relevant benchmarks. See TOP_BENCHMARKS_FOR_SCORING
+    // for why this is 5 -- short version: a wider view stops one near-perfect
+    // similarity from dominating the decision.
     const sortedBenchmarks = Object.entries(benchmarkSimilarities)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 3);
+      .slice(0, TOP_BENCHMARKS_FOR_SCORING);
 
     const topBenchmarkDict: Record<string, number> = {};
     for (const [name, score] of sortedBenchmarks) {
       topBenchmarkDict[name] = score;
     }
 
+    // Per-benchmark medians for the benchmarks we actually care about. Built
+    // once per call from the same `models` argument we're about to score
+    // against -- so adding/removing/filtering models flows through correctly
+    // without needing a separate "rebuild medians" step.
+    const benchmarkMedians = computeBenchmarkMedians(
+      models,
+      sortedBenchmarks.map(([name]) => name),
+    );
+
     const scores: ModelScore[] = [];
 
     for (const model of models) {
-      const score = this._scoreSingleModel(model, topBenchmarkDict, priorities);
+      const score = this._scoreSingleModel(model, topBenchmarkDict, benchmarkMedians, priorities);
       if (score !== null) {
         scores.push(score);
       }
@@ -100,21 +156,37 @@ export class ScoringEngine {
   private _scoreSingleModel(
     model: ModelInfo,
     topBenchmarks: Record<string, number>,
+    benchmarkMedians: Record<string, number>,
     priorities: Priorities,
   ): ModelScore | null {
     // --- Quality score ---
     let weightedQualitySum = 0;
     let totalSimilarityWeight = 0;
+    let imputedCount = 0;
+    // Only the model's *own* benchmark data goes in this list -- it powers
+    // the human-readable reasoning string, which should reflect real strengths,
+    // not registry-median guesses.
     const modelTopBenchmarks: Array<[string, number]> = [];
 
     for (const [benchmarkName, userSimilarity] of Object.entries(topBenchmarks)) {
-      const modelBenchScore = model.benchmarkScores[benchmarkName];
-      if (modelBenchScore == null) continue;
+      let rawScore = model.benchmarkScores[benchmarkName];
+      let imputed = false;
+      if (rawScore == null) {
+        const median = benchmarkMedians[benchmarkName];
+        // No model in the registry has data on this benchmark -> nothing to
+        // impute from. Falling through to `continue` here preserves the old
+        // "skip the model entirely if it intersects nothing" semantic, which
+        // is exactly what the test at line ~140 of engine.test.ts pins.
+        if (median == null) continue;
+        rawScore = median;
+        imputed = true;
+        imputedCount += 1;
+      }
 
-      const normalized = this._normalizer.normalize(benchmarkName, modelBenchScore);
+      const normalized = this._normalizer.normalize(benchmarkName, rawScore);
       weightedQualitySum += userSimilarity * normalized;
       totalSimilarityWeight += userSimilarity;
-      modelTopBenchmarks.push([benchmarkName, normalized]);
+      if (!imputed) modelTopBenchmarks.push([benchmarkName, normalized]);
     }
 
     if (totalSimilarityWeight === 0) return null;
@@ -155,6 +227,12 @@ export class ScoringEngine {
       .join(', ');
 
     let reasoning = `Quality: ${qualityScore.toFixed(2)} on [${topBenchStr}]`;
+    if (imputedCount > 0) {
+      // Tell the reader the score is partly an estimate. Useful when reading
+      // eval output and wondering why a model with thin coverage ranked here.
+      const total = Object.keys(topBenchmarks).length;
+      reasoning += ` | imputed: ${imputedCount}/${total}`;
+    }
     if (costScore > 0) {
       reasoning += ` | Cost efficiency: ${costScore.toFixed(2)}`;
     }
