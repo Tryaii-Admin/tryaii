@@ -86,6 +86,10 @@ app.use(dreMiddleware({ apiKey: "sk-or-..." }));
 - `ChatResponse` -- `{ content, modelUsed, openrouterModel, routeReasoning, usage }`
 - `ChatOptions` -- `{ priorities?, systemMessage?, temperature?, maxTokens? }`
 
+## Eval Dashboard
+
+`renderDashboard`, `DashboardSummary`, and `DashboardLinks` are re-exported from `tryaii-dre` for convenience -- import them directly from `tryaii-dre-sdk` if you'd rather not pull in the core package by name. See the [core README](../../node/README.md#eval-dashboard) for usage.
+
 ## License
 
 Apache 2.0

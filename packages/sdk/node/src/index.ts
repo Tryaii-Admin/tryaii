@@ -27,3 +27,7 @@ export type {
   DREClientOptions,
   DREMiddlewareOptions,
 } from './types.js';
+
+// HTML report generator for eval runs (re-exported from tryaii-dre)
+export { renderDashboard } from 'tryaii-dre';
+export type { DashboardSummary, DashboardLinks } from 'tryaii-dre';

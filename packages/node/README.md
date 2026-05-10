@@ -139,6 +139,26 @@ User Prompt
 [RouteResult] --> best model + reasoning
 ```
 
+## Eval Dashboard
+
+Render a self-contained HTML report from an eval run's `summary.json` (the same shape produced by the bundled eval runner). The output is a zero-dependency string you can write next to `summary.json` / `results.jsonl` to make the run dir an openable artifact.
+
+```ts
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { renderDashboard, type DashboardSummary } from 'tryaii-dre';
+
+const runDir = './runs/quality';
+const summary: DashboardSummary = JSON.parse(
+  await readFile(join(runDir, 'summary.json'), 'utf8'),
+);
+
+const html = renderDashboard(summary, runDir);
+await writeFile(join(runDir, 'index.html'), html, 'utf8');
+```
+
+Pass `{ summaryHref, resultsHref }` as the third argument to override the footer artifact links (useful when rendering to a directory that doesn't sit next to the JSON).
+
 ## Requirements
 
 - Node.js >= 18.0.0
