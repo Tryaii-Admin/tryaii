@@ -46,3 +46,10 @@ Thumbs.db
 
 # Local-only docs
 packages/python/CENTROIDS_AND_UPDATES.md
+
+# Local-only dev workspace (eval runner, datasets, scratch scripts)
+eval/
+
+# Internal scratch / proposals
+MIGRATION.md
+docs/benchmarks-compare.html
