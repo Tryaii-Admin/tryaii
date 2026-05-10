@@ -55,3 +55,7 @@ export { STANDARD_BENCHMARKS } from './benchmarks/standard.js';
 
 // Types
 export type { LatencyTier, ScoringStrategy, ModelData, ModelsJson, CentroidsJson, TrainingQueriesJson } from './types.js';
+
+// Dashboard (HTML report generator for eval runs)
+export { renderDashboard } from './dashboard/index.js';
+export type { DashboardSummary, DashboardLinks } from './dashboard/index.js';
