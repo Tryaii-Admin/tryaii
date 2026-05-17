@@ -128,6 +128,9 @@ export interface DREClientOptions {
  * Options for Express middleware.
  */
 export interface DREMiddlewareOptions {
+  /** OpenRouter API key. Falls back to OPENROUTER_API_KEY env var. Not required for routing-only middleware. */
+  apiKey?: string;
+
   /** Default priorities for routing. */
   priorities?: Priorities;
 
@@ -136,4 +139,13 @@ export interface DREMiddlewareOptions {
 
   /** JSON body field to extract the prompt from. Default: "prompt". */
   promptField?: string;
+
+  /**
+   * Callback invoked when routing fails inside the middleware.
+   *
+   * Routing failures never block the request pipeline — `next()` always runs.
+   * This hook is the only way to observe/log such failures in production.
+   * If omitted, failures are silently swallowed.
+   */
+  onError?: (error: unknown) => void;
 }

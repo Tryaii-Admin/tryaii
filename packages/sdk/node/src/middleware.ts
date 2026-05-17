@@ -28,26 +28,37 @@ import { DREClient } from './client.js';
 export function dreMiddleware(options?: DREMiddlewareOptions): RequestHandler {
   const prefix = options?.headerPrefix ?? 'X-DRE';
   const promptField = options?.promptField ?? 'prompt';
+  const onError = options?.onError;
 
   const client = new DREClient({
+    apiKey: options?.apiKey,
     priorities: options?.priorities,
   });
 
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = req.body as Record<string, unknown> | undefined;
       const prompt = body?.[promptField];
 
       if (typeof prompt === 'string' && prompt.length > 0) {
-        const result = client.route(prompt, {
+        const result = await client.route(prompt, {
           priorities: options?.priorities,
         });
 
         res.setHeader(`${prefix}-Model`, result.bestModel);
         res.setHeader(`${prefix}-Score`, String(result.bestScore));
       }
-    } catch {
-      // Routing failure should not block the request pipeline
+    } catch (err) {
+      // Routing failure must not block the request pipeline. The onError hook
+      // is the only way to observe these failures in production; without it
+      // they are silently swallowed.
+      if (onError) {
+        try {
+          onError(err);
+        } catch {
+          // A broken onError hook must also not block the pipeline.
+        }
+      }
     }
 
     next();

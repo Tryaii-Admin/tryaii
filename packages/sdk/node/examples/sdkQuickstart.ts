@@ -13,7 +13,7 @@ async function main() {
   });
 
   // --- Route only (no API call) ---
-  const route = client.route('Write a sorting algorithm');
+  const route = await client.route('Write a sorting algorithm');
   console.log('Best model:', route.bestModel);
   console.log('Score:', route.bestScore);
   console.log('Reasoning:', route.bestReasoning);
