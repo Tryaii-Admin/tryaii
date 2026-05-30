@@ -57,17 +57,37 @@ result = router.route(
 )
 ```
 
-## Eval CLI
+## CLI
 
-Run routing over a JSON dataset:
+Installing the package adds a `tryaii-dre` command (same surface as the Node SDK). It opens
+with an animated blue→red banner, then runs your command. The banner prints to stderr and
+auto-suppresses when output is piped, so `--json` stays clean.
 
 ```bash
+tryaii-dre route "Write a Python function to merge sorted arrays" --quality=5 --cost=1
 tryaii-dre eval prompts.json --output results/my-run --quality=5 --cost=1 --speed=1
+tryaii-dre models --provider anthropic        # add --json for machine-readable output
+tryaii-dre benchmarks --json
+tryaii-dre setup                               # download the embedding model + warm centroids
 ```
 
-Budget-aware eval:
+| Command | Key options |
+|---------|-------------|
+| `route "<prompt>"` | `--quality/--cost/--speed <1-5>` (default 3), `--top-k <n>` |
+| `eval <input.json>` | `-o/--output <dir>`, `--max-price <usd>`, `--output-tokens <n>`, `--budget-mode strict\|fit-output` |
+| `models` | `--provider <name>`, `--json` |
+| `benchmarks` | `--json` |
+| `setup` / `regenerate` | `--model <name>` |
+
+Global flags: `--no-banner` (or `TRYAII_NO_BANNER=1`), `NO_COLOR=1`, `-v/--verbose`.
+
+### Eval over a dataset
 
 ```bash
+# Balanced run into a named folder
+tryaii-dre eval prompts.json --output results/my-run --quality=5 --cost=1 --speed=1
+
+# Budget-aware: --max-price is the total budget for the whole dataset
 tryaii-dre eval prompts.json --output results/budget --max-price=0.10 --output-tokens=2000
 tryaii-dre eval prompts.json --output results/budget-fit --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
 ```

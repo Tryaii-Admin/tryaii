@@ -34,6 +34,32 @@ const response = await client.chat('Write a quicksort implementation');
 console.log(response.content);
 ```
 
+## CLI
+
+Installing the package adds a `tryaii-dre` command (same surface as the Python SDK). It
+opens with an animated blue→red banner, then runs your command. The banner prints to
+stderr and auto-suppresses when output is piped, so `--json` stays clean.
+
+```bash
+tryaii-dre route "Write a Python function to merge sorted arrays" --quality=5 --cost=1
+tryaii-dre eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
+tryaii-dre eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+tryaii-dre models --provider anthropic        # add --json for machine-readable output
+tryaii-dre benchmarks --json
+tryaii-dre setup                               # download the embedding model + warm centroids
+```
+
+| Command | Key options |
+|---------|-------------|
+| `route "<prompt>"` | `--quality/--cost/--speed <1-5>` (default 3), `--top-k <n>` |
+| `eval <input.json>` | `-o/--output <dir>`, `--max-price <usd>`, `--output-tokens <n>`, `--budget-mode strict\|fit-output` |
+| `models` | `--provider <name>`, `--json` |
+| `benchmarks` | `--json` |
+| `setup` / `regenerate` | `--model <name>` |
+
+Global flags: `--no-banner` (or `TRYAII_NO_BANNER=1`), `NO_COLOR=1`, `--version`. See the
+[repo README](../../README.md#command-line-interface) for the full reference.
+
 ## Embedding Provider
 
 `Router` uses semantic embeddings to classify prompts against benchmark centroids. The default provider is `LocalEmbeddingProvider` (backed by `@xenova/transformers`), which runs an ONNX MiniLM model locally with no API keys. You can supply a custom provider via the `embeddingProvider` option.
@@ -163,12 +189,11 @@ User Prompt
 
 ## Eval Dashboard
 
-The eval runner supports a shared generation budget:
+The `tryaii-dre eval` command (above) supports a shared generation budget:
 
 ```bash
-cd eval
-npm run eval -- data/example.json results/node-budget -- --max-price=0.10 --output-tokens=2000
-npm run eval -- data/example.json results/node-budget-fit -- --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+tryaii-dre eval prompts.json --output results/node-budget --max-price=0.10 --output-tokens=2000
+tryaii-dre eval prompts.json --output results/node-budget-fit --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
 ```
 
 This treats `--max-price` as the total budget for the whole dataset and
@@ -176,9 +201,12 @@ This treats `--max-price` as the total budget for the whole dataset and
 eval, quality/cost/speed priority flags are ignored: price is the hard
 constraint, and the optimizer maximizes model quality within that price.
 `--budget-mode=fit-output` lowers that fixed output length when the requested
-length cannot fit the total budget.
+length cannot fit the total budget. Each run writes `results.jsonl`,
+`summary.json`, and an `index.html` dashboard.
 
-Render a self-contained HTML report from an eval run's `summary.json` (the same shape produced by the bundled eval runner). The output is a zero-dependency string you can write next to `summary.json` / `results.jsonl` to make the run dir an openable artifact.
+You can also render that dashboard programmatically from any eval run's `summary.json`
+(the same shape the CLI writes). The output is a zero-dependency string you can write next
+to `summary.json` / `results.jsonl` to make the run dir an openable artifact.
 
 ```ts
 import { readFile, writeFile } from 'node:fs/promises';

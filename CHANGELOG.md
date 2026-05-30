@@ -1,8 +1,38 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-05-30)
 
-### Scoring v2 — top-5 benchmarks with median imputation (Node)
+First public release on PyPI and npm (the 0.1.0 monorepo below was never
+published to a public registry). Highlights: full Node/Python routing parity, a
+matching `tryaii-dre` CLI on both packages, and scoring v2 in both SDKs.
+
+### Node/Python SDK parity reconciled
+
+A cross-SDK audit found the Node and Python routers had silently drifted despite
+being meant to produce identical routing/scoring/budget decisions. Reconciled to
+a single set of canonical rules:
+
+- **Preset data** is now byte-identical across both packages (Python
+  `default_models.json` is the source of truth; the Node copy was corrected).
+- **Speed scores, cost/speed gating, priorities clamping (round-half-up), and
+  tie-breaks** (utility → lowest cost → smallest model id) now match.
+- **Budget feasibility** is decided in float; the integer DP only optimizes and
+  falls back to the cheapest assignment rather than declaring a feasible dataset
+  infeasible.
+- **No-benchmark-signal fallback**: prompts whose embedding is orthogonal to
+  every centroid stay routable on cost/speed instead of crashing `route()`.
+- A `tests/test_parity.py` guard asserts the preset JSONs and normalization
+  ranges stay in sync.
+
+### CLI parity — one `tryaii-dre` command on both packages
+
+Both SDKs now ship a matching `tryaii-dre` CLI (`route`, `eval`, `models`,
+`benchmarks`, `setup`, `regenerate`) with identical `eval` artifacts
+(`results.jsonl` + `summary.json` + `index.html`). Each opens with an animated
+blue→red banner printed to stderr that self-suppresses on non-TTY / `NO_COLOR` /
+`TRYAII_NO_BANNER` / `--no-banner`.
+
+### Scoring v2 — top-5 benchmarks with median imputation
 
 `packages/node/src/scoring/engine.ts`
 
@@ -50,13 +80,12 @@ will shift toward models with broader benchmark coverage. The shift is
 most visible at quality-heavy priorities; balanced priorities are less
 affected because cost and speed dampen swings.
 
-**Python parity.** `packages/python/tryaii_dre/scoring/engine.py` still
-uses the old top-3 + silent-skip behaviour. A TODO comment now points at
-the Node implementation. Mirroring this change in Python is a follow-up.
+**Python parity.** Mirrored in `packages/python/tryaii_dre/scoring/engine.py` —
+both SDKs now use top-5 + median imputation with matching tie-breaks.
 
 ## 0.1.0 (2026-03-29)
 
-- Initial release as TryAii-DRE monorepo (ported from diffrential)
+- Initial monorepo release (ported from diffrential); never published to a public registry
 - Python and Node core packages with routing engine support
 - 35+ models from 6 providers (OpenAI, Anthropic, Google, xAI, DeepSeek, Mistral)
 - 12 standard benchmarks (MMLU, HumanEval, SWE-bench, GSM8K, MT-Bench, etc.)
