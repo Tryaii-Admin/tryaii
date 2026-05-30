@@ -17,6 +17,19 @@
 export { Router, routeResultTopK, routeResultBestScore, routeResultBestReasoning } from './router.js';
 export type { RouteResult, RouteOptions } from './router.js';
 
+// High-level client
+export { DREClient } from './client.js';
+export type {
+  ChatOptions,
+  ChatResponse,
+  DREClientOptions,
+  ModelScore as ClientModelScore,
+  Priorities as ClientPriorities,
+  RouteOptions as ClientRouteOptions,
+  RouteResult as ClientRouteResult,
+  TokenUsage,
+} from './client-types.js';
+
 // Integrations
 export { OpenRouterIntegration, MODEL_ID_TO_OPENROUTER } from './integrations/index.js';
 export type { OpenRouterResponse, OpenRouterChatOptions } from './integrations/index.js';
@@ -59,3 +72,20 @@ export type { LatencyTier, ScoringStrategy, ModelData, ModelsJson, CentroidsJson
 // Dashboard (HTML report generator for eval runs)
 export { renderDashboard } from './dashboard/index.js';
 export type { DashboardSummary, DashboardLinks } from './dashboard/index.js';
+
+// Budget optimization
+export {
+  costUnitForBudget,
+  estimateGenerationCost,
+  estimateTokens,
+  optimizeBudgetCandidates,
+  paretoPrune,
+  routeDatasetWithBudget,
+} from './budget.js';
+export type {
+  BudgetCandidate,
+  BudgetedRouteResult,
+  BudgetMode,
+  BudgetOptimizationResult,
+  RouteDatasetWithBudgetOptions,
+} from './budget.js';

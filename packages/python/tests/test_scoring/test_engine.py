@@ -108,17 +108,24 @@ class TestScoringEngine:
         )
         assert scores == []
 
-    def test_no_matching_benchmarks_skips_model(self):
-        model = ModelInfo(
-            model_id="no-match",
-            provider="Test",
-            benchmark_scores={"UnknownBench": 99.0},
-        )
+    def test_no_signal_prompt_falls_back_to_neutral(self):
+        # A prompt whose similarities are all 0 (a degenerate embedding that is
+        # orthogonal/negative to every centroid) matches no benchmark, so every
+        # model is signal-less. Instead of returning nothing -- which would make
+        # a single route() raise and a budget run report the whole dataset
+        # infeasible -- the engine falls back to a neutral quality so the prompt
+        # stays routable on cost/speed, flagged in the reasoning so the "no
+        # signal" case is observable rather than mistaken for a real judgement.
         scores = self.engine.score_models(
-            [model],
-            benchmark_similarities={"HumanEval": 0.8},
+            self.models,
+            benchmark_similarities={"HumanEval": 0.0, "MMLU": 0.0},
+            priorities=Priorities(quality=5, cost=1, speed=1),
         )
-        assert len(scores) == 0
+        assert len(scores) == len(self.models)
+        assert all("No benchmark signal" in s.reasoning for s in scores)
+        # Quality is neutralised for every model, so cost/speed decide the
+        # winner -> the cheap, very-fast model ranks first.
+        assert scores[0].model_id == "cheap-fast"
 
     def test_reasoning_populated(self):
         scores = self.engine.score_models(

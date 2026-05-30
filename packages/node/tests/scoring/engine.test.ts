@@ -134,10 +134,20 @@ describe('ScoringEngine', () => {
     expect(scores.length).toBeLessThanOrEqual(2);
   });
 
-  it('should return empty array when no models have matching benchmarks', () => {
+  it('falls back to neutral quality when a prompt matches no benchmark', () => {
+    // No model has this benchmark and there's no median to impute from, so every
+    // model is signal-less. Rather than returning nothing -- which would make a
+    // single route() throw and a budget run report the whole dataset infeasible
+    // -- the engine falls back to a neutral quality so the prompt stays routable
+    // on cost/speed, flagged in the reasoning so the case is observable.
     const benchmarkSimilarities = { 'NonExistentBenchmark': 0.9 };
-    const scores = engine.scoreModels(models, benchmarkSimilarities, new Priorities());
-    expect(scores.length).toBe(0);
+    const scores = engine.scoreModels(models, benchmarkSimilarities, new Priorities(5, 1, 1));
+    expect(scores.length).toBe(models.length);
+    for (const s of scores) {
+      expect(s.reasoning).toContain('No benchmark signal');
+    }
+    // Quality is neutralised, so cost/speed decide -> the cheap, very-fast model.
+    expect(scores[0].modelId).toBe('gpt-4o-mini');
   });
 
   it('should include reasoning text', () => {

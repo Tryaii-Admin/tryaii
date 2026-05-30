@@ -70,7 +70,9 @@ class TestBenchmarkNormalizer:
         normalizer = BenchmarkNormalizer()
         r = normalizer.get_range("MT-Bench")
         assert r is not None
-        assert r.min_score == 6.0
+        # Canonical MT-Bench range matches STANDARD_BENCHMARKS (the default
+        # routing path) and the Node SDK: NormalizationRange(5, 10).
+        assert r.min_score == 5.0
         assert r.max_score == 10
 
     def test_livebench_matches_original(self):

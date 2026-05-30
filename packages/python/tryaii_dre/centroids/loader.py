@@ -11,13 +11,14 @@ Loading priority:
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
 
-from tryaii_dre.centroids.generator import CentroidGenerator
-from tryaii_dre.config import DEFAULT_EMBEDDING_MODEL, TryaiiDreConfig
+from tryaii_dre.centroids.generator import CentroidGenerator, benchmark_fingerprint
+from tryaii_dre.config import TryaiiDreConfig
 from tryaii_dre.embeddings.base import BaseEmbeddingProvider
 
 logger = logging.getLogger("tryaii_dre.centroids")
@@ -50,6 +51,9 @@ class CentroidLoader:
         self._provider = embedding_provider
         self._centroids: Optional[dict[str, np.ndarray]] = None
         self._generator = CentroidGenerator(embedding_provider)
+        # Guards lazy load/regenerate so concurrent asyncio.to_thread workers
+        # don't each load the model / generate centroids.
+        self._lock = threading.Lock()
 
     def get_centroids(self) -> dict[str, np.ndarray]:
         """
@@ -57,30 +61,36 @@ class CentroidLoader:
 
         Priority: memory > user cache > bundled static > generate fresh.
         """
+        # Double-checked locking: fast path without the lock, then re-check
+        # under the lock so only one thread performs the load/regenerate.
         if self._centroids is not None:
             return self._centroids
 
-        # 1. Try user's cached centroids (~/.tryaii_dre/centroids/)
-        self._config.ensure_dirs()
-        user_path = self._config.centroid_file
-        loaded = self._try_load(user_path)
-        if loaded is not None:
-            self._centroids = loaded
-            return self._centroids
+        with self._lock:
+            if self._centroids is not None:
+                return self._centroids
 
-        # 2. Try bundled static centroids (ships with package)
-        bundled_path = _bundled_centroid_path(self._provider.model_name)
-        loaded = self._try_load(bundled_path)
-        if loaded is not None:
-            self._centroids = loaded
-            logger.info(
-                f"Loaded bundled centroids for {self._provider.model_name} "
-                f"({len(loaded)} benchmarks)"
-            )
-            return self._centroids
+            # 1. Try user's cached centroids (~/.tryaii_dre/centroids/)
+            self._config.ensure_dirs()
+            user_path = self._config.centroid_file
+            loaded = self._try_load(user_path)
+            if loaded is not None:
+                self._centroids = loaded
+                return self._centroids
 
-        # 3. Generate fresh centroids (non-default model, first use)
-        return self._regenerate()
+            # 2. Try bundled static centroids (ships with package)
+            bundled_path = _bundled_centroid_path(self._provider.model_name)
+            loaded = self._try_load(bundled_path)
+            if loaded is not None:
+                self._centroids = loaded
+                logger.info(
+                    f"Loaded bundled centroids for {self._provider.model_name} "
+                    f"({len(loaded)} benchmarks)"
+                )
+                return self._centroids
+
+            # 3. Generate fresh centroids (non-default model, first use)
+            return self._regenerate()
 
     def _try_load(self, path: Path) -> Optional[dict[str, np.ndarray]]:
         """Try to load centroids from a file, validating compatibility."""
@@ -93,22 +103,41 @@ class CentroidLoader:
             saved_model = metadata.get("model", "")
             saved_dim = metadata.get("dimension", 0)
 
-            if (saved_model == self._provider.model_name
-                    and saved_dim == self._provider.dimension):
-                logger.debug(
-                    f"Loaded {len(centroids)} centroids from {path}"
-                )
-                return centroids
-            else:
+            # Validate model + dimension.
+            if (saved_model != self._provider.model_name
+                    or saved_dim != self._provider.dimension):
                 logger.debug(
                     f"Centroid mismatch at {path} "
                     f"(saved: {saved_model}/{saved_dim}, "
                     f"current: {self._provider.model_name}/{self._provider.dimension})"
                 )
                 return None
+
+            # Validate the benchmark set. We fingerprint the benchmarks actually
+            # present in the file (not a stored metadata value -- older/bundled
+            # files predate fingerprinting and have none) and compare against the
+            # expected default set. This regenerates a file built against a
+            # different benchmark set (the real risk) while still loading
+            # pre-fingerprint bundled files whose benchmark set is unchanged.
+            actual_fingerprint = benchmark_fingerprint(centroids.keys())
+            expected_fingerprint = self._expected_fingerprint()
+            if actual_fingerprint != expected_fingerprint:
+                logger.debug(
+                    f"Centroid benchmark-set mismatch at {path} "
+                    f"(file fingerprint: {actual_fingerprint!r}, "
+                    f"expected: {expected_fingerprint!r})"
+                )
+                return None
+
+            logger.debug(f"Loaded {len(centroids)} centroids from {path}")
+            return centroids
         except Exception as e:
             logger.warning(f"Failed to load centroids from {path}: {e}")
             return None
+
+    def _expected_fingerprint(self) -> str:
+        """Fingerprint of the benchmark set this loader expects on disk."""
+        return CentroidGenerator.default_benchmark_fingerprint()
 
     def _regenerate(self) -> dict[str, np.ndarray]:
         """Generate centroids from training queries and save to user cache."""

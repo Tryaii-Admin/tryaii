@@ -5,7 +5,7 @@ Wraps Router + OpenRouterIntegration into a single class so users
 do not need to manage two separate objects.
 
 Usage:
-    from tryaii_dre_sdk import DREClient
+    from tryaii_dre import DREClient
 
     client = DREClient(api_key="sk-or-...")
     response = client.chat("Write a quicksort in Python")
@@ -17,9 +17,9 @@ from __future__ import annotations
 import os
 from typing import Generator, Optional
 
-from tryaii_dre import Router, RouteResult
 from tryaii_dre.config import TryaiiDreConfig
 from tryaii_dre.integrations.openrouter import OpenRouterIntegration, OpenRouterResponse
+from tryaii_dre.router import Router, RouteResult
 from tryaii_dre.scoring.priorities import Priorities
 
 

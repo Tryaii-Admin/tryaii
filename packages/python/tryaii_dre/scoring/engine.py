@@ -7,6 +7,7 @@ weighted by user priorities. This is the heart of the routing logic.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Optional
 
@@ -39,6 +40,38 @@ SPEED_SCORES: dict[str, float] = {
     "slow": 0.3,
     "very slow": 0.1,
 }
+
+
+TOP_BENCHMARKS_FOR_SCORING = 5
+
+# Neutral quality used only as a last-resort fallback when a prompt matches no
+# benchmark at all (every similarity clamps to 0), so it stays routable on
+# cost/speed instead of being dropped. See score_models' neutral_fallback retry.
+NEUTRAL_QUALITY_SCORE = 0.5
+
+
+def _compute_benchmark_medians(
+    models: list[ModelInfo],
+    benchmark_names: list[str],
+) -> dict[str, float]:
+    """Compute registry-wide raw-score medians for missing benchmark data."""
+    medians: dict[str, float] = {}
+    for name in benchmark_names:
+        values = [
+            score
+            for model in models
+            if (score := model.benchmark_scores.get(name)) is not None
+            and math.isfinite(score)
+        ]
+        if not values:
+            continue
+        values.sort()
+        mid = len(values) // 2
+        if len(values) % 2 == 1:
+            medians[name] = values[mid]
+        else:
+            medians[name] = (values[mid - 1] + values[mid]) / 2
+    return medians
 
 
 class ScoringEngine:
@@ -76,33 +109,62 @@ class ScoringEngine:
         Returns:
             Sorted list of ModelScore objects (highest score first).
         """
-        # TODO: parity with Node -- the TS engine in
-        # packages/node/src/scoring/engine.ts uses top-5 (not top-3) and
-        # imputes missing benchmark scores with the registry-wide median
-        # instead of silently skipping them. Without those changes, Python
-        # routing keeps the sparse-data-inflation bug documented in the
-        # repo-root CHANGELOG.md (Scoring v2 entry). Mirror when this
-        # package becomes a hot path again.
-        # Use top 3 most relevant benchmarks for scoring
         top_benchmarks = sorted(
             benchmark_similarities.items(), key=lambda x: x[1], reverse=True
-        )[:3]
+        )[:TOP_BENCHMARKS_FOR_SCORING]
         top_benchmark_dict = dict(top_benchmarks)
+        benchmark_medians = _compute_benchmark_medians(
+            models,
+            [name for name, _ in top_benchmarks],
+        )
 
         scores: list[ModelScore] = []
 
         for model in models:
-            score = self._score_single_model(model, top_benchmark_dict, priorities)
+            score = self._score_single_model(
+                model,
+                top_benchmark_dict,
+                benchmark_medians,
+                priorities,
+            )
             if score is not None:
                 scores.append(score)
 
-        # Sort by final score descending
-        scores.sort(key=lambda s: s.final_score, reverse=True)
+        # Fallback: if NO model scored, the prompt matched no benchmark at all
+        # (its embedding is orthogonal/negative to every centroid, so all
+        # similarities clamped to 0). Rather than return nothing -- which makes a
+        # single route() raise and a budget run report the whole dataset
+        # infeasible -- re-score every model on a neutral quality baseline so the
+        # prompt stays routable on cost/speed. The per-model skip above still
+        # applies in the normal case where only *some* models lack signal.
+        if not scores:
+            for model in models:
+                score = self._score_single_model(
+                    model,
+                    top_benchmark_dict,
+                    benchmark_medians,
+                    priorities,
+                    neutral_fallback=True,
+                )
+                if score is not None:
+                    scores.append(score)
 
-        # Normalize to 0.1-0.95 range (best model ~ 0.95)
-        if scores:
+        # Sort by final score descending. Deterministic secondary keys break
+        # ties in favour of real (non-imputed) benchmark coverage, then by
+        # ascending modelId in Unicode code point order (not locale-aware).
+        scores.sort(
+            key=lambda s: (-s.final_score, -len(s.top_benchmarks), s.model_id)
+        )
+
+        # Normalize to 0.1-0.95 range (best model ~ 0.95). With a single
+        # surviving model there is nothing to rescale against, so surface its
+        # own unnormalized weighted score (clamped to [0,1]) instead of forcing
+        # it against a hardcoded 0 floor.
+        if len(scores) == 1:
+            scores[0].final_score = round(max(0.0, min(1.0, scores[0].final_score)), 4)
+        elif scores:
             max_raw = scores[0].final_score
-            min_raw = scores[-1].final_score if len(scores) > 1 else 0
+            min_raw = scores[-1].final_score
 
             for s in scores:
                 if max_raw == min_raw:
@@ -117,29 +179,56 @@ class ScoringEngine:
         self,
         model: ModelInfo,
         top_benchmarks: dict[str, float],
+        benchmark_medians: dict[str, float],
         priorities: Priorities,
+        neutral_fallback: bool = False,
     ) -> Optional[ModelScore]:
-        """Score a single model against the benchmark similarities."""
+        """Score a single model against the benchmark similarities.
+
+        When neutral_fallback is True, a model with no usable similarity signal
+        is scored on a neutral quality baseline instead of being dropped -- used
+        only for the all-models-signal-less case (see score_models).
+        """
 
         # --- Quality score ---
         weighted_quality_sum = 0.0
         total_similarity_weight = 0.0
+        imputed_count = 0
         model_top_benchmarks: list[tuple[str, float]] = []
 
         for benchmark_name, user_similarity in top_benchmarks.items():
             model_bench_score = model.benchmark_scores.get(benchmark_name)
-            if model_bench_score is None:
-                continue
+            imputed = False
+            # Treat a non-finite raw score (NaN/inf) as missing so it does not
+            # poison the weighted quality sum; fall back to the median instead.
+            if model_bench_score is None or not math.isfinite(model_bench_score):
+                model_bench_score = benchmark_medians.get(benchmark_name)
+                if model_bench_score is None:
+                    continue
+                imputed = True
+                imputed_count += 1
 
             normalized = self._normalizer.normalize(benchmark_name, model_bench_score)
             weighted_quality_sum += user_similarity * normalized
             total_similarity_weight += user_similarity
-            model_top_benchmarks.append((benchmark_name, normalized))
+            if not imputed:
+                model_top_benchmarks.append((benchmark_name, normalized))
 
-        if total_similarity_weight == 0:
+        # No usable similarity signal: this model shares none of the prompt's
+        # relevant benchmarks (even after median imputation). Normally drop it so
+        # models with real signal win. But when EVERY model is signal-less,
+        # score_models retries with neutral_fallback=True so the prompt stays
+        # routable on cost/speed alone -- flagged in the reasoning below so the
+        # "no signal" case is observable, not mistaken for a real quality call.
+        no_signal = total_similarity_weight == 0
+        if no_signal and not neutral_fallback:
             return None
 
-        quality_score = weighted_quality_sum / total_similarity_weight
+        quality_score = (
+            NEUTRAL_QUALITY_SCORE
+            if no_signal
+            else weighted_quality_sum / total_similarity_weight
+        )
 
         # --- Cost score ---
         cost_score = 0.0
@@ -170,7 +259,12 @@ class ScoringEngine:
         top_bench_str = ", ".join(
             f"{b} ({s:.0%})" for b, s in model_top_benchmarks[:2]
         )
-        reasoning = f"Quality: {quality_score:.2f} on [{top_bench_str}]"
+        if no_signal:
+            reasoning = "No benchmark signal -- routed on cost/speed"
+        else:
+            reasoning = f"Quality: {quality_score:.2f} on [{top_bench_str}]"
+            if imputed_count > 0:
+                reasoning += f" | imputed: {imputed_count}/{len(top_benchmarks)}"
         if cost_score > 0:
             reasoning += f" | Cost efficiency: {cost_score:.2f}"
         if speed_score > 0:

@@ -39,9 +39,13 @@ class ClassificationResult:
 
     @property
     def top_benchmarks(self) -> list[tuple[str, float]]:
-        """Top benchmarks sorted by similarity score."""
+        """
+        Top benchmarks sorted by similarity score (descending).
+
+        Ties are broken deterministically by benchmark name (ascending).
+        """
         return sorted(
-            self.benchmark_scores.items(), key=lambda x: x[1], reverse=True
+            self.benchmark_scores.items(), key=lambda x: (-x[1], x[0])
         )
 
 

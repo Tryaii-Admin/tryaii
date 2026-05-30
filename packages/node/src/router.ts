@@ -28,6 +28,13 @@ import { DEFAULT_PRIORITIES, Priorities } from './scoring/priorities.js';
 import type { LatencyTier } from './types.js';
 
 /**
+ * Maximum allowed prompt length (characters). Prompts longer than this are
+ * truncated before classification to avoid OOM in the embedding model. Must
+ * stay in sync with the Python SDK's MAX_PROMPT_LENGTH (classifiers/base.py).
+ */
+export const MAX_PROMPT_LENGTH = 100_000;
+
+/**
  * Result of routing a prompt.
  *
  * Contains the recommended model, all scored models, and classification details.
@@ -171,6 +178,7 @@ export class Router {
    * @returns RouteResult with the best model and full scoring breakdown.
    */
   async route(prompt: string, opts?: RouteOptions): Promise<RouteResult> {
+    prompt = Router._normalizePrompt(prompt);
     const classifier = this._ensureClassifier();
     const classification = await classifier.classifyAsync(prompt);
     return this._buildResult(classification, opts);
@@ -186,6 +194,7 @@ export class Router {
    * cached provider) to use this path.
    */
   routeSync(prompt: string, opts?: RouteOptions): RouteResult {
+    prompt = Router._normalizePrompt(prompt);
     const classifier = this._ensureClassifier();
     if (this._embeddingProvider !== null && !this._embeddingProvider.supportsSync) {
       throw new Error(
@@ -196,6 +205,23 @@ export class Router {
     }
     const classification = classifier.classify(prompt);
     return this._buildResult(classification, opts);
+  }
+
+  /**
+   * Validate and normalize a prompt before classification.
+   *
+   * Rejects empty/non-string prompts and truncates to MAX_PROMPT_LENGTH,
+   * matching the Python Router (which raises ValueError on empty/non-string
+   * and slices to the same limit) so both SDKs behave identically.
+   */
+  private static _normalizePrompt(prompt: string): string {
+    if (typeof prompt !== 'string' || prompt.length === 0) {
+      throw new Error('prompt must be a non-empty string');
+    }
+    if (prompt.length > MAX_PROMPT_LENGTH) {
+      return prompt.slice(0, MAX_PROMPT_LENGTH);
+    }
+    return prompt;
   }
 
   /** Shared post-classification path: filter models, score, return RouteResult. */

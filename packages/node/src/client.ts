@@ -11,14 +11,16 @@
  * completion.
  *
  * Usage:
- *   import { DREClient } from 'tryaii-dre-sdk';
+ *   import { DREClient } from 'tryaii-dre';
  *
  *   const client = new DREClient({ apiKey: 'sk-or-...' });
  *   const response = await client.chat('Write a sorting algorithm');
  *   console.log(response.modelUsed, response.content);
  */
 
-import { Router, Priorities, MODEL_ID_TO_OPENROUTER } from 'tryaii-dre';
+import { MODEL_ID_TO_OPENROUTER } from './integrations/index.js';
+import { Router } from './router.js';
+import { Priorities } from './scoring/priorities.js';
 
 import type {
   ChatOptions,
@@ -29,7 +31,7 @@ import type {
   RouteResult,
   TokenUsage,
   Priorities as PrioritiesData,
-} from './types.js';
+} from './client-types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -39,10 +41,16 @@ const DEFAULT_PRIORITIES: PrioritiesData = { quality: 3, cost: 3, speed: 3 };
 
 function mergePriorities(data?: PrioritiesData): PrioritiesData {
   if (!data) return DEFAULT_PRIORITIES;
+  // Per-field default of 3: a partial dict like { quality: 5 } would otherwise
+  // produce Math.round(undefined) === NaN, which survives a `?? 3` fallback.
+  const clampField = (value: unknown): number => {
+    const n = Math.round(Number(value));
+    return Number.isFinite(n) ? Math.max(1, Math.min(5, n)) : 3;
+  };
   return {
-    quality: Math.max(1, Math.min(5, Math.round(data.quality))),
-    cost: Math.max(1, Math.min(5, Math.round(data.cost))),
-    speed: Math.max(1, Math.min(5, Math.round(data.speed))),
+    quality: clampField(data.quality),
+    cost: clampField(data.cost),
+    speed: clampField(data.speed),
   };
 }
 
@@ -98,6 +106,10 @@ export class DREClient {
       topK,
     });
 
+    if (!coreResult.bestModel) {
+      throw new Error('routing returned no model for this prompt');
+    }
+
     return this._toSdkResult(coreResult, priorities);
   }
 
@@ -117,9 +129,7 @@ export class DREClient {
     });
 
     if (!coreResult.bestModel) {
-      throw new Error(
-        'DREClient.chat: routing returned no model -- the registry is empty or all models were filtered out',
-      );
+      throw new Error('routing returned no model for this prompt');
     }
     const modelId = coreResult.bestModel;
     const reasoning = coreResult.scores[0]?.reasoning ?? '';
@@ -138,7 +148,8 @@ export class DREClient {
       messages,
       temperature: options?.temperature ?? 0.7,
     };
-    if (options?.maxTokens) {
+    // Only send max_tokens when it is a finite, positive number (0 is not meaningful).
+    if (options?.maxTokens != null && Number.isFinite(options.maxTokens) && options.maxTokens > 0) {
       payload.max_tokens = options.maxTokens;
     }
 
@@ -159,7 +170,14 @@ export class DREClient {
     }
 
     const data = await response.json() as Record<string, unknown>;
-    const choices = data.choices as Array<{ message: { content: string } }>;
+    const choices = data.choices as Array<{ message: { content: string } }> | undefined;
+    // OpenRouter can return HTTP 200 with an { error } envelope and no choices.
+    // Surface the provider message instead of returning a fake-empty success.
+    if (!choices?.length && data.error != null) {
+      const err = data.error as { message?: string } | string;
+      const message = typeof err === 'string' ? err : err.message ?? 'OpenRouter returned an error';
+      throw new Error(`OpenRouter API error: ${message}`);
+    }
     const content = choices?.[0]?.message?.content ?? '';
 
     const rawUsage = data.usage as Record<string, number> | undefined;
@@ -197,9 +215,7 @@ export class DREClient {
     });
 
     if (!coreResult.bestModel) {
-      throw new Error(
-        'DREClient.stream: routing returned no model -- the registry is empty or all models were filtered out',
-      );
+      throw new Error('routing returned no model for this prompt');
     }
     const modelId = coreResult.bestModel;
     const openrouterModel = resolveModel(modelId);
@@ -218,7 +234,8 @@ export class DREClient {
       temperature: options?.temperature ?? 0.7,
       stream: true,
     };
-    if (options?.maxTokens) {
+    // Only send max_tokens when it is a finite, positive number (0 is not meaningful).
+    if (options?.maxTokens != null && Number.isFinite(options.maxTokens) && options.maxTokens > 0) {
       payload.max_tokens = options.maxTokens;
     }
 
@@ -262,15 +279,26 @@ export class DREClient {
           const dataStr = trimmed.slice(6);
           if (dataStr === '[DONE]') return;
 
+          let chunk: {
+            choices?: Array<{ delta: { content?: string } }>;
+            error?: { message?: string } | string;
+          };
           try {
-            const chunk = JSON.parse(dataStr) as {
-              choices: Array<{ delta: { content?: string } }>;
-            };
-            const content = chunk.choices?.[0]?.delta?.content;
-            if (content) yield content;
+            chunk = JSON.parse(dataStr);
           } catch {
             // Skip malformed SSE chunks
+            continue;
           }
+          // OpenRouter can stream an { error } chunk; surface it before reading the delta.
+          // Thrown outside the parse try/catch so it is not swallowed as a malformed chunk.
+          if (chunk.error != null) {
+            const err = chunk.error;
+            const message =
+              typeof err === 'string' ? err : err.message ?? 'OpenRouter returned an error';
+            throw new Error(`OpenRouter stream error: ${message}`);
+          }
+          const content = chunk.choices?.[0]?.delta?.content;
+          if (content) yield content;
         }
       }
     } finally {

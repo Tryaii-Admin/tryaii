@@ -7,6 +7,7 @@ on a 1-5 scale. These get transformed into weights that influence scoring.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 
@@ -35,7 +36,11 @@ class Priorities:
             value = getattr(self, field_name)
             if not isinstance(value, (int, float)):
                 raise TypeError(f"{field_name} must be a number, got {type(value)}")
-            clamped = max(1, min(5, int(value)))
+            # Round-half-up to match Node's Math.round (3.6 -> 4, 4.5 -> 5).
+            # Python's built-in round() uses banker's rounding (4.5 -> 4), so
+            # use floor(value + 0.5) to stay in parity with the Node SDK.
+            rounded = math.floor(value + 0.5)
+            clamped = max(1, min(5, rounded))
             object.__setattr__(self, field_name, clamped)
 
     @property

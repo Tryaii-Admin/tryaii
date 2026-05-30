@@ -8,12 +8,12 @@
  *   4. Generate from training queries (only if using a non-default model)
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { BaseEmbeddingProvider } from '../embeddings/base.js';
-import { CentroidGenerator } from './generator.js';
+import { CentroidGenerator, TRAINING_QUERIES_PATH } from './generator.js';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
@@ -24,6 +24,45 @@ const BUNDLED_CENTROIDS_DIR = join(currentDir, 'data');
 function bundledCentroidPath(modelName: string): string {
   const safeName = modelName.replace(/\//g, '__');
   return join(BUNDLED_CENTROIDS_DIR, `centroids_${safeName}.json`);
+}
+
+/**
+ * Stable fingerprint of the benchmark set present in a centroid file.
+ *
+ * Defined as the sorted benchmark names joined by "|". Used to detect when a
+ * cached/bundled centroid file was generated against a different benchmark set
+ * and must be regenerated. Must stay identical to the Python SDK's
+ * `benchmark_fingerprint` (centroids/generator.py).
+ */
+export function benchmarkFingerprint(benchmarkNames: Iterable<string>): string {
+  return [...benchmarkNames].sort().join('|');
+}
+
+/**
+ * Fingerprint of the bundled default benchmark set, derived from the shipped
+ * training queries. A centroid file whose benchmark set doesn't match this was
+ * built against a different benchmark set and must be regenerated. Mirrors the
+ * Python SDK's `CentroidGenerator.default_benchmark_fingerprint()`.
+ */
+function defaultBenchmarkFingerprint(): string {
+  const raw = readFileSync(TRAINING_QUERIES_PATH, 'utf-8');
+  const data = JSON.parse(raw) as { benchmarks: Record<string, unknown> };
+  return benchmarkFingerprint(Object.keys(data.benchmarks));
+}
+
+/**
+ * Whether the provider has reported a real embedding dimension yet.
+ *
+ * The default `LocalEmbeddingProvider` returns a hardcoded fallback (384)
+ * before its model is initialized, so comparing against it would wrongly
+ * reject/accept centroid files for non-default-dimension models. We detect the
+ * uninitialized state via its private `_dimension` marker; providers that
+ * always report a real dimension are treated as known.
+ */
+function providerDimensionKnown(provider: BaseEmbeddingProvider): boolean {
+  const dim = (provider as unknown as { _dimension?: number | null })._dimension;
+  // Providers without the marker (custom providers) report a real dimension.
+  return dim === undefined ? true : dim !== null;
 }
 
 /**
@@ -111,11 +150,28 @@ export class CentroidLoader {
       const savedModel = metadata.model ?? '';
       const savedDim = metadata.dimension ?? 0;
 
-      if (savedModel === this._provider.modelName && savedDim === this._provider.dimension) {
-        return centroids;
+      // Model name must always match.
+      if (savedModel !== this._provider.modelName) {
+        return null;
       }
-      // Model mismatch -- skip this file
-      return null;
+
+      // Dimension check: skip while the provider hasn't reported a real
+      // dimension (it may still be returning a hardcoded fallback). Otherwise
+      // a non-default-dimension file would be wrongly rejected/accepted.
+      if (providerDimensionKnown(this._provider) && savedDim !== this._provider.dimension) {
+        return null;
+      }
+
+      // Benchmark-set check: fingerprint the benchmarks actually present in the
+      // file and compare against the expected default set. Computing from the
+      // file's own keys (rather than a stored metadata value that older/bundled
+      // files lack) lets pre-fingerprint bundled files load while still
+      // regenerating a file built against a different benchmark set.
+      if (benchmarkFingerprint(Object.keys(centroids)) !== defaultBenchmarkFingerprint()) {
+        return null;
+      }
+
+      return centroids;
     } catch {
       return null;
     }

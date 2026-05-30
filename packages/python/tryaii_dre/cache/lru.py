@@ -24,7 +24,9 @@ class LRUCache(Generic[T]):
     """
 
     def __init__(self, max_size: int = 300, ttl_seconds: float = 300.0):
-        self._max_size = max_size
+        # Clamp to >= 1 so a degenerate size never makes set() raise on an
+        # empty cache (popitem on an empty OrderedDict raises KeyError).
+        self._max_size = max(1, max_size)
         self._ttl_seconds = ttl_seconds
         self._cache: OrderedDict[str, tuple[T, float]] = OrderedDict()
         self._lock = threading.Lock()
@@ -54,7 +56,7 @@ class LRUCache(Generic[T]):
                 del self._cache[key]
 
             # Evict oldest if at capacity
-            while len(self._cache) >= self._max_size:
+            while self._cache and len(self._cache) >= self._max_size:
                 self._cache.popitem(last=False)
 
             self._cache[key] = (value, time.time())

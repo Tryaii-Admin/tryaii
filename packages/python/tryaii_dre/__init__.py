@@ -22,8 +22,16 @@ from tryaii_dre.registry.models import ModelRegistry, ModelInfo
 from tryaii_dre.scoring.priorities import Priorities, DEFAULT_PRIORITIES
 from tryaii_dre.benchmarks.registry import BenchmarkRegistry
 from tryaii_dre.config import TryaiiDreConfig
+from tryaii_dre.client import DREClient
+from tryaii_dre.budget import (
+    BudgetCandidate,
+    BudgetOptimizationResult,
+    BudgetedRouteResult,
+    estimate_tokens,
+    route_dataset_with_budget,
+)
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "Router",
@@ -34,5 +42,20 @@ __all__ = [
     "DEFAULT_PRIORITIES",
     "BenchmarkRegistry",
     "TryaiiDreConfig",
+    "DREClient",
+    "AsyncDREClient",
+    "BudgetCandidate",
+    "BudgetOptimizationResult",
+    "BudgetedRouteResult",
+    "estimate_tokens",
+    "route_dataset_with_budget",
     "__version__",
 ]
+
+
+def __getattr__(name: str):
+    if name == "AsyncDREClient":
+        from tryaii_dre.async_client import AsyncDREClient
+
+        return AsyncDREClient
+    raise AttributeError(f"module 'tryaii_dre' has no attribute {name!r}")
