@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -8,6 +8,7 @@ const packageDir = dirname(scriptDir);
 const requiredPaths = [
   'dist/index.js',
   'dist/index.d.ts',
+  'dist/cli.js',
   'dist/integrations/index.js',
   'dist/integrations/index.d.ts',
   'dist/registry/presets/defaultModels.json',
@@ -19,6 +20,12 @@ for (const relativePath of requiredPaths) {
   if (!existsSync(absolutePath)) {
     throw new Error(`Missing dist artifact: ${absolutePath}`);
   }
+}
+
+// The CLI must keep its shebang so `tryaii-dre` is directly executable.
+const cliSource = readFileSync(join(packageDir, 'dist/cli.js'), 'utf-8');
+if (!cliSource.startsWith('#!/usr/bin/env node')) {
+  throw new Error('dist/cli.js is missing its "#!/usr/bin/env node" shebang');
 }
 
 const indexModule = await import(pathToFileURL(join(packageDir, 'dist/index.js')).href);

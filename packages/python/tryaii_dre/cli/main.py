@@ -13,14 +13,15 @@ Commands:
 from __future__ import annotations
 
 import argparse
+import json
+import logging
+import os
+import sys
+import time
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from html import escape
-import json
-import logging
 from pathlib import Path
-import sys
-import time
 
 
 def cmd_route(args):
@@ -668,6 +669,11 @@ def cli():
         description="TryAii-DRE -- Embedding-based AI model router",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
+    parser.add_argument(
+        "--no-banner",
+        action="store_true",
+        help="Disable the startup banner (also honored via TRYAII_NO_BANNER)",
+    )
 
     subparsers = parser.add_subparsers(dest="command")
 
@@ -719,7 +725,17 @@ def cli():
     regen_parser = subparsers.add_parser("regenerate", help="Regenerate centroids")
     regen_parser.add_argument("--model", help="Embedding model name")
 
-    args = parser.parse_args()
+    # Accept --no-banner anywhere (before OR after the subcommand) by stripping
+    # it before argparse runs -- argparse would otherwise only honor a global
+    # flag that precedes the subcommand. Matches the Node CLI's behavior.
+    raw_args = sys.argv[1:]
+    no_banner = "--no-banner" in raw_args or bool(os.environ.get("TRYAII_NO_BANNER"))
+    args = parser.parse_args([a for a in raw_args if a != "--no-banner"])
+
+    if not no_banner:
+        from tryaii_dre.cli import banner
+
+        banner.show()
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
