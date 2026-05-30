@@ -6,10 +6,8 @@
 
 | Package | Install | Description |
 |---------|---------|-------------|
-| [Python core](packages/python/) | `pip install tryaii-dre` | Routing engine for Python |
-| [Node core](packages/node/) | `npm install tryaii-dre` | TypeScript routing engine |
-| [Python SDK](packages/sdk/python/) | `pip install tryaii-dre-sdk` | High-level client + middleware |
-| [Node SDK](packages/sdk/node/) | `npm install tryaii-dre-sdk` | Express/Next.js middleware |
+| [Python](packages/python/) | `pip install tryaii-dre` | Routing engine, high-level client, and async client |
+| [Node](packages/node/) | `npm install tryaii-dre` | TypeScript routing engine and high-level client |
 
 ## Quick Start (Python)
 
@@ -25,6 +23,36 @@ result = router.route("Write a Python function to merge sorted arrays")
 
 print(result.best_model)      # "grok-4-fast"
 print(result.best_reasoning)  # "Quality: 0.91 on [HumanEval (95%), ...]"
+```
+
+Run a routing eval from the Python CLI:
+
+```bash
+tryaii-dre eval eval/data/example.json --output eval/results/python-quality --quality=5 --cost=1 --speed=1
+```
+
+Add a shared generation budget and expected response length:
+
+```bash
+tryaii-dre eval eval/data/example.json --output eval/results/python-budget --max-price=0.10 --output-tokens=2000
+```
+
+## Quick Start (Node)
+
+```bash
+npm install tryaii-dre
+```
+
+```ts
+import { DREClient, Router } from "tryaii-dre";
+
+const router = new Router();
+const route = await router.route("Write a Python function to merge sorted arrays");
+console.log(route.bestModel);
+
+const client = new DREClient({ apiKey: process.env.OPENROUTER_API_KEY });
+const response = await client.chat("Write a quicksort implementation");
+console.log(response.content);
 ```
 
 ## How It Works
@@ -56,7 +84,6 @@ tryaii-dre/
   packages/
     python/                pip install tryaii-dre
     node/                  npm install tryaii-dre
-    sdk/                   Higher-level wrappers
   scripts/                 Build and sync tooling
 ```
 

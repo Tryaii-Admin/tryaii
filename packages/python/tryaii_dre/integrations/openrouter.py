@@ -25,10 +25,13 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import random
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Generator, Optional
 
 from tryaii_dre.classifiers.base import MAX_PROMPT_LENGTH
@@ -199,8 +202,19 @@ class OpenRouterIntegration:
         if response.status_code == 429:
             retry_after = response.headers.get("Retry-After")
             if retry_after is not None:
+                # Retry-After may be either delta-seconds or an HTTP-date.
                 try:
                     return float(retry_after)
+                except (ValueError, TypeError):
+                    pass
+                try:
+                    then = parsedate_to_datetime(retry_after)
+                    if then is not None:
+                        # Naive HTTP-dates are UTC per RFC 7231.
+                        if then.tzinfo is None:
+                            then = then.replace(tzinfo=timezone.utc)
+                        delta = (then - datetime.now(timezone.utc)).total_seconds()
+                        return max(0.0, delta)
                 except (ValueError, TypeError):
                     pass
         return 2 ** attempt + random.uniform(0, 1)
@@ -263,6 +277,10 @@ class OpenRouterIntegration:
             model_id = route_result.best_model
             reasoning = route_result.scores[0].reasoning if route_result.scores else ""
 
+        # Never POST an empty model -- the router could not score any model.
+        if not model_id:
+            raise ValueError("routing returned no model for this prompt")
+
         openrouter_model = self._resolve_model(model_id)
 
         # Build messages
@@ -277,7 +295,8 @@ class OpenRouterIntegration:
             "messages": messages,
             "temperature": temperature,
         }
-        if max_tokens:
+        # Only forward max_tokens when it is a positive, finite value.
+        if max_tokens is not None and math.isfinite(max_tokens) and max_tokens > 0:
             payload["max_tokens"] = max_tokens
 
         response = self._request_with_retry("POST", "/chat/completions", json=payload)
@@ -288,10 +307,16 @@ class OpenRouterIntegration:
 
         choices = data.get("choices")
         if not choices:
-            error = data.get("error", {})
-            raise ValueError(
-                f"OpenRouter API error: {error.get('message', 'No choices returned')}"
-            )
+            # OpenRouter can return HTTP 200 with an {"error": ...} envelope and
+            # no choices. 'error' may be a dict or a bare string.
+            error = data.get("error")
+            if isinstance(error, dict):
+                msg = error.get("message", "No choices returned")
+            elif isinstance(error, str):
+                msg = error
+            else:
+                msg = "No choices returned"
+            raise ValueError(f"OpenRouter API error: {msg}")
         content = choices[0].get("message", {}).get("content", "")
         usage = data.get("usage", {})
 
@@ -338,6 +363,10 @@ class OpenRouterIntegration:
             route_result = self._router.route(prompt, priorities=prio)
             model_id = route_result.best_model
 
+        # Never POST an empty model -- the router could not score any model.
+        if not model_id:
+            raise ValueError("routing returned no model for this prompt")
+
         openrouter_model = self._resolve_model(model_id)
 
         logger.debug("OpenRouter stream started model=%s", openrouter_model)
@@ -353,11 +382,16 @@ class OpenRouterIntegration:
             "temperature": temperature,
             "stream": True,
         }
-        if max_tokens:
+        # Only forward max_tokens when it is a positive, finite value.
+        if max_tokens is not None and math.isfinite(max_tokens) and max_tokens > 0:
             payload["max_tokens"] = max_tokens
 
         import httpx
 
+        # Retries only cover the pre-first-byte connection phase. Once a chunk
+        # has been yielded a mid-stream failure must re-raise -- replaying the
+        # request would duplicate already-emitted content.
+        yielded_any = False
         last_exc: Exception | None = None
         for attempt in range(self._MAX_RETRIES + 1):
             try:
@@ -380,13 +414,15 @@ class OpenRouterIntegration:
                             delta = chunk["choices"][0].get("delta", {})
                             content = delta.get("content", "")
                             if content:
+                                yielded_any = True
                                 yield content
                         except (json.JSONDecodeError, KeyError, IndexError):
                             continue
                     return  # Stream completed successfully; exit retry loop
             except (httpx.TransportError, httpx.HTTPStatusError) as exc:
                 last_exc = exc
-                if attempt == self._MAX_RETRIES:
+                # Once content has started flowing, never retry from scratch.
+                if yielded_any or attempt == self._MAX_RETRIES:
                     raise
                 wait = 2 ** attempt + random.uniform(0, 1)
                 logger.warning(

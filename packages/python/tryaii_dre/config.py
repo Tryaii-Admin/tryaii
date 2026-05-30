@@ -4,10 +4,13 @@ Global configuration for TryAii-DRE.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Optional
+
+logger = logging.getLogger("tryaii_dre")
 
 # Load .env file if python-dotenv is available
 try:
@@ -32,8 +35,16 @@ class CacheConfig:
     embedding_cache_size: int = 300
     classification_cache_size: int = 150
     ttl_seconds: float = 300.0  # 5 minutes
-    # Optional Redis URL for distributed caching
+    # Reserved for future distributed/Redis caching. NOT YET IMPLEMENTED:
+    # setting this currently has no effect and the in-memory LRU cache is used.
     redis_url: Optional[str] = None
+
+    def __post_init__(self):
+        if self.redis_url:
+            logger.warning(
+                "redis_url is set but distributed/Redis caching is not yet "
+                "implemented; falling back to the in-memory LRU cache."
+            )
 
 
 @dataclass

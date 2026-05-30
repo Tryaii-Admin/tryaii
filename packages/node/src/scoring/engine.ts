@@ -24,10 +24,10 @@ export interface ModelScore {
 
 /** Speed tier -> numeric score. */
 export const SPEED_SCORES: Record<string, number> = {
-  'very fast': 0.5,
-  'fast': 0.4,
-  'medium': 0.3,
-  'slow': 0.2,
+  'very fast': 1.0,
+  'fast': 0.8,
+  'medium': 0.6,
+  'slow': 0.3,
   'very slow': 0.1,
 };
 
@@ -39,6 +39,13 @@ export const SPEED_SCORES: Record<string, number> = {
  * scorer a wider, more stable view of what the prompt looks like.
  */
 const TOP_BENCHMARKS_FOR_SCORING = 5;
+
+/**
+ * Neutral quality used only as a last-resort fallback when a prompt matches no
+ * benchmark at all (every similarity clamps to 0), so it stays routable on
+ * cost/speed instead of being dropped. See scoreModels' neutralFallback retry.
+ */
+const NEUTRAL_QUALITY_SCORE = 0.5;
 
 /**
  * Compute the median raw benchmark score across the registry, per benchmark.
@@ -64,7 +71,9 @@ function computeBenchmarkMedians(
     const values: number[] = [];
     for (const m of models) {
       const v = m.benchmarkScores[name];
-      if (v != null) values.push(v);
+      // Number.isFinite skips NaN/Infinity as well as undefined -- a NaN
+      // benchmark value must not poison the registry-wide median.
+      if (Number.isFinite(v)) values.push(v);
     }
     if (values.length === 0) continue; // omit -> caller skips this benchmark for this model
     values.sort((a, b) => a - b);
@@ -132,13 +141,46 @@ export class ScoringEngine {
       }
     }
 
-    // Sort by final score descending
-    scores.sort((a, b) => b.finalScore - a.finalScore);
+    // Fallback: if NO model scored, the prompt matched no benchmark at all (its
+    // embedding is orthogonal/negative to every centroid, so all similarities
+    // clamped to 0). Rather than return nothing -- which makes a single route()
+    // throw and a budget run report the whole dataset infeasible -- re-score
+    // every model on a neutral quality baseline so the prompt stays routable on
+    // cost/speed. The per-model skip above still applies when only *some* models
+    // lack signal.
+    if (scores.length === 0) {
+      for (const model of models) {
+        const score = this._scoreSingleModel(
+          model,
+          topBenchmarkDict,
+          benchmarkMedians,
+          priorities,
+          true,
+        );
+        if (score !== null) {
+          scores.push(score);
+        }
+      }
+    }
 
-    // Normalize to 0.1-0.95 range (best model ~ 0.95)
-    if (scores.length > 0) {
+    // Sort by final score descending, with a deterministic secondary key so
+    // median-imputation ties favour real data and are reproducible:
+    //   1. higher finalScore
+    //   2. more real (non-imputed) benchmark coverage -- topBenchmarks only
+    //      holds the model's own non-imputed benchmarks
+    //   3. ascending modelId by Unicode code point (NOT locale-aware)
+    scores.sort((a, b) => {
+      if (b.finalScore !== a.finalScore) return b.finalScore - a.finalScore;
+      if (b.topBenchmarks.length !== a.topBenchmarks.length) {
+        return b.topBenchmarks.length - a.topBenchmarks.length;
+      }
+      return a.modelId < b.modelId ? -1 : a.modelId > b.modelId ? 1 : 0;
+    });
+
+    if (scores.length > 1) {
+      // Normalize to 0.1-0.95 range (best model ~ 0.95)
       const maxRaw = scores[0].finalScore;
-      const minRaw = scores.length > 1 ? scores[scores.length - 1].finalScore : 0;
+      const minRaw = scores[scores.length - 1].finalScore;
 
       for (const s of scores) {
         if (maxRaw === minRaw) {
@@ -148,6 +190,12 @@ export class ScoringEngine {
           s.finalScore = Math.round((0.1 + 0.85 * normalized) * 10000) / 10000;
         }
       }
+    } else if (scores.length === 1) {
+      // Single surviving model: don't rescale against a hardcoded 0 floor
+      // (that forced ~0.95 regardless of how good the model actually is).
+      // Surface its own unnormalized weighted score, clamped to [0,1].
+      const only = scores[0];
+      only.finalScore = Math.round(Math.max(0, Math.min(1, only.finalScore)) * 10000) / 10000;
     }
 
     return scores.slice(0, topK);
@@ -158,6 +206,10 @@ export class ScoringEngine {
     topBenchmarks: Record<string, number>,
     benchmarkMedians: Record<string, number>,
     priorities: Priorities,
+    // When true, a model with no usable similarity signal is scored on a neutral
+    // quality baseline instead of being dropped -- used only for the
+    // all-models-signal-less case (see scoreModels).
+    neutralFallback = false,
   ): ModelScore | null {
     // --- Quality score ---
     let weightedQualitySum = 0;
@@ -171,7 +223,9 @@ export class ScoringEngine {
     for (const [benchmarkName, userSimilarity] of Object.entries(topBenchmarks)) {
       let rawScore = model.benchmarkScores[benchmarkName];
       let imputed = false;
-      if (rawScore == null) {
+      // !Number.isFinite treats NaN/Infinity like a missing score so a junk
+      // value is imputed from the median rather than poisoning the result.
+      if (!Number.isFinite(rawScore)) {
         const median = benchmarkMedians[benchmarkName];
         // No model in the registry has data on this benchmark -> nothing to
         // impute from. Falling through to `continue` here preserves the old
@@ -189,13 +243,22 @@ export class ScoringEngine {
       if (!imputed) modelTopBenchmarks.push([benchmarkName, normalized]);
     }
 
-    if (totalSimilarityWeight === 0) return null;
+    // No usable similarity signal: normally drop the model so models with real
+    // signal win. But when EVERY model is signal-less, scoreModels retries with
+    // neutralFallback=true so the prompt stays routable on cost/speed -- flagged
+    // in the reasoning below so the "no signal" case is observable, not mistaken
+    // for a real quality judgement.
+    const noSignal = totalSimilarityWeight === 0;
+    if (noSignal && !neutralFallback) return null;
 
-    const qualityScore = weightedQualitySum / totalSimilarityWeight;
+    const qualityScore = noSignal ? NEUTRAL_QUALITY_SCORE : weightedQualitySum / totalSimilarityWeight;
 
     // --- Cost score ---
+    // Always compute when pricing data exists: gating on priority dropped the
+    // numerator while keeping the weight in totalWeight (denominator), which is
+    // mathematically inconsistent. The priority weight already scales the term.
     let costScore = 0;
-    if (priorities.cost > 1 && model.pricing) {
+    if (model.pricing) {
       const avgCost = (model.pricing.inputPer1k + model.pricing.outputPer1k) / 2;
       // Normalize against $0.10/1k tokens baseline
       costScore = Math.max(0.0, 1.0 - avgCost / 0.1);
@@ -203,7 +266,7 @@ export class ScoringEngine {
 
     // --- Speed score ---
     let speedScore = 0;
-    if (priorities.speed > 1 && model.latency) {
+    if (model.latency) {
       speedScore = SPEED_SCORES[model.latency] ?? 0.3;
     }
 
@@ -226,12 +289,17 @@ export class ScoringEngine {
       .map(([b, s]) => `${b} (${Math.round(s * 100)}%)`)
       .join(', ');
 
-    let reasoning = `Quality: ${qualityScore.toFixed(2)} on [${topBenchStr}]`;
-    if (imputedCount > 0) {
-      // Tell the reader the score is partly an estimate. Useful when reading
-      // eval output and wondering why a model with thin coverage ranked here.
-      const total = Object.keys(topBenchmarks).length;
-      reasoning += ` | imputed: ${imputedCount}/${total}`;
+    let reasoning: string;
+    if (noSignal) {
+      reasoning = 'No benchmark signal -- routed on cost/speed';
+    } else {
+      reasoning = `Quality: ${qualityScore.toFixed(2)} on [${topBenchStr}]`;
+      if (imputedCount > 0) {
+        // Tell the reader the score is partly an estimate. Useful when reading
+        // eval output and wondering why a model with thin coverage ranked here.
+        const total = Object.keys(topBenchmarks).length;
+        reasoning += ` | imputed: ${imputedCount}/${total}`;
+      }
     }
     if (costScore > 0) {
       reasoning += ` | Cost efficiency: ${costScore.toFixed(2)}`;

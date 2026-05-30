@@ -16,6 +16,7 @@ from typing import Optional
 import numpy as np
 
 from tryaii_dre.cache.lru import LRUCache
+from tryaii_dre.centroids.generator import benchmark_fingerprint
 from tryaii_dre.centroids.loader import CentroidLoader
 from tryaii_dre.classifiers.base import BaseClassifier, ClassificationResult
 from tryaii_dre.config import TryaiiDreConfig
@@ -44,9 +45,13 @@ def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     dot = np.dot(a, b)
     norm_a = np.linalg.norm(a)
     norm_b = np.linalg.norm(b)
-    if norm_a == 0 or norm_b == 0:
+    # Treat zero or non-finite norms (NaN/inf) as zero similarity.
+    if not np.isfinite(norm_a) or not np.isfinite(norm_b) or norm_a == 0 or norm_b == 0:
         return 0.0
-    return float(dot / (norm_a * norm_b))
+    sim = float(dot / (norm_a * norm_b))
+    if not np.isfinite(sim):
+        return 0.0
+    return sim
 
 
 class EmbeddingClassifier(BaseClassifier):
@@ -87,8 +92,13 @@ class EmbeddingClassifier(BaseClassifier):
         """Classify a prompt using embedding similarity to benchmark centroids."""
         start = time.time()
 
-        # Check classification cache
-        cache_key = self._hash_prompt(prompt)
+        # Ensure centroids are loaded
+        centroids = self._centroid_loader.get_centroids()
+
+        # Build a cache key that is scoped to the embedding model, dimension,
+        # and the benchmark-set fingerprint -- not just the prompt -- so cached
+        # results don't leak across models or benchmark sets.
+        cache_key = self._cache_key(prompt, centroids)
         cached = self._classification_cache.get(cache_key)
         if cached is not None:
             result = copy.copy(cached)
@@ -96,8 +106,21 @@ class EmbeddingClassifier(BaseClassifier):
             result.processing_time_ms = (time.time() - start) * 1000
             return result
 
-        # Ensure centroids are loaded
-        centroids = self._centroid_loader.get_centroids()
+        # Empty centroid map: return a well-defined zero-confidence result
+        # rather than crashing on max([]) or fabricating a label.
+        if not centroids:
+            result = ClassificationResult(
+                benchmark_scores={},
+                broad_category="",
+                subcategory="",
+                confidence=0.0,
+                classifier_used="embedding",
+                cache_hit=False,
+                processing_time_ms=(time.time() - start) * 1000,
+            )
+            self._classification_cache.set(cache_key, result)
+            self._ready = True
+            return result
 
         # Get prompt embedding (with caching)
         embedding = self._get_embedding(prompt)
@@ -109,8 +132,13 @@ class EmbeddingClassifier(BaseClassifier):
             # Clamp to [0, 1] -- negative similarities are not meaningful here
             benchmark_scores[benchmark_name] = max(0.0, similarity)
 
-        # Determine top category from highest-scoring benchmark
-        top_benchmark = max(benchmark_scores, key=benchmark_scores.get)  # type: ignore[arg-type]
+        # Determine top category from highest-scoring benchmark.
+        # Break ties deterministically by (score desc, benchmark_name asc),
+        # matching ClassificationResult.top_benchmarks ordering.
+        top_benchmark = min(
+            benchmark_scores,
+            key=lambda name: (-benchmark_scores[name], name),
+        )
         top_score = benchmark_scores[top_benchmark]
 
         broad_cat, sub_cat = BENCHMARK_CATEGORIES.get(
@@ -135,7 +163,9 @@ class EmbeddingClassifier(BaseClassifier):
 
     def _get_embedding(self, text: str) -> np.ndarray:
         """Get embedding with caching."""
-        cache_key = self._hash_prompt(text)
+        # Embedding cache key is scoped to the embedding model + dimension so
+        # vectors from different models never collide on the same prompt hash.
+        cache_key = self._embedding_cache_key(text)
         cached = self._embedding_cache.get(cache_key)
         if cached is not None:
             return cached
@@ -146,6 +176,20 @@ class EmbeddingClassifier(BaseClassifier):
 
     def is_ready(self) -> bool:
         return True  # Lazy initialization handles readiness
+
+    def _embedding_cache_key(self, text: str) -> str:
+        """Cache key scoped to the embedding model name + dimension."""
+        scope = f"{self._provider.model_name}:{self._provider.dimension}"
+        return self._hash_prompt(f"{scope}:{text}")
+
+    def _cache_key(self, prompt: str, centroids: dict[str, np.ndarray]) -> str:
+        """
+        Classification cache key scoped to the embedding model name, the
+        embedding dimension, and the benchmark-set fingerprint.
+        """
+        fingerprint = benchmark_fingerprint(centroids.keys())
+        scope = f"{self._provider.model_name}:{self._provider.dimension}:{fingerprint}"
+        return self._hash_prompt(f"{scope}:{prompt}")
 
     @staticmethod
     def _hash_prompt(prompt: str) -> str:

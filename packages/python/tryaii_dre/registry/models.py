@@ -70,10 +70,15 @@ class ModelInfo:
                 input_per_1k=d["pricing"].get("input_per_1k", 0),
                 output_per_1k=d["pricing"].get("output_per_1k", 0),
             )
+
+        # Filter out null benchmark scores
+        benchmark_scores = {
+            k: v for k, v in (d.get("benchmark_scores") or {}).items() if v is not None
+        }
         return cls(
             model_id=d["model_id"],
             provider=d["provider"],
-            benchmark_scores=d.get("benchmark_scores", {}),
+            benchmark_scores=benchmark_scores,
             capabilities=d.get("capabilities", []),
             pricing=pricing,
             latency=d.get("latency"),

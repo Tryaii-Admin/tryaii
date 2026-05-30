@@ -38,8 +38,8 @@ NORMALIZATION_RANGES: dict[str, NormalizationRange] = {
     "GSM8K": NormalizationRange(20, 98, "Grade school math"),
     "DROP": NormalizationRange(30, 90, "Reading comprehension with arithmetic"),
     "SuperGLUE": NormalizationRange(40, 95, "Natural language understanding"),
-    "Chatbot Arena (LMSys)": NormalizationRange(1000, 1600, "Human-rated chat quality"),
-    "MT-Bench": NormalizationRange(6.0, 10, "Multi-turn conversation quality"),
+    "Chatbot Arena (LMSys)": NormalizationRange(1000, 1550, "Human-rated chat quality"),
+    "MT-Bench": NormalizationRange(5, 10, "Multi-turn conversation quality"),
     "LiveBench": NormalizationRange(0, 100, "Fresh, contamination-resistant evaluation"),
 }
 

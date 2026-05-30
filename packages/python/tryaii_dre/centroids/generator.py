@@ -28,6 +28,17 @@ logger = logging.getLogger("tryaii_dre.centroids")
 TRAINING_QUERIES_PATH = Path(__file__).parent / "data" / "training_queries.json"
 
 
+def benchmark_fingerprint(benchmark_names) -> str:
+    """
+    Stable fingerprint of the benchmark set present in a centroid file.
+
+    Defined as the sorted benchmark names joined by "|". Used to detect when
+    a cached/bundled centroid file was generated against a different benchmark
+    set and must be regenerated. Must stay identical in the Node SDK.
+    """
+    return "|".join(sorted(benchmark_names))
+
+
 class CentroidGenerator:
     """
     Generates and manages benchmark centroids.
@@ -72,6 +83,12 @@ class CentroidGenerator:
             if show_progress:
                 logger.info(f"Generating centroid for {benchmark} ({len(queries)} queries)...")
 
+            # Reject empty query lists -- they would produce an all-NaN centroid
+            if not queries:
+                raise ValueError(
+                    f"Cannot generate centroid for '{benchmark}': no training queries provided"
+                )
+
             # Embed all queries for this benchmark
             embeddings = self._provider.embed_batch(queries)
 
@@ -80,6 +97,13 @@ class CentroidGenerator:
             norm = np.linalg.norm(centroid)
             if norm > 0:
                 centroid = centroid / norm
+
+            # Refuse to store a non-finite centroid (NaN/inf) -- skip the benchmark
+            if not np.all(np.isfinite(centroid)):
+                logger.warning(
+                    f"Skipping benchmark '{benchmark}': computed centroid is non-finite"
+                )
+                continue
 
             centroids[benchmark] = centroid
 
@@ -104,11 +128,23 @@ class CentroidGenerator:
         Returns:
             Centroid vector (numpy array).
         """
+        # Reject empty query lists -- they would produce an all-NaN centroid
+        if not queries:
+            raise ValueError(
+                f"Cannot generate centroid for '{benchmark_name}': no queries provided"
+            )
+
         embeddings = self._provider.embed_batch(queries)
         centroid = np.mean(embeddings, axis=0)
         norm = np.linalg.norm(centroid)
         if norm > 0:
             centroid = centroid / norm
+
+        # Refuse to return a non-finite centroid (NaN/inf)
+        if not np.all(np.isfinite(centroid)):
+            raise ValueError(
+                f"Computed centroid for '{benchmark_name}' is non-finite"
+            )
         return centroid
 
     def save(self, centroids: dict[str, np.ndarray], path: str | Path) -> None:
@@ -121,6 +157,9 @@ class CentroidGenerator:
                 "model": self._provider.model_name,
                 "dimension": self._provider.dimension,
                 "benchmark_count": len(centroids),
+                # Fingerprint of the benchmark set so the loader can reject a
+                # file generated against a different set of benchmarks.
+                "benchmark_fingerprint": benchmark_fingerprint(centroids.keys()),
             },
             "centroids": {
                 name: vector.tolist() for name, vector in centroids.items()
@@ -166,3 +205,10 @@ class CentroidGenerator:
             name: bench_data["queries"]
             for name, bench_data in data["benchmarks"].items()
         }
+
+    @staticmethod
+    def default_benchmark_fingerprint() -> str:
+        """Fingerprint of the bundled default benchmark set."""
+        with open(TRAINING_QUERIES_PATH, "r") as f:
+            data = json.load(f)
+        return benchmark_fingerprint(data["benchmarks"].keys())

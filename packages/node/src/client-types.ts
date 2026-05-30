@@ -1,7 +1,5 @@
 /**
- * SDK-specific TypeScript types for TryAii-DRE.
- *
- * These types define the public API surface of the Node SDK.
+ * High-level client TypeScript types for TryAii-DRE.
  */
 
 /**
@@ -31,7 +29,7 @@ export interface ModelScore {
 }
 
 /**
- * Result of routing a prompt (no API call made).
+ * Result of routing a prompt, with no API call made.
  */
 export interface RouteResult {
   /** The top recommended model ID. */
@@ -40,7 +38,7 @@ export interface RouteResult {
   /** All scored models, sorted by score descending. */
   scores: ModelScore[];
 
-  /** Score of the best model (convenience accessor). */
+  /** Score of the best model. */
   bestScore: number;
 
   /** Reasoning for why the top model was chosen. */
@@ -92,7 +90,7 @@ export interface ChatOptions {
   /** System message / system prompt. */
   systemMessage?: string;
 
-  /** Sampling temperature (0.0 to 2.0). Default: 0.7. */
+  /** Sampling temperature. Default: 0.7. */
   temperature?: number;
 
   /** Maximum tokens in the response. */
@@ -122,30 +120,4 @@ export interface DREClientOptions {
 
   /** Base URL for OpenRouter API. */
   baseUrl?: string;
-}
-
-/**
- * Options for Express middleware.
- */
-export interface DREMiddlewareOptions {
-  /** OpenRouter API key. Falls back to OPENROUTER_API_KEY env var. Not required for routing-only middleware. */
-  apiKey?: string;
-
-  /** Default priorities for routing. */
-  priorities?: Priorities;
-
-  /** Prefix for response headers. Default: "X-DRE". */
-  headerPrefix?: string;
-
-  /** JSON body field to extract the prompt from. Default: "prompt". */
-  promptField?: string;
-
-  /**
-   * Callback invoked when routing fails inside the middleware.
-   *
-   * Routing failures never block the request pipeline — `next()` always runs.
-   * This hook is the only way to observe/log such failures in production.
-   * If omitted, failures are silently swallowed.
-   */
-  onError?: (error: unknown) => void;
 }

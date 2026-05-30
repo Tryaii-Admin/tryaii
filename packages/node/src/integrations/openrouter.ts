@@ -158,6 +158,10 @@ export class OpenRouterIntegration {
       reasoning = routeResult.scores[0]?.reasoning ?? '';
     }
 
+    if (!modelId) {
+      throw new Error('routing returned no model for this prompt');
+    }
+
     const openrouterModel = this._resolveModel(modelId);
 
     // Build messages
@@ -173,7 +177,8 @@ export class OpenRouterIntegration {
       messages,
       temperature: opts?.temperature ?? 0.7,
     };
-    if (opts?.maxTokens) {
+    // Only send max_tokens when it is a finite, positive number (0 is not meaningful).
+    if (opts?.maxTokens != null && Number.isFinite(opts.maxTokens) && opts.maxTokens > 0) {
       payload.max_tokens = opts.maxTokens;
     }
 
@@ -193,6 +198,13 @@ export class OpenRouterIntegration {
     }
 
     const data = await response.json() as Record<string, any>;
+    // OpenRouter can return HTTP 200 with an { error } envelope and no choices.
+    // Surface the provider message instead of returning a fake-empty success.
+    if (!data.choices?.length && data.error != null) {
+      const err = data.error as { message?: string } | string;
+      const message = typeof err === 'string' ? err : err.message ?? 'OpenRouter returned an error';
+      throw new Error(`OpenRouter API error: ${message}`);
+    }
     const content = data.choices?.[0]?.message?.content ?? '';
     const usage = data.usage ?? {};
 
@@ -227,6 +239,10 @@ export class OpenRouterIntegration {
       modelId = routeResult.bestModel;
     }
 
+    if (!modelId) {
+      throw new Error('routing returned no model for this prompt');
+    }
+
     const openrouterModel = this._resolveModel(modelId);
 
     const messages: Array<{ role: string; content: string }> = [];
@@ -241,7 +257,8 @@ export class OpenRouterIntegration {
       temperature: opts?.temperature ?? 0.7,
       stream: true,
     };
-    if (opts?.maxTokens) {
+    // Only send max_tokens when it is a finite, positive number (0 is not meaningful).
+    if (opts?.maxTokens != null && Number.isFinite(opts.maxTokens) && opts.maxTokens > 0) {
       payload.max_tokens = opts.maxTokens;
     }
 
@@ -280,13 +297,22 @@ export class OpenRouterIntegration {
         const dataStr = line.slice(6).trim();
         if (dataStr === '[DONE]') return;
 
+        let chunk: any;
         try {
-          const chunk = JSON.parse(dataStr);
-          const content = chunk.choices?.[0]?.delta?.content ?? '';
-          if (content) yield content;
+          chunk = JSON.parse(dataStr);
         } catch {
+          // Skip malformed SSE chunks
           continue;
         }
+        // OpenRouter can stream an { error } chunk; surface it before reading the delta.
+        // Thrown outside the parse try/catch so it is not swallowed as a malformed chunk.
+        if (chunk?.error != null) {
+          const err = chunk.error as { message?: string } | string;
+          const message = typeof err === 'string' ? err : err.message ?? 'OpenRouter returned an error';
+          throw new Error(`OpenRouter stream error: ${message}`);
+        }
+        const content = chunk.choices?.[0]?.delta?.content ?? '';
+        if (content) yield content;
       }
     }
   }

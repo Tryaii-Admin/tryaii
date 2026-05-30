@@ -4,6 +4,8 @@ The router is embedding-only. Tests use a deterministic FakeSentenceTransformer
 so they run instantly in CI without downloading model weights.
 """
 
+import hashlib
+
 import numpy as np
 import pytest
 
@@ -30,7 +32,10 @@ class FakeSentenceTransformer:
 
         vectors = []
         for text in texts:
-            seed = abs(hash(text)) % (2**32)
+            # Stable hash -- Python's builtin hash() is randomized per process
+            # (PYTHONHASHSEED), which made this "deterministic" fake actually
+            # vary run-to-run and flake confidence assertions.
+            seed = int(hashlib.md5(text.encode("utf-8")).hexdigest(), 16) % (2**32)
             rng = np.random.RandomState(seed)
             vector = rng.randn(384).astype(np.float32)
             if normalize_embeddings:

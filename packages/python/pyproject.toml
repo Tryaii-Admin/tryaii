@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tryaii-dre"
-version = "0.1.0"
+version = "0.2.0"
 description = "TryAii Diff Routing Engine -- Embedding-based AI model router. Understands your prompt semantically and routes to the best model based on benchmarks, cost, speed, and quality."
 readme = "README.md"
 license = "Apache-2.0"
@@ -40,6 +40,8 @@ dependencies = [
 [project.optional-dependencies]
 openai = ["openai>=1.0.0"]
 openrouter = ["httpx>=0.25.0"]
+# Planned: Redis-backed distributed cache. Not yet implemented; installing this
+# extra has no effect on caching today (the in-memory LRU cache is used).
 redis = ["redis>=5.0.0"]
 all = [
     "openai>=1.0.0",

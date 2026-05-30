@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -107,31 +108,43 @@ class Router:
         # Embedding provider (lazy -- only initialized when needed)
         self._embedding_provider = embedding_provider
         self._classifier: Optional[EmbeddingClassifier] = None
+        # The live centroid loader, shared between the classifier and
+        # add_benchmark so mutations are visible to classification.
+        self._centroid_loader: Optional[CentroidLoader] = None
+        # Guards lazy classifier/provider init so concurrent asyncio.to_thread
+        # workers don't each build a classifier / load the model.
+        self._classifier_lock = threading.Lock()
 
     def _ensure_classifier(self) -> EmbeddingClassifier:
         """Lazy-initialize the embedding classifier on first use."""
+        # Double-checked locking: fast path without the lock, then re-check
+        # under the lock so only one thread builds the classifier.
         if self._classifier is not None:
             return self._classifier
 
-        # Initialize embedding provider
-        if self._embedding_provider is None:
-            self._embedding_provider = LocalEmbeddingProvider(
-                model_name=self._config.embedding_model
+        with self._classifier_lock:
+            if self._classifier is not None:
+                return self._classifier
+
+            # Initialize embedding provider
+            if self._embedding_provider is None:
+                self._embedding_provider = LocalEmbeddingProvider(
+                    model_name=self._config.embedding_model
+                )
+
+            # Initialize centroid loader (stored so add_benchmark reuses it)
+            self._centroid_loader = CentroidLoader(
+                config=self._config,
+                embedding_provider=self._embedding_provider,
             )
 
-        # Initialize centroid loader
-        centroid_loader = CentroidLoader(
-            config=self._config,
-            embedding_provider=self._embedding_provider,
-        )
+            self._classifier = EmbeddingClassifier(
+                embedding_provider=self._embedding_provider,
+                centroid_loader=self._centroid_loader,
+                config=self._config,
+            )
 
-        self._classifier = EmbeddingClassifier(
-            embedding_provider=self._embedding_provider,
-            centroid_loader=centroid_loader,
-            config=self._config,
-        )
-
-        return self._classifier
+            return self._classifier
 
     def route(
         self,
@@ -245,13 +258,12 @@ class Router:
         normalizer = self._benchmark_registry.get_normalizer()
         self._scoring_engine = ScoringEngine(normalizer=normalizer)
 
-        # Generate centroid if classifier is initialized
-        if self._classifier is not None and self._embedding_provider is not None:
-            centroid_loader = CentroidLoader(
-                config=self._config,
-                embedding_provider=self._embedding_provider,
-            )
-            centroid_loader.add_benchmark_centroid(name, queries)
+        # Generate centroid if classifier is initialized. Mutate the LIVE
+        # loader shared with the classifier so the new benchmark is visible to
+        # classification, then invalidate cached classification results.
+        if self._classifier is not None and self._centroid_loader is not None:
+            self._centroid_loader.add_benchmark_centroid(name, queries)
+            self._classifier._classification_cache.clear()
 
         logger.info(f"Added custom benchmark: {name} ({len(queries)} queries)")
 

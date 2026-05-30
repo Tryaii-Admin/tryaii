@@ -50,6 +50,12 @@ packages/python/CENTROIDS_AND_UPDATES.md
 # Local-only dev workspace (eval runner, datasets, scratch scripts)
 eval/
 
+# Local benchmark snapshot cache (fetched from the tryaii-bench API)
+cache/
+
+# Derived routing data built from the snapshot (scripts/build_cache_shared.py)
+cache-shared/
+
 # Internal scratch / proposals
 MIGRATION.md
 docs/benchmarks-compare.html

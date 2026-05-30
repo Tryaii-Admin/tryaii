@@ -13,7 +13,7 @@ npm install tryaii-dre
 ## Quick Start
 
 ```typescript
-import { Priorities, Router } from 'tryaii-dre';
+import { DREClient, Priorities, Router } from 'tryaii-dre';
 
 // Embedding-based classifier using @xenova/transformers.
 const router = new Router();
@@ -27,6 +27,11 @@ const budgetResult = await router.route(
   'Explain quantum computing',
   { priorities: Priorities.budget() }  // Favor cheaper models
 );
+
+// Route and call the selected model through OpenRouter.
+const client = new DREClient({ apiKey: process.env.OPENROUTER_API_KEY });
+const response = await client.chat('Write a quicksort implementation');
+console.log(response.content);
 ```
 
 ## Embedding Provider
@@ -107,6 +112,23 @@ await router.route('prompt', { filterMaxCost: 0.01 });
 await router.route('prompt', { filterCapability: 'vision' });
 ```
 
+## High-Level Client
+
+Use `DREClient` when you want routing plus chat/streaming in one object:
+
+```typescript
+import { DREClient } from 'tryaii-dre';
+
+const client = new DREClient({ apiKey: process.env.OPENROUTER_API_KEY });
+
+const route = await client.route('Explain quantum computing');
+console.log(route.bestModel);
+
+for await (const chunk of client.stream('Explain machine learning')) {
+  process.stdout.write(chunk);
+}
+```
+
 ## OpenRouter Integration
 
 Route prompts and call the selected model through OpenRouter:
@@ -140,6 +162,21 @@ User Prompt
 ```
 
 ## Eval Dashboard
+
+The eval runner supports a shared generation budget:
+
+```bash
+cd eval
+npm run eval -- data/example.json results/node-budget -- --max-price=0.10 --output-tokens=2000
+npm run eval -- data/example.json results/node-budget-fit -- --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+```
+
+This treats `--max-price` as the total budget for the whole dataset and
+`--output-tokens` as the fixed expected response length per prompt. In budgeted
+eval, quality/cost/speed priority flags are ignored: price is the hard
+constraint, and the optimizer maximizes model quality within that price.
+`--budget-mode=fit-output` lowers that fixed output length when the requested
+length cannot fit the total budget.
 
 Render a self-contained HTML report from an eval run's `summary.json` (the same shape produced by the bundled eval runner). The output is a zero-dependency string you can write next to `summary.json` / `results.jsonl` to make the run dir an openable artifact.
 
