@@ -88,3 +88,13 @@ def test_compute_difficulty_low_when_cheap_model_is_strong():
 def test_compute_difficulty_zero_for_empty_or_zero_ceiling():
     assert compute_difficulty([]) == 0.0
     assert compute_difficulty([{"quality": 0.0, "cost": 1.0}]) == 0.0
+
+
+def test_batch_percentile_ranks():
+    from tryaii_dre.budget import _batch_percentile_ranks
+
+    assert _batch_percentile_ranks([10, 20, 30]) == [0.0, 0.5, 1.0]
+    assert _batch_percentile_ranks([30, 10, 20]) == [1.0, 0.0, 0.5]
+    assert _batch_percentile_ranks([5, 5]) == [0.5, 0.5]
+    assert _batch_percentile_ranks([42]) == [0.0]
+    assert _batch_percentile_ranks([]) == []

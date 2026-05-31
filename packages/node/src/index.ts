@@ -75,6 +75,7 @@ export type { DashboardSummary, DashboardLinks } from './dashboard/index.js';
 
 // Budget optimization
 export {
+  batchPercentileRanks,
   computeDifficulty,
   costUnitForBudget,
   DEFAULT_DIFFICULTY_GAMMA,

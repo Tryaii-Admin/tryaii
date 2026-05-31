@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { computeDifficulty, optimizeBudgetCandidates, type BudgetCandidate } from '../src/budget.js';
+import {
+  batchPercentileRanks,
+  computeDifficulty,
+  optimizeBudgetCandidates,
+  type BudgetCandidate,
+} from '../src/budget.js';
 
 function candidate(
   promptIndex: number,
@@ -87,5 +92,18 @@ describe('computeDifficulty', () => {
   it('returns 0 for empty input or a non-positive ceiling', () => {
     expect(computeDifficulty([])).toBe(0);
     expect(computeDifficulty([{ quality: 0, cost: 1 }])).toBe(0);
+  });
+});
+
+describe('batchPercentileRanks', () => {
+  it('maps values to 0..1 by rank, averaging ties', () => {
+    expect(batchPercentileRanks([10, 20, 30])).toEqual([0, 0.5, 1]);
+    expect(batchPercentileRanks([30, 10, 20])).toEqual([1, 0, 0.5]);
+    expect(batchPercentileRanks([5, 5])).toEqual([0.5, 0.5]);
+  });
+
+  it('handles empty and single-element inputs', () => {
+    expect(batchPercentileRanks([])).toEqual([]);
+    expect(batchPercentileRanks([42])).toEqual([0]);
   });
 });

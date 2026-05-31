@@ -100,6 +100,29 @@ def compute_difficulty(points: list[dict]) -> float:
     return max(0.0, min(1.0, difficulty))
 
 
+def _batch_percentile_ranks(values: list[float]) -> list[float]:
+    """Map values to their rank within the batch, scaled to [0, 1] (smallest -> 0,
+    largest -> 1, ties share the average rank). Spreads a compressed difficulty
+    signal across the full range so relative ordering -- not tiny absolute
+    differences -- drives allocation. Empty/single inputs map to 0. Must stay in
+    sync with the Node SDK's batchPercentileRanks (budget.ts)."""
+    n = len(values)
+    if n <= 1:
+        return [0.0 for _ in values]
+    order = sorted(range(n), key=lambda i: values[i])
+    ranks = [0.0] * n
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and values[order[j + 1]] == values[order[i]]:
+            j += 1
+        avg = (i + j) / 2.0
+        for k in range(i, j + 1):
+            ranks[order[k]] = avg / (n - 1)
+        i = j + 1
+    return ranks
+
+
 def estimate_generation_cost(model, input_tokens: int, output_tokens: int) -> Optional[float]:
     """Estimate USD generation cost for a model, or None when pricing is missing."""
     if not model or not model.pricing:
@@ -347,7 +370,6 @@ def build_budget_candidates(
     prompt_index: int,
     priorities: Priorities,
     output_tokens: int,
-    difficulty_gamma: float = DEFAULT_DIFFICULTY_GAMMA,
 ) -> tuple[RouteResult, list[BudgetCandidate]]:
     """Route one prompt and convert every scored model to a budget candidate."""
     all_model_count = len(router.models.all_models)
@@ -373,10 +395,10 @@ def build_budget_candidates(
     difficulty = compute_difficulty(
         [{"quality": score.quality_score, "cost": cost} for score, cost in priced]
     )
-    difficulty_factor = 1.0 + difficulty_gamma * difficulty
-
+    # gamma is applied later in route_dataset_with_budget, AFTER batch-normalizing
+    # difficulty across all prompts; here utility is just raw quality.
     candidate_inputs = [
-        (score, cost, score.quality_score * difficulty_factor) for score, cost in priced
+        (score, cost, score.quality_score) for score, cost in priced
     ]
 
     # Tie-break: highest utility, then lowest cost, then smallest modelId
@@ -437,7 +459,6 @@ def route_dataset_with_budget(
             idx,
             quality_priorities,
             output_tokens,
-            difficulty_gamma,
         )
         route_times.append(round((time.perf_counter() - started) * 1000, 2))
         route_results.append(route_result)
@@ -455,6 +476,26 @@ def route_dataset_with_budget(
         )
         if progress_callback:
             progress_callback(idx + 1, len(prompts))
+
+    # Fix 1: batch-normalize difficulty to each prompt's rank within the batch
+    # (0 = easiest, 1 = hardest), then apply utility *= 1 + gamma * rank. Raw
+    # capability-sensitivity is compressed (cheap models are strong), so ranking
+    # stretches the signal to a full range and lets the knapsack reallocate toward
+    # the relatively-harder prompts. Must stay in sync with the Node SDK.
+    raw_difficulties = [group[0].difficulty if group else 0.0 for group in candidate_groups]
+    difficulty_ranks = _batch_percentile_ranks(raw_difficulties)
+    candidate_groups = [
+        [
+            BudgetCandidate(
+                **{
+                    **c.__dict__,
+                    "utility": c.utility * (1.0 + difficulty_gamma * difficulty_ranks[i]),
+                }
+            )
+            for c in group
+        ]
+        for i, group in enumerate(candidate_groups)
+    ]
 
     requested_output_tokens = output_tokens
     optimization = optimize_budget_candidates(candidate_groups, max_price, cost_unit)

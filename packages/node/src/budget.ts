@@ -123,6 +123,30 @@ export function computeDifficulty(points: Array<{ quality: number; cost: number 
   return Math.max(0, Math.min(1, difficulty));
 }
 
+/**
+ * Map a list of values to their rank within the batch, scaled to [0, 1]
+ * (smallest -> 0, largest -> 1, ties share the average rank). Used to spread a
+ * compressed difficulty signal across the full range so relative ordering --
+ * not tiny absolute differences -- drives budget allocation. Empty / single
+ * inputs map to 0 (no relative information to act on). Must stay in sync with
+ * the Python SDK's _batch_percentile_ranks (budget.py).
+ */
+export function batchPercentileRanks(values: number[]): number[] {
+  const n = values.length;
+  if (n <= 1) return values.map(() => 0);
+  const order = values.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v);
+  const ranks = new Array<number>(n);
+  let i = 0;
+  while (i < n) {
+    let j = i;
+    while (j + 1 < n && order[j + 1].v === order[i].v) j++;
+    const avg = (i + j) / 2; // 0-based average rank for the tie group
+    for (let k = i; k <= j; k++) ranks[order[k].i] = avg / (n - 1);
+    i = j + 1;
+  }
+  return ranks;
+}
+
 /** Estimate USD generation cost for a model, or null when pricing is missing. */
 export function estimateGenerationCost(
   model: ModelInfo | undefined,
@@ -385,7 +409,6 @@ async function buildBudgetCandidates(
   priorities: Priorities,
   outputTokens: number,
   costUnit: number,
-  difficultyGamma: number,
 ): Promise<{ routeResult: RouteResult; candidates: BudgetCandidate[]; routeMs: number; difficulty: number }> {
   const started = Date.now();
   const routeResult = await router.route(prompt, {
@@ -416,8 +439,9 @@ async function buildBudgetCandidates(
   const difficulty = computeDifficulty(
     priced.map((p) => ({ quality: p.score.qualityScore, cost: p.estimatedCost })),
   );
-  const difficultyFactor = 1 + difficultyGamma * difficulty;
-
+  // gamma is applied later in routeDatasetWithBudget, AFTER batch-normalizing
+  // difficulty across all prompts, so a compressed raw signal still produces
+  // strong relative ordering. Here utility is just raw quality.
   const candidateInputs: Array<{
     score: RouteResult['scores'][number];
     estimatedCost: number;
@@ -425,7 +449,7 @@ async function buildBudgetCandidates(
   }> = priced.map((p) => ({
     score: p.score,
     estimatedCost: p.estimatedCost,
-    utility: p.score.qualityScore * difficultyFactor,
+    utility: p.score.qualityScore,
   }));
 
   const qualityBestModel =
@@ -480,12 +504,26 @@ export async function routeDatasetWithBudget(
       qualityPriorities,
       options.outputTokens,
       costUnit,
-      difficultyGamma,
     );
     routeResults.push(prepared.routeResult);
     routeTimes.push(prepared.routeMs);
     candidateGroups.push(prepared.candidates);
     options.progressCallback?.(idx + 1, options.prompts.length);
+  }
+
+  // Fix 1: batch-normalize difficulty. Raw capability-sensitivity is compressed
+  // (most prompts ~0.05-0.09, because cheap models are strong), so the absolute
+  // value barely separates prompts. Replace it with each prompt's RANK within the
+  // batch (0 = easiest, 1 = hardest) and apply utility *= 1 + gamma * rank. This
+  // preserves the ordering but stretches it to a full 0..1 range, so the knapsack
+  // actually reallocates budget toward the relatively-harder prompts.
+  const rawDifficulties = candidateGroups.map((group) => group[0]?.difficulty ?? 0);
+  const difficultyRanks = batchPercentileRanks(rawDifficulties);
+  for (let idx = 0; idx < candidateGroups.length; idx++) {
+    const factor = 1 + difficultyGamma * difficultyRanks[idx];
+    for (const candidate of candidateGroups[idx]) {
+      candidate.utility *= factor;
+    }
   }
 
   const requestedOutputTokens = options.outputTokens;
