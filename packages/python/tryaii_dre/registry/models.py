@@ -224,7 +224,7 @@ class ModelRegistry:
         if not preset_file.exists():
             raise FileNotFoundError(f"Preset '{name}' not found at {preset_file}")
 
-        with open(preset_file, "r") as f:
+        with open(preset_file) as f:
             data = json.load(f)
 
         count = 0

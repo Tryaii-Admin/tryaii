@@ -15,23 +15,25 @@ Usage:
 
 import logging
 
-logging.getLogger("tryaii_dre").addHandler(logging.NullHandler())
-
-from tryaii_dre.router import Router, RouteResult
-from tryaii_dre.registry.models import ModelRegistry, ModelInfo
-from tryaii_dre.scoring.priorities import Priorities, DEFAULT_PRIORITIES
 from tryaii_dre.benchmarks.registry import BenchmarkRegistry
-from tryaii_dre.config import TryaiiDreConfig
-from tryaii_dre.client import DREClient
 from tryaii_dre.budget import (
     BudgetCandidate,
-    BudgetOptimizationResult,
     BudgetedRouteResult,
+    BudgetOptimizationResult,
     estimate_tokens,
     route_dataset_with_budget,
 )
+from tryaii_dre.client import DREClient
+from tryaii_dre.config import TryaiiDreConfig
+from tryaii_dre.registry.models import ModelInfo, ModelRegistry
+from tryaii_dre.router import Router, RouteResult
+from tryaii_dre.scoring.priorities import DEFAULT_PRIORITIES, Priorities
 
-__version__ = "0.2.0"
+# Attach a NullHandler so library logging stays silent unless the host app
+# configures handlers. Done after imports to keep module-level imports at top.
+logging.getLogger("tryaii_dre").addHandler(logging.NullHandler())
+
+__version__ = "0.2.1"
 
 __all__ = [
     "Router",

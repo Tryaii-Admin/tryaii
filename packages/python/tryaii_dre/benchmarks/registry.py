@@ -159,7 +159,7 @@ class BenchmarkRegistry:
         Returns:
             Number of benchmarks loaded.
         """
-        with open(path, "r") as f:
+        with open(path) as f:
             data = json.load(f)
 
         count = 0

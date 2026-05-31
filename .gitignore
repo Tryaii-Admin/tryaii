@@ -50,11 +50,15 @@ packages/python/CENTROIDS_AND_UPDATES.md
 # Local-only dev workspace (eval runner, datasets, scratch scripts)
 eval/
 
-# Local benchmark snapshot cache (fetched from the tryaii-bench API)
-cache/
+# Local benchmark snapshot cache (fetched from the tryaii-bench API).
+# Anchored with a leading slash to the repo root so it does NOT match the
+# packages/python/tryaii_dre/cache/ submodule. Hatchling honors .gitignore at
+# build time, and an unanchored `cache/` dropped that submodule from the 0.2.0
+# wheel (ModuleNotFoundError: No module named 'tryaii_dre.cache').
+/cache/
 
 # Derived routing data built from the snapshot (scripts/build_cache_shared.py)
-cache-shared/
+/cache-shared/
 
 # Internal scratch / proposals
 MIGRATION.md

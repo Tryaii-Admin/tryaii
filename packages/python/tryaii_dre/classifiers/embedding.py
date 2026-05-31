@@ -22,7 +22,6 @@ from tryaii_dre.classifiers.base import BaseClassifier, ClassificationResult
 from tryaii_dre.config import TryaiiDreConfig
 from tryaii_dre.embeddings.base import BaseEmbeddingProvider
 
-
 # Benchmark -> broad category mapping for display purposes
 BENCHMARK_CATEGORIES: dict[str, tuple[str, str]] = {
     "MMLU": ("EDUCATIONAL", "ACADEMIC_INSTRUCTION"),

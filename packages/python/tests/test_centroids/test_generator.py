@@ -1,6 +1,5 @@
 """Tests for centroid generation."""
 
-import json
 import tempfile
 from pathlib import Path
 

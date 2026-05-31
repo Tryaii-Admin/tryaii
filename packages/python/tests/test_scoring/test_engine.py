@@ -58,7 +58,9 @@ class TestScoringEngine:
         )
         # cheap-fast should rank higher with cost priority than with quality priority
         cheap_rank_cost = next(i for i, s in enumerate(scores_cost) if s.model_id == "cheap-fast")
-        cheap_rank_qual = next(i for i, s in enumerate(scores_quality) if s.model_id == "cheap-fast")
+        cheap_rank_qual = next(
+            i for i, s in enumerate(scores_quality) if s.model_id == "cheap-fast"
+        )
         assert cheap_rank_cost < cheap_rank_qual
 
     def test_speed_first_boosts_faster_models(self):

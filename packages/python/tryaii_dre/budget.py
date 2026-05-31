@@ -426,7 +426,9 @@ def route_dataset_with_budget(
             fitted_optimization.budget_mode = budget_mode
             fitted_optimization.requested_output_tokens = requested_output_tokens
             fitted_optimization.effective_output_tokens = fitted_tokens
-            fitted_optimization.requested_minimum_required_budget = optimization.minimum_required_budget
+            fitted_optimization.requested_minimum_required_budget = (
+                optimization.minimum_required_budget
+            )
             fitted_optimization.budget_shortfall = max(
                 0.0,
                 optimization.minimum_required_budget - max_price,

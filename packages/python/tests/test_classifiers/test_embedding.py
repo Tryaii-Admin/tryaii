@@ -5,10 +5,9 @@ the real sentence-transformers model in CI.
 """
 
 import numpy as np
-import pytest
 
-from tryaii_dre.classifiers.embedding import EmbeddingClassifier, _cosine_similarity
 from tryaii_dre.centroids.loader import CentroidLoader
+from tryaii_dre.classifiers.embedding import EmbeddingClassifier, _cosine_similarity
 from tryaii_dre.config import TryaiiDreConfig
 from tryaii_dre.embeddings.base import BaseEmbeddingProvider
 
@@ -98,7 +97,7 @@ class TestEmbeddingClassifier:
     def test_caching_works(self):
         classifier = self._make_classifier()
 
-        result1 = classifier.classify("Same prompt")
+        classifier.classify("Same prompt")
         call_count_after_first = self.provider._call_count
 
         result2 = classifier.classify("Same prompt")
@@ -113,8 +112,6 @@ class TestEmbeddingClassifier:
         result1 = classifier.classify("Write Python code")
         result2 = classifier.classify("Tell me a bedtime story")
 
-        # Different prompts should produce different top benchmarks
-        top1 = result1.top_benchmarks[0][0]
-        top2 = result2.top_benchmarks[0][0]
-        # Not guaranteed to be different with mock, but scores should differ
+        # Different prompts should produce different scores (top-benchmark
+        # ordering isn't guaranteed to differ with the mock provider).
         assert result1.benchmark_scores != result2.benchmark_scores

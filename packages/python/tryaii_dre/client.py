@@ -15,7 +15,8 @@ Usage:
 from __future__ import annotations
 
 import os
-from typing import Generator, Optional
+from collections.abc import Generator
+from typing import Optional
 
 from tryaii_dre.config import TryaiiDreConfig
 from tryaii_dre.integrations.openrouter import OpenRouterIntegration, OpenRouterResponse

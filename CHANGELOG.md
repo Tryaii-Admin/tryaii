@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.1 (2026-05-31)
+
+Bugfix release. **The 0.2.0 PyPI wheel was broken and has been yanked** — please
+use 0.2.1. (The npm 0.2.0 package was unaffected; 0.2.1 is published for parity.)
+
+### Fixed
+
+- **Missing `tryaii_dre.cache` submodule in the published wheel.** The root
+  `.gitignore` had an unanchored `cache/` pattern (intended for the repo-root
+  benchmark-snapshot cache). Hatchling honors `.gitignore` at build time, so the
+  pattern also matched `packages/python/tryaii_dre/cache/` and silently dropped
+  it from the sdist and wheel — a clean `pip install tryaii-dre` followed by
+  `from tryaii_dre import Router` raised
+  `ModuleNotFoundError: No module named 'tryaii_dre.cache'`. The patterns are now
+  anchored (`/cache/`, `/cache-shared/`) so only the repo-root directories are
+  ignored, and the wheel ships all 33 modules. npm was unaffected (it ships
+  `dist/` via the `files` field, not `.gitignore`).
+
+### Changed
+
+- Python CI lint is green again. `UP045` (`Optional[X]` → `X | None`) is ignored
+  in ruff config because the package targets Python 3.9 + pydantic, where that
+  union syntax raises `TypeError` at annotation-evaluation time; the remaining
+  `E402`/`E501`/`F841` findings were cleaned up.
+
 ## 0.2.0 (2026-05-30)
 
 First public release on PyPI and npm (the 0.1.0 monorepo below was never

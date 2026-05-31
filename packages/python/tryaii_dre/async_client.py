@@ -21,9 +21,10 @@ import logging
 import math
 import os
 import random
+from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-from typing import AsyncGenerator, Optional
+from typing import Optional
 
 from tryaii_dre.classifiers.base import MAX_PROMPT_LENGTH
 from tryaii_dre.config import TryaiiDreConfig

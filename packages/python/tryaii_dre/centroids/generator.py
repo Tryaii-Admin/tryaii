@@ -186,7 +186,7 @@ class CentroidGenerator:
         Returns:
             Tuple of (centroids dict, metadata dict).
         """
-        with open(path, "r") as f:
+        with open(path) as f:
             data = json.load(f)
 
         centroids = {
@@ -198,7 +198,7 @@ class CentroidGenerator:
 
     def _load_default_queries(self) -> dict[str, list[str]]:
         """Load bundled training queries."""
-        with open(TRAINING_QUERIES_PATH, "r") as f:
+        with open(TRAINING_QUERIES_PATH) as f:
             data = json.load(f)
 
         return {
@@ -209,6 +209,6 @@ class CentroidGenerator:
     @staticmethod
     def default_benchmark_fingerprint() -> str:
         """Fingerprint of the bundled default benchmark set."""
-        with open(TRAINING_QUERIES_PATH, "r") as f:
+        with open(TRAINING_QUERIES_PATH) as f:
             data = json.load(f)
         return benchmark_fingerprint(data["benchmarks"].keys())

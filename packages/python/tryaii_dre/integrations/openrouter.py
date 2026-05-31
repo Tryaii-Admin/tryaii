@@ -29,10 +29,11 @@ import math
 import os
 import random
 import time
+from collections.abc import Generator
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-from typing import Generator, Optional
+from typing import Optional
 
 from tryaii_dre.classifiers.base import MAX_PROMPT_LENGTH
 
@@ -301,7 +302,11 @@ class OpenRouterIntegration:
 
         response = self._request_with_retry("POST", "/chat/completions", json=payload)
         if response.status_code >= 400:
-            logger.warning("OpenRouter API error status=%d model=%s", response.status_code, openrouter_model)
+            logger.warning(
+                "OpenRouter API error status=%d model=%s",
+                response.status_code,
+                openrouter_model,
+            )
         response.raise_for_status()
         data = response.json()
 

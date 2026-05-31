@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tryaii-dre"
-version = "0.2.0"
+version = "0.2.1"
 description = "TryAii Diff Routing Engine -- Embedding-based AI model router. Understands your prompt semantically and routes to the best model based on benchmarks, cost, speed, and quality."
 readme = "README.md"
 license = "Apache-2.0"
@@ -76,6 +76,17 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
+ignore = [
+    # UP045 rewrites `Optional[X]` to `X | None`. This package targets Python 3.9
+    # and uses pydantic, which evaluates annotations at runtime -- `X | None`
+    # raises TypeError on 3.9. Keep `Optional[...]` until the floor is >= 3.10.
+    "UP045",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# main.py embeds the eval dashboard's HTML/CSS as triple-quoted string literals;
+# wrapping those lines to 100 cols would corrupt the generated markup.
+"tryaii_dre/cli/main.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
