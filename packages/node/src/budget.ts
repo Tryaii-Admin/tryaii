@@ -66,6 +66,8 @@ export interface RouteDatasetWithBudgetOptions {
    * complexity-aware allocation (utility = raw quality).
    */
   difficultyGamma?: number;
+  /** Which difficulty signal to use: 'intrinsic' (default), 'capability', or 'blend'. */
+  difficultySource?: DifficultySource;
   progressCallback?: (done: number, total: number) => void;
 }
 
@@ -90,6 +92,16 @@ export function estimateTokens(text: string): number {
  * Must stay in sync with the Python SDK's DEFAULT_DIFFICULTY_GAMMA (budget.py).
  */
 export const DEFAULT_DIFFICULTY_GAMMA = 1.0;
+
+/**
+ * Which difficulty signal drives allocation:
+ *   - 'intrinsic'  : embedding distance to easy/hard centroids (content-based) [default]
+ *   - 'capability' : spread of model quality vs price (computeDifficulty)
+ *   - 'blend'      : mean of the two
+ * Must stay in sync with the Python SDK (DEFAULT_DIFFICULTY_SOURCE).
+ */
+export type DifficultySource = 'intrinsic' | 'capability' | 'blend';
+export const DEFAULT_DIFFICULTY_SOURCE: DifficultySource = 'intrinsic';
 
 /**
  * Per-prompt difficulty = capability sensitivity: how much the achievable quality
@@ -409,6 +421,7 @@ async function buildBudgetCandidates(
   priorities: Priorities,
   outputTokens: number,
   costUnit: number,
+  difficultySource: DifficultySource,
 ): Promise<{ routeResult: RouteResult; candidates: BudgetCandidate[]; routeMs: number; difficulty: number }> {
   const started = Date.now();
   const routeResult = await router.route(prompt, {
@@ -436,9 +449,20 @@ async function buildBudgetCandidates(
   // budget. The old `confidence` multiplier is dropped on purpose: it measured
   // category-match clarity (often higher for easy, prototypical prompts), not
   // difficulty, and so worked mildly against complexity-aware allocation.
-  const difficulty = computeDifficulty(
+  // Pick the difficulty signal. 'capability' = how much model choice changes
+  // quality (computeDifficulty); 'intrinsic' = content-based easy/hard centroid
+  // distance from the classifier; 'blend' = mean of the two. Intrinsic falls back
+  // to capability when the classifier didn't supply it (e.g. the sync path).
+  const capabilityDifficulty = computeDifficulty(
     priced.map((p) => ({ quality: p.score.qualityScore, cost: p.estimatedCost })),
   );
+  const intrinsicDifficulty = routeResult.classification?.difficulty ?? capabilityDifficulty;
+  const difficulty =
+    difficultySource === 'capability'
+      ? capabilityDifficulty
+      : difficultySource === 'blend'
+        ? 0.5 * (capabilityDifficulty + intrinsicDifficulty)
+        : intrinsicDifficulty;
   // gamma is applied later in routeDatasetWithBudget, AFTER batch-normalizing
   // difficulty across all prompts, so a compressed raw signal still produces
   // strong relative ordering. Here utility is just raw quality.
@@ -491,6 +515,7 @@ export async function routeDatasetWithBudget(
 
   const costUnit = costUnitForBudget(options.maxPrice);
   const difficultyGamma = options.difficultyGamma ?? DEFAULT_DIFFICULTY_GAMMA;
+  const difficultySource = options.difficultySource ?? DEFAULT_DIFFICULTY_SOURCE;
   const routeResults: RouteResult[] = [];
   const routeTimes: number[] = [];
   const candidateGroups: BudgetCandidate[][] = [];
@@ -504,6 +529,7 @@ export async function routeDatasetWithBudget(
       qualityPriorities,
       options.outputTokens,
       costUnit,
+      difficultySource,
     );
     routeResults.push(prepared.routeResult);
     routeTimes.push(prepared.routeMs);

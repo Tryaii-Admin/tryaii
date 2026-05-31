@@ -79,6 +79,7 @@ export {
   computeDifficulty,
   costUnitForBudget,
   DEFAULT_DIFFICULTY_GAMMA,
+  DEFAULT_DIFFICULTY_SOURCE,
   estimateGenerationCost,
   estimateTokens,
   optimizeBudgetCandidates,
@@ -90,5 +91,6 @@ export type {
   BudgetedRouteResult,
   BudgetMode,
   BudgetOptimizationResult,
+  DifficultySource,
   RouteDatasetWithBudgetOptions,
 } from './budget.js';
