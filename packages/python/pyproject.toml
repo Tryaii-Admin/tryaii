@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tryaii-dre"
-version = "0.2.1"
+version = "0.2.2"
 description = "TryAii Diff Routing Engine -- Embedding-based AI model router. Understands your prompt semantically and routes to the best model based on benchmarks, cost, speed, and quality."
 readme = "README.md"
 license = "Apache-2.0"
@@ -87,6 +87,10 @@ ignore = [
 # main.py embeds the eval dashboard's HTML/CSS as triple-quoted string literals;
 # wrapping those lines to 100 cols would corrupt the generated markup.
 "tryaii_dre/cli/main.py" = ["E501"]
+# embedding.py holds the EASY/HARD difficulty exemplars as natural-language
+# string literals; these must stay verbatim (and match the Node SDK), so the
+# 100-col limit doesn't apply to them.
+"tryaii_dre/classifiers/embedding.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

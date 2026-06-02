@@ -17,7 +17,7 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import { showBanner } from './banner.js';
-import { BudgetMode, routeDatasetWithBudget } from './budget.js';
+import { BudgetMode, DifficultySource, routeDatasetWithBudget } from './budget.js';
 import { benchmarkToDict, BenchmarkRegistry } from './benchmarks/registry.js';
 import { CentroidGenerator } from './centroids/generator.js';
 import { ClassificationResult } from './classifiers/base.js';
@@ -424,6 +424,8 @@ async function cmdEval(subArgs: string[]): Promise<void> {
       'max-price': { type: 'string' },
       'output-tokens': { type: 'string', default: '1000' },
       'budget-mode': { type: 'string', default: 'strict' },
+      'difficulty-source': { type: 'string', default: 'intrinsic' },
+      'difficulty-gamma': { type: 'string', default: '1' },
     },
   });
 
@@ -445,6 +447,18 @@ async function cmdEval(subArgs: string[]): Promise<void> {
   const budgetMode = (values['budget-mode'] ?? 'strict') as BudgetMode;
   if (budgetMode !== 'strict' && budgetMode !== 'fit-output') {
     throw new CliError("--budget-mode must be 'strict' or 'fit-output'");
+  }
+  const difficultySource = (values['difficulty-source'] ?? 'intrinsic') as DifficultySource;
+  if (
+    difficultySource !== 'intrinsic' &&
+    difficultySource !== 'capability' &&
+    difficultySource !== 'blend'
+  ) {
+    throw new CliError("--difficulty-source must be 'intrinsic', 'capability', or 'blend'");
+  }
+  const difficultyGamma = Number(values['difficulty-gamma'] ?? '1');
+  if (!Number.isFinite(difficultyGamma) || difficultyGamma < 0) {
+    throw new CliError('--difficulty-gamma must be a non-negative number');
   }
 
   const rows = loadEvalPrompts(inputPath);
@@ -472,7 +486,7 @@ async function cmdEval(subArgs: string[]): Promise<void> {
   if (maxPrice != null) {
     out.write(
       `[eval] budget     : $${maxPrice.toFixed(6)} total, ` +
-        `${outputTokens} output tokens/prompt, mode=${budgetMode}\n`,
+        `${outputTokens} output tokens/prompt, mode=${budgetMode}, difficulty=${difficultySource}\n`,
     );
     let nextPct = 10;
     const progress = (done: number, total: number): void => {
@@ -490,6 +504,8 @@ async function cmdEval(subArgs: string[]): Promise<void> {
       maxPrice,
       outputTokens,
       budgetMode,
+      difficultySource,
+      difficultyGamma,
       progressCallback: progress,
     });
 
@@ -506,6 +522,7 @@ async function cmdEval(subArgs: string[]): Promise<void> {
         budgetConstrained: selected.modelId !== selected.normalBestModel,
         bestScore: selected.finalScore,
         bestReasoning: selected.reasoning,
+        difficulty: round(selected.difficulty, 4),
         estimatedCost: round(selected.estimatedCost, 8),
         cumulativeCost: round(budgetedResult.cumulativeCost, 8),
         remainingBudget: round(budgetedResult.remainingBudget, 8),
@@ -530,6 +547,7 @@ async function cmdEval(subArgs: string[]): Promise<void> {
       status: optimization.status,
       budget: optimization.budget,
       budgetMode: optimization.budgetMode,
+      difficultySource,
       selectionObjective: 'maximizeQualityUnderBudget',
       prioritiesIgnored: true,
       requestedOutputTokens: optimization.requestedOutputTokens,
@@ -644,6 +662,8 @@ Eval-only options:
   --max-price <usd>     Total dataset budget; switches eval to budget-optimized mode
   --output-tokens <n>   Expected output tokens per prompt for budget estimation (default 1000)
   --budget-mode <mode>  'strict' (default) or 'fit-output'
+  --difficulty-source <s>  Gauge task complexity: 'intrinsic' (default), 'capability', or 'blend'
+  --difficulty-gamma <n>   How hard to shift budget toward complex prompts (default 1; 0 disables)
 
 Global flags:
   --no-banner           Disable the startup banner (also honored via TRYAII_NO_BANNER)
@@ -654,6 +674,7 @@ Examples:
   tryaii-dre route "Write a Python function to merge sorted arrays" --quality=5 --cost=1
   tryaii-dre eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
   tryaii-dre eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+  tryaii-dre eval prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
 `;
 
 function version(): string {

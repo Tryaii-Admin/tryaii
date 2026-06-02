@@ -1,6 +1,6 @@
 {
   "name": "tryaii-dre",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "AI model router for Node.js and TypeScript with benchmark, cost, and speed-based ranking",
   "type": "module",
   "main": "dist/index.js",

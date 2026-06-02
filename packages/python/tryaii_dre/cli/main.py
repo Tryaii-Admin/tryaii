@@ -422,7 +422,8 @@ def cmd_eval(args):
     if args.max_price is not None:
         print(
             f"[eval] budget     : ${args.max_price:.6f} total, "
-            f"{args.output_tokens} output tokens/prompt, mode={args.budget_mode}"
+            f"{args.output_tokens} output tokens/prompt, mode={args.budget_mode}, "
+            f"difficulty={args.difficulty_source}"
         )
         next_progress_pct = 10
 
@@ -441,6 +442,8 @@ def cmd_eval(args):
             max_price=args.max_price,
             output_tokens=args.output_tokens,
             budget_mode=args.budget_mode,
+            difficulty_source=args.difficulty_source,
+            difficulty_gamma=args.difficulty_gamma,
             progress_callback=progress,
         )
         results = []
@@ -459,6 +462,7 @@ def cmd_eval(args):
                     "budgetConstrained": selected.model_id != selected.normal_best_model,
                     "bestScore": selected.final_score,
                     "bestReasoning": selected.reasoning,
+                    "difficulty": round(selected.difficulty, 4),
                     "estimatedCost": round(selected.estimated_cost, 8),
                     "cumulativeCost": round(budgeted.cumulative_cost, 8),
                     "remainingBudget": round(budgeted.remaining_budget, 8),
@@ -480,6 +484,7 @@ def cmd_eval(args):
             "status": optimization.status,
             "budget": optimization.budget,
             "budgetMode": optimization.budget_mode,
+            "difficultySource": args.difficulty_source,
             "selectionObjective": "maximizeQualityUnderBudget",
             "prioritiesIgnored": True,
             "requestedOutputTokens": optimization.requested_output_tokens,
@@ -706,6 +711,18 @@ def cli():
         default="strict",
         help="Budget handling: strict fails if requested output tokens do not fit; "
         "fit-output lowers output tokens to keep all prompts under budget",
+    )
+    eval_parser.add_argument(
+        "--difficulty-source",
+        choices=("intrinsic", "capability", "blend"),
+        default="intrinsic",
+        help="Gauge task complexity: intrinsic (default), capability, or blend",
+    )
+    eval_parser.add_argument(
+        "--difficulty-gamma",
+        type=float,
+        default=1.0,
+        help="How hard to shift budget toward complex prompts (default 1; 0 disables)",
     )
 
     # setup

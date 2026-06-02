@@ -23,6 +23,11 @@ export interface BudgetCandidate {
   finalScore: number;
   reasoning: string;
   normalBestModel: string;
+  /**
+   * Per-prompt difficulty in [0, 1] (capability sensitivity). Same value for
+   * every candidate of a prompt; surfaced here so eval/consumers can report it.
+   */
+  difficulty: number;
 }
 
 export interface BudgetOptimizationResult {
@@ -55,6 +60,14 @@ export interface RouteDatasetWithBudgetOptions {
   maxPrice: number;
   outputTokens: number;
   budgetMode?: BudgetMode;
+  /**
+   * Difficulty amplification for the knapsack utility (see DEFAULT_DIFFICULTY_GAMMA).
+   * Higher => the optimizer concentrates more budget on harder prompts. 0 disables
+   * complexity-aware allocation (utility = raw quality).
+   */
+  difficultyGamma?: number;
+  /** Which difficulty signal to use: 'intrinsic' (default), 'capability', or 'blend'. */
+  difficultySource?: DifficultySource;
   progressCallback?: (done: number, total: number) => void;
 }
 
@@ -67,6 +80,100 @@ interface State {
 /** Approximate token count with a deterministic 4 chars ~= 1 token rule. */
 export function estimateTokens(text: string): number {
   return Math.max(1, Math.ceil(text.length / 4));
+}
+
+/**
+ * Default difficulty amplification for the budget knapsack.
+ *
+ * utility = quality * (1 + DIFFICULTY_GAMMA * difficulty), so a maximally-hard
+ * prompt (difficulty = 1) counts up to (1 + gamma)x as much as an easy one in the
+ * shared-budget optimization. This is the lever that makes the optimizer invest
+ * more in complex prompts. Tunable via RouteDatasetWithBudgetOptions.difficultyGamma.
+ * Must stay in sync with the Python SDK's DEFAULT_DIFFICULTY_GAMMA (budget.py).
+ */
+export const DEFAULT_DIFFICULTY_GAMMA = 1.0;
+
+/**
+ * Which difficulty signal drives allocation:
+ *   - 'intrinsic'  : embedding distance to easy/hard centroids (content-based) [default]
+ *   - 'capability' : spread of model quality vs price (computeDifficulty)
+ *   - 'blend'      : mean of the two
+ * Must stay in sync with the Python SDK (DEFAULT_DIFFICULTY_SOURCE).
+ */
+export type DifficultySource = 'intrinsic' | 'capability' | 'blend';
+export const DEFAULT_DIFFICULTY_SOURCE: DifficultySource = 'intrinsic';
+
+/**
+ * Combine the two difficulty signals according to the chosen source:
+ *   - 'capability' -> model-spread difficulty only
+ *   - 'intrinsic'  -> content-based difficulty only (default)
+ *   - 'blend'      -> their mean
+ * Must stay in sync with the Python SDK's _resolve_difficulty (budget.py).
+ */
+export function resolveDifficulty(
+  source: DifficultySource,
+  capability: number,
+  intrinsic: number,
+): number {
+  if (source === 'capability') return capability;
+  if (source === 'blend') return 0.5 * (capability + intrinsic);
+  return intrinsic;
+}
+
+/**
+ * Per-prompt difficulty = capability sensitivity: how much the achievable quality
+ * depends on which model you pick. We compare the best quality reachable with a
+ * *cheap* model against the best quality reachable at all:
+ *
+ *     difficulty = (qTop - qCheap) / qTop          (clamped to [0, 1])
+ *
+ *   - difficulty ~ 0 -> even a cheap model is about as good as the frontier -> EASY
+ *   - difficulty ~ 1 -> only expensive models reach the top quality         -> HARD
+ *
+ * "Cheap tier" = the cheapest third of candidates by estimated cost (at least one).
+ * Using best-cheap vs best-overall (not min vs max) keeps a single junk model from
+ * inflating difficulty, and correctly reports EASY when a cheap-but-strong model
+ * exists. Returns 0 for empty input or a non-positive ceiling (nothing to invest in).
+ * Must stay in sync with the Python SDK's compute_difficulty (budget.py).
+ */
+export function computeDifficulty(points: Array<{ quality: number; cost: number }>): number {
+  if (points.length === 0) return 0;
+
+  let qTop = Number.NEGATIVE_INFINITY;
+  for (const p of points) if (p.quality > qTop) qTop = p.quality;
+  if (!(qTop > 0)) return 0;
+
+  const byCost = [...points].sort((a, b) => a.cost - b.cost);
+  const tierSize = Math.max(1, Math.floor(byCost.length / 3));
+  let qCheap = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i < tierSize; i++) if (byCost[i].quality > qCheap) qCheap = byCost[i].quality;
+
+  const difficulty = (qTop - qCheap) / qTop;
+  return Math.max(0, Math.min(1, difficulty));
+}
+
+/**
+ * Map a list of values to their rank within the batch, scaled to [0, 1]
+ * (smallest -> 0, largest -> 1, ties share the average rank). Used to spread a
+ * compressed difficulty signal across the full range so relative ordering --
+ * not tiny absolute differences -- drives budget allocation. Empty / single
+ * inputs map to 0 (no relative information to act on). Must stay in sync with
+ * the Python SDK's _batch_percentile_ranks (budget.py).
+ */
+export function batchPercentileRanks(values: number[]): number[] {
+  const n = values.length;
+  if (n <= 1) return values.map(() => 0);
+  const order = values.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v);
+  const ranks = new Array<number>(n);
+  let i = 0;
+  while (i < n) {
+    let j = i;
+    while (j + 1 < n && order[j + 1].v === order[i].v) j++;
+    const avg = (i + j) / 2; // 0-based average rank for the tie group
+    for (let k = i; k <= j; k++) ranks[order[k].i] = avg / (n - 1);
+    i = j + 1;
+  }
+  return ranks;
 }
 
 /** Estimate USD generation cost for a model, or null when pricing is missing. */
@@ -331,34 +438,55 @@ async function buildBudgetCandidates(
   priorities: Priorities,
   outputTokens: number,
   costUnit: number,
-): Promise<{ routeResult: RouteResult; candidates: BudgetCandidate[]; routeMs: number }> {
+  difficultySource: DifficultySource,
+): Promise<{ routeResult: RouteResult; candidates: BudgetCandidate[]; routeMs: number; difficulty: number }> {
   const started = Date.now();
   const routeResult = await router.route(prompt, {
     topK: router.models.allModels.length,
     priorities,
   });
   const routeMs = Date.now() - started;
-  const confidence = routeResult.classification?.confidence ?? 0;
-  const confidenceFactor = 0.75 + 0.25 * Math.max(0, Math.min(1, confidence));
   const inputTokens = estimateTokens(prompt);
+
+  // Price every model first so the prompt's difficulty can be read off the
+  // (cost, quality) spread before utilities are assigned.
+  const priced: Array<{ score: RouteResult['scores'][number]; estimatedCost: number }> = [];
+  for (const score of routeResult.scores) {
+    const model = router.models.getModel(score.modelId);
+    const estimatedCost = estimateGenerationCost(model, inputTokens, outputTokens);
+    // Reject null AND non-finite (NaN/Infinity).
+    if (estimatedCost === null || !Number.isFinite(estimatedCost)) continue;
+    priced.push({ score, estimatedCost });
+  }
+
+  // Difficulty = capability sensitivity (see computeDifficulty). The factor
+  // scales every candidate of THIS prompt equally, so it never changes which
+  // model is best for the prompt -- it only raises the prompt's weight in the
+  // cross-prompt budget knapsack, which is exactly how harder prompts win more
+  // budget. The old `confidence` multiplier is dropped on purpose: it measured
+  // category-match clarity (often higher for easy, prototypical prompts), not
+  // difficulty, and so worked mildly against complexity-aware allocation.
+  // Pick the difficulty signal. 'capability' = how much model choice changes
+  // quality (computeDifficulty); 'intrinsic' = content-based easy/hard centroid
+  // distance from the classifier; 'blend' = mean of the two. Intrinsic falls back
+  // to capability when the classifier didn't supply it (e.g. the sync path).
+  const capabilityDifficulty = computeDifficulty(
+    priced.map((p) => ({ quality: p.score.qualityScore, cost: p.estimatedCost })),
+  );
+  const intrinsicDifficulty = routeResult.classification?.difficulty ?? capabilityDifficulty;
+  const difficulty = resolveDifficulty(difficultySource, capabilityDifficulty, intrinsicDifficulty);
+  // gamma is applied later in routeDatasetWithBudget, AFTER batch-normalizing
+  // difficulty across all prompts, so a compressed raw signal still produces
+  // strong relative ordering. Here utility is just raw quality.
   const candidateInputs: Array<{
     score: RouteResult['scores'][number];
     estimatedCost: number;
     utility: number;
-  }> = [];
-
-  for (const score of routeResult.scores) {
-    const model = router.models.getModel(score.modelId);
-    const estimatedCost = estimateGenerationCost(model, inputTokens, outputTokens);
-    // Reject null AND non-finite (NaN/Infinity); the `=== null` arm also narrows
-    // the type for the push below.
-    if (estimatedCost === null || !Number.isFinite(estimatedCost)) continue;
-    candidateInputs.push({
-      score,
-      estimatedCost,
-      utility: score.qualityScore * confidenceFactor,
-    });
-  }
+  }> = priced.map((p) => ({
+    score: p.score,
+    estimatedCost: p.estimatedCost,
+    utility: p.score.qualityScore,
+  }));
 
   const qualityBestModel =
     [...candidateInputs].sort((a, b) => {
@@ -381,10 +509,11 @@ async function buildBudgetCandidates(
       finalScore: score.finalScore,
       reasoning: score.reasoning,
       normalBestModel: qualityBestModel,
+      difficulty,
     });
   }
 
-  return { routeResult, candidates, routeMs };
+  return { routeResult, candidates, routeMs, difficulty };
 }
 
 export async function routeDatasetWithBudget(
@@ -397,6 +526,8 @@ export async function routeDatasetWithBudget(
   if (options.outputTokens < 0) throw new Error('outputTokens must be non-negative');
 
   const costUnit = costUnitForBudget(options.maxPrice);
+  const difficultyGamma = options.difficultyGamma ?? DEFAULT_DIFFICULTY_GAMMA;
+  const difficultySource = options.difficultySource ?? DEFAULT_DIFFICULTY_SOURCE;
   const routeResults: RouteResult[] = [];
   const routeTimes: number[] = [];
   const candidateGroups: BudgetCandidate[][] = [];
@@ -410,11 +541,27 @@ export async function routeDatasetWithBudget(
       qualityPriorities,
       options.outputTokens,
       costUnit,
+      difficultySource,
     );
     routeResults.push(prepared.routeResult);
     routeTimes.push(prepared.routeMs);
     candidateGroups.push(prepared.candidates);
     options.progressCallback?.(idx + 1, options.prompts.length);
+  }
+
+  // Fix 1: batch-normalize difficulty. Raw capability-sensitivity is compressed
+  // (most prompts ~0.05-0.09, because cheap models are strong), so the absolute
+  // value barely separates prompts. Replace it with each prompt's RANK within the
+  // batch (0 = easiest, 1 = hardest) and apply utility *= 1 + gamma * rank. This
+  // preserves the ordering but stretches it to a full 0..1 range, so the knapsack
+  // actually reallocates budget toward the relatively-harder prompts.
+  const rawDifficulties = candidateGroups.map((group) => group[0]?.difficulty ?? 0);
+  const difficultyRanks = batchPercentileRanks(rawDifficulties);
+  for (let idx = 0; idx < candidateGroups.length; idx++) {
+    const factor = 1 + difficultyGamma * difficultyRanks[idx];
+    for (const candidate of candidateGroups[idx]) {
+      candidate.utility *= factor;
+    }
   }
 
   const requestedOutputTokens = options.outputTokens;

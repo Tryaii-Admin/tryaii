@@ -73,6 +73,48 @@ class AsyncOnlyFakeProvider extends BaseEmbeddingProvider {
   }
 }
 
+/**
+ * Fake provider with a controllable intrinsic-difficulty axis. Picks a fixed
+ * unit "hard" direction (e0) and "easy" direction (e1). The 24 HARD exemplars
+ * embed to e0, the 24 EASY exemplars to e1 (in classifier batch order), so the
+ * hard/easy centroids land on those axes. A probe prompt tagged "HARD"/"EASY"
+ * embeds toward the matching axis, letting us assert the difficulty ordering
+ * without the real embedding model.
+ */
+class AxisDifficultyProvider extends BaseEmbeddingProvider {
+  private _embedBatchCount = 0;
+
+  embed(text: string): number[] {
+    const v = new Array<number>(384).fill(0);
+    if (text.includes('HARD')) v[0] = 1;
+    else if (text.includes('EASY')) v[1] = 1;
+    else v[2] = 1; // neutral, orthogonal to both axes
+    return v;
+  }
+
+  // The classifier builds the difficulty centroids via embedBatchAsync:
+  // EASY_EXEMPLARS first, then HARD_EXEMPLARS. First batch -> easy axis (e1),
+  // second -> hard axis (e0). (The default embedBatchAsync loops embed(), so we
+  // override the async batch path directly to control the centroid axes.)
+  async embedBatchAsync(texts: string[]): Promise<number[][]> {
+    const axis = this._embedBatchCount === 0 ? 1 : 0;
+    this._embedBatchCount += 1;
+    return texts.map(() => {
+      const v = new Array<number>(384).fill(0);
+      v[axis] = 1;
+      return v;
+    });
+  }
+
+  get dimension(): number {
+    return 384;
+  }
+
+  get modelName(): string {
+    return 'all-MiniLM-L6-v2';
+  }
+}
+
 function hashString(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) {
@@ -249,5 +291,31 @@ describe('Router.addBenchmark', () => {
   it('sync: throws when the provider is async-only', () => {
     const router = new Router({ embeddingProvider: new AsyncOnlyFakeProvider() });
     expect(() => router.addBenchmarkSync(CUSTOM_NAME, CUSTOM_QUERIES)).toThrow(/async-only/);
+  });
+});
+
+describe('intrinsic difficulty (classifier)', () => {
+  it('rates a hard-leaning prompt above an easy-leaning one, both in [0,1]', async () => {
+    const router = new Router({ embeddingProvider: new AxisDifficultyProvider() });
+
+    const hard = await router.route('HARD prompt');
+    const easy = await router.route('EASY prompt');
+
+    for (const d of [hard.classification?.difficulty, easy.classification?.difficulty]) {
+      expect(d).toBeDefined();
+      expect(d as number).toBeGreaterThanOrEqual(0);
+      expect(d as number).toBeLessThanOrEqual(1);
+    }
+    // Hard-axis prompt sits closer to the HARD centroid -> higher difficulty.
+    expect(hard.classification!.difficulty as number).toBeGreaterThan(
+      easy.classification!.difficulty as number,
+    );
+  });
+
+  it('gives a neutral (orthogonal) prompt difficulty ~0.5', async () => {
+    const router = new Router({ embeddingProvider: new AxisDifficultyProvider() });
+    const neutral = await router.route('something unrelated');
+    // sim_hard == sim_easy == 0 -> sigmoid(0) = 0.5
+    expect(neutral.classification!.difficulty as number).toBeCloseTo(0.5, 5);
   });
 });

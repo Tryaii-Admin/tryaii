@@ -134,6 +134,13 @@ tryaii-dre <command> [options]
 | `--max-price <usd>`     | _off_    | Total budget for the **whole dataset**. Switches eval into budget-optimized mode: price becomes a hard constraint and the optimizer maximizes quality under it. |
 | `--output-tokens <n>`   | `1000`   | Expected response length per prompt, used for cost estimation. |
 | `--budget-mode <mode>`  | `strict` | `strict` fails if the requested output length can't fit the budget; `fit-output` lowers the per-prompt output length until everything fits. |
+| `--difficulty-source <s>` | `intrinsic` | How task complexity is gauged so the optimizer invests more in harder prompts (budget mode only). `intrinsic` = how complex the prompt *looks* (embedding distance to easy/hard exemplars); `capability` = how much model choice changes quality; `blend` = mean of both. |
+| `--difficulty-gamma <n>` | `1` | How aggressively budget shifts toward harder prompts. `0` disables complexity-aware allocation (utility = raw quality); higher concentrates more spend on hard prompts. |
+
+> **Complexity-aware routing.** In budget mode the optimizer spends *more* on harder prompts and *less* on easy ones, at the same total budget. Difficulty is rank-normalized across the dataset, so it adapts to whatever mix of prompts you pass. Choose how difficulty is measured with `--difficulty-source`:
+> - **`intrinsic`** (default) — content-based: open-ended / multi-step prompts score high, short / factual ones low. Independent of your model catalog.
+> - **`capability`** — catalog-based: high only when expensive models clearly beat cheap ones on the task; near-flat when your cheap models are already strong.
+> - **`blend`** — the mean of the two.
 
 **`models`** — `--provider <name>` filters by provider; `--json` prints machine-readable output.
 **`benchmarks`** — `--json` prints machine-readable output.
@@ -163,6 +170,12 @@ tryaii-dre eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
 
 # Spend at most $0.10 across the whole dataset, ~2000 tokens/answer, shrink answers to fit
 tryaii-dre eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+
+# Complexity-aware budget: invest more in the harder prompts (intrinsic difficulty, the default)
+tryaii-dre eval prompts.json --max-price=0.50 --output-tokens=2000 --difficulty-source=intrinsic
+
+# Gauge difficulty from model disagreement instead, and push budget harder toward complex prompts
+tryaii-dre eval prompts.json --max-price=0.50 --difficulty-source=capability --difficulty-gamma=3
 
 # Inspect what's available
 tryaii-dre models --provider anthropic
@@ -220,6 +233,7 @@ CLI (same command for both packages)
   tryaii-dre route "<prompt>" --quality=5 --cost=1 --speed=2
   tryaii-dre eval prompts.json --output results/run            # writes results.jsonl + summary.json + index.html
   tryaii-dre eval prompts.json --max-price=0.10 --output-tokens=2000
+  tryaii-dre eval prompts.json --max-price=0.50 --difficulty-source=intrinsic   # spend more on harder prompts
   tryaii-dre models --json        # machine-readable model catalog (stdout)
   tryaii-dre benchmarks --json    # machine-readable benchmark catalog
   # Add --no-banner (or set TRYAII_NO_BANNER=1) for clean, scriptable output.

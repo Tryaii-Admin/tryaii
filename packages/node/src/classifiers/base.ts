@@ -27,6 +27,13 @@ export interface ClassificationResult {
 
   /** How long classification took in milliseconds. */
   processingTimeMs: number;
+
+  /**
+   * Intrinsic task difficulty in [0, 1] from the easy/hard difficulty centroids
+   * (0 = trivial/atomic, 1 = complex/multi-step). Set on the async embedding
+   * path; undefined when difficulty centroids aren't available (sync path).
+   */
+  difficulty?: number;
 }
 
 /** Create a default (empty) ClassificationResult. */
@@ -39,6 +46,7 @@ export function emptyClassificationResult(): ClassificationResult {
     classifierUsed: '',
     cacheHit: false,
     processingTimeMs: 0,
+    difficulty: 0,
   };
 }
 

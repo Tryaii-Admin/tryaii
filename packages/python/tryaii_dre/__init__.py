@@ -17,9 +17,12 @@ import logging
 
 from tryaii_dre.benchmarks.registry import BenchmarkRegistry
 from tryaii_dre.budget import (
+    DEFAULT_DIFFICULTY_GAMMA,
+    DEFAULT_DIFFICULTY_SOURCE,
     BudgetCandidate,
     BudgetedRouteResult,
     BudgetOptimizationResult,
+    compute_difficulty,
     estimate_tokens,
     route_dataset_with_budget,
 )
@@ -33,7 +36,7 @@ from tryaii_dre.scoring.priorities import DEFAULT_PRIORITIES, Priorities
 # configures handlers. Done after imports to keep module-level imports at top.
 logging.getLogger("tryaii_dre").addHandler(logging.NullHandler())
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 __all__ = [
     "Router",
@@ -49,6 +52,9 @@ __all__ = [
     "BudgetCandidate",
     "BudgetOptimizationResult",
     "BudgetedRouteResult",
+    "DEFAULT_DIFFICULTY_GAMMA",
+    "DEFAULT_DIFFICULTY_SOURCE",
+    "compute_difficulty",
     "estimate_tokens",
     "route_dataset_with_budget",
     "__version__",

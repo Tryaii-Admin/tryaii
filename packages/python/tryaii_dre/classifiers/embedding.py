@@ -38,6 +38,77 @@ BENCHMARK_CATEGORIES: dict[str, tuple[str, str]] = {
     "LiveBench": ("TECHNICAL", "CODE_TECHNICAL"),
 }
 
+# Logistic steepness for intrinsic difficulty. Only affects the spread of the
+# reported [0,1] value; ordering (which drives batch-normalized allocation) is
+# scale-invariant. Must stay in sync with the Node SDK (DIFFICULTY_SCALE).
+DIFFICULTY_SCALE = 10.0
+
+# Canonical EASY exemplars (atomic / single-step / lookup), spanning many domains
+# so the difficulty axis encodes COMPLEXITY, not topic. Paired by domain with
+# HARD_EXEMPLARS. Must stay in sync with the Node SDK (classifiers/embedding.ts).
+EASY_EXEMPLARS: list[str] = [
+    "What is the capital of Japan?",
+    "Which planet is closest to the sun?",
+    "How many continents are there on Earth?",
+    "How many days are in a week?",
+    "What is 7 times 8?",
+    "What is 25 percent of 80?",
+    "Round 3.14159 to two decimal places.",
+    "What is the square root of 144?",
+    "What does the 'len()' function do in Python?",
+    "How do I print 'Hello, World!' in JavaScript?",
+    "Which command stages all changes in Git?",
+    "How do I declare a constant variable in JavaScript?",
+    "If all cats are animals and Tom is a cat, is Tom an animal?",
+    "Does 'P implies Q' mean Q is true whenever P is true?",
+    "If A is taller than B, who is shorter?",
+    "Is the statement 'it is raining and it is not raining' true or false?",
+    "Translate 'good morning' into German.",
+    "What is the plural of 'cactus'?",
+    "Correct the spelling: 'recieve'.",
+    "How do you say 'thank you' in Japanese?",
+    "What does ROI stand for in business?",
+    "What is the formula to calculate gross profit?",
+    "What does the acronym KPI mean?",
+    "Convert 250 US dollars to euros at a rate of 1.08.",
+]
+
+# Canonical HARD exemplars (multi-step / open-ended / design / proof).
+HARD_EXEMPLARS: list[str] = [
+    "Explain how a refrigerator keeps food cold using the principles of thermodynamics.",
+    "Assess how the printing press reshaped literacy, religion, and politics across early modern Europe.",
+    "Explain why the sky is blue at noon but red at sunset, accounting for light scattering.",
+    "Compare the long-term societal trade-offs of nuclear, solar, and coal energy for a national grid.",
+    "Prove that the square root of 2 is irrational and justify each step rigorously.",
+    "Derive a closed-form expression for the sum of the first n cubes and prove it by induction.",
+    "Evaluate the integral of e to the negative x squared from negative infinity to infinity and explain the method used.",
+    "Determine the expected number of draws to collect all n distinct coupons and analyze its asymptotic growth.",
+    "Design a horizontally scalable, exactly-once message queue and discuss its consistency trade-offs.",
+    "Implement a lock-free concurrent hash map and prove it is linearizable.",
+    "Architect a multi-region database with automatic failover and explain how you resolve write conflicts.",
+    "Refactor a tightly coupled monolith into event-driven microservices while preserving transactional integrity.",
+    "Determine whether this argument is valid and name any fallacy it commits, justifying each step.",
+    "Prove that the given set of logical premises is inconsistent using natural deduction.",
+    "Solve the knights-and-knaves puzzle and explain the chain of inferences leading to each identity.",
+    "Resolve the apparent paradox in this self-referential statement and explain why naive interpretations fail.",
+    "Translate this poem into French while preserving its rhyme scheme and meter.",
+    "Rewrite this technical manual for a sixth-grade reading level without losing accuracy.",
+    "Write a persuasive essay arguing both sides of a dilemma, then synthesize a conclusion.",
+    "Compare how three languages encode politeness and what that reveals about each culture.",
+    "Build a three-year financial model with scenario analysis and justify every assumption.",
+    "Design a churn-prediction pipeline from raw event logs and defend your feature choices.",
+    "Develop a market-entry strategy for a new region and quantify the risk-adjusted payback.",
+    "Construct a data-governance policy covering retention, access control, and regulatory compliance across jurisdictions.",
+]
+
+
+def _normalize(v: np.ndarray) -> np.ndarray:
+    """Unit-normalize a vector; return it unchanged on a zero/non-finite norm."""
+    norm = np.linalg.norm(v)
+    if not np.isfinite(norm) or norm == 0:
+        return v
+    return v / norm
+
 
 def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     """Compute cosine similarity between two vectors."""
@@ -86,6 +157,8 @@ class EmbeddingClassifier(BaseClassifier):
         )
 
         self._ready = False
+        self._easy_centroid: Optional[np.ndarray] = None
+        self._hard_centroid: Optional[np.ndarray] = None
 
     def classify(self, prompt: str) -> ClassificationResult:
         """Classify a prompt using embedding similarity to benchmark centroids."""
@@ -123,6 +196,7 @@ class EmbeddingClassifier(BaseClassifier):
 
         # Get prompt embedding (with caching)
         embedding = self._get_embedding(prompt)
+        self._ensure_difficulty_centroids()
 
         # Calculate cosine similarity against each benchmark centroid
         benchmark_scores: dict[str, float] = {}
@@ -152,6 +226,7 @@ class EmbeddingClassifier(BaseClassifier):
             classifier_used="embedding",
             cache_hit=False,
             processing_time_ms=(time.time() - start) * 1000,
+            difficulty=self._intrinsic_difficulty(embedding),
         )
 
         # Cache the result
@@ -172,6 +247,25 @@ class EmbeddingClassifier(BaseClassifier):
         embedding = self._provider.embed(text)
         self._embedding_cache.set(cache_key, embedding)
         return embedding
+
+    def _ensure_difficulty_centroids(self) -> None:
+        """Build the easy/hard difficulty centroids once from the bundled exemplars."""
+        if self._easy_centroid is not None and self._hard_centroid is not None:
+            return
+        easy = self._provider.embed_batch(EASY_EXEMPLARS)
+        hard = self._provider.embed_batch(HARD_EXEMPLARS)
+        self._easy_centroid = _normalize(np.mean(np.stack(easy), axis=0))
+        self._hard_centroid = _normalize(np.mean(np.stack(hard), axis=0))
+
+    def _intrinsic_difficulty(self, embedding: np.ndarray) -> float:
+        """Intrinsic difficulty in [0, 1]: how much closer the prompt sits to the
+        HARD exemplars than the EASY ones, squashed through a logistic. Returns 0
+        when the difficulty centroids haven't been built."""
+        if self._easy_centroid is None or self._hard_centroid is None:
+            return 0.0
+        sim_hard = _cosine_similarity(embedding, self._hard_centroid)
+        sim_easy = _cosine_similarity(embedding, self._easy_centroid)
+        return float(1.0 / (1.0 + np.exp(-DIFFICULTY_SCALE * (sim_hard - sim_easy))))
 
     def is_ready(self) -> bool:
         return True  # Lazy initialization handles readiness

@@ -36,6 +36,9 @@ class ClassificationResult:
     classifier_used: str = ""  # always "embedding" in the current system
     cache_hit: bool = False
     processing_time_ms: float = 0.0
+    # Intrinsic task difficulty in [0, 1] from the easy/hard centroids
+    # (0 = trivial, 1 = complex). 0.0 when difficulty centroids are unavailable.
+    difficulty: float = 0.0
 
     @property
     def top_benchmarks(self) -> list[tuple[str, float]]:

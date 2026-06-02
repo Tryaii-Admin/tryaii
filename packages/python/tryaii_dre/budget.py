@@ -28,6 +28,9 @@ class BudgetCandidate:
     final_score: float
     reasoning: str
     normal_best_model: str
+    # Per-prompt difficulty in [0, 1] (capability sensitivity). Same value for
+    # every candidate of a prompt; surfaced so eval/consumers can report it.
+    difficulty: float = 0.0
 
 
 @dataclass
@@ -58,6 +61,82 @@ class BudgetedRouteResult:
 def estimate_tokens(text: str) -> int:
     """Approximate token count with a deterministic 4 chars ~= 1 token rule."""
     return max(1, math.ceil(len(text) / 4))
+
+
+# Default difficulty amplification for the budget knapsack.
+#
+# utility = quality * (1 + DEFAULT_DIFFICULTY_GAMMA * difficulty), so a maximally
+# hard prompt (difficulty = 1) counts up to (1 + gamma)x as much as an easy one in
+# the shared-budget optimization. This is the lever that makes the optimizer invest
+# more in complex prompts. Must stay in sync with the Node SDK's
+# DEFAULT_DIFFICULTY_GAMMA (budget.ts).
+DEFAULT_DIFFICULTY_GAMMA = 1.0
+
+# Which difficulty signal drives allocation: "intrinsic" (content-based easy/hard
+# centroid distance, default), "capability" (model quality vs price spread), or
+# "blend" (mean of the two). Must stay in sync with the Node SDK.
+DEFAULT_DIFFICULTY_SOURCE = "intrinsic"
+
+
+def _resolve_difficulty(source: str, capability: float, intrinsic: float) -> float:
+    """Combine the two difficulty signals per the chosen source: 'capability'
+    (model-spread only), 'intrinsic' (content-based only, default), or 'blend'
+    (mean). Must stay in sync with the Node SDK's resolveDifficulty (budget.ts)."""
+    if source == "capability":
+        return capability
+    if source == "blend":
+        return 0.5 * (capability + intrinsic)
+    return intrinsic
+
+
+def compute_difficulty(points: list[dict]) -> float:
+    """Per-prompt difficulty = capability sensitivity: how much achievable quality
+    depends on which model you pick.
+
+        difficulty = (q_top - q_cheap) / q_top      (clamped to [0, 1])
+
+      - difficulty ~ 0 -> a cheap model is about as good as the frontier -> EASY
+      - difficulty ~ 1 -> only expensive models reach the top quality     -> HARD
+
+    ``q_cheap`` is the best quality among the cheapest third of candidates (>= 1).
+    Using best-cheap vs best-overall (not min vs max) stops one junk model from
+    inflating difficulty and correctly reports EASY when a cheap-but-strong model
+    exists. Returns 0 for empty input or a non-positive ceiling. Must stay in sync
+    with the Node SDK's computeDifficulty (budget.ts).
+    """
+    if not points:
+        return 0.0
+    q_top = max(p["quality"] for p in points)
+    if not (q_top > 0):
+        return 0.0
+    by_cost = sorted(points, key=lambda p: p["cost"])
+    tier_size = max(1, len(by_cost) // 3)
+    q_cheap = max(p["quality"] for p in by_cost[:tier_size])
+    difficulty = (q_top - q_cheap) / q_top
+    return max(0.0, min(1.0, difficulty))
+
+
+def _batch_percentile_ranks(values: list[float]) -> list[float]:
+    """Map values to their rank within the batch, scaled to [0, 1] (smallest -> 0,
+    largest -> 1, ties share the average rank). Spreads a compressed difficulty
+    signal across the full range so relative ordering -- not tiny absolute
+    differences -- drives allocation. Empty/single inputs map to 0. Must stay in
+    sync with the Node SDK's batchPercentileRanks (budget.ts)."""
+    n = len(values)
+    if n <= 1:
+        return [0.0 for _ in values]
+    order = sorted(range(n), key=lambda i: values[i])
+    ranks = [0.0] * n
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and values[order[j + 1]] == values[order[i]]:
+            j += 1
+        avg = (i + j) / 2.0
+        for k in range(i, j + 1):
+            ranks[order[k]] = avg / (n - 1)
+        i = j + 1
+    return ranks
 
 
 def estimate_generation_cost(model, input_tokens: int, output_tokens: int) -> Optional[float]:
@@ -307,22 +386,49 @@ def build_budget_candidates(
     prompt_index: int,
     priorities: Priorities,
     output_tokens: int,
+    difficulty_source: str = DEFAULT_DIFFICULTY_SOURCE,
 ) -> tuple[RouteResult, list[BudgetCandidate]]:
     """Route one prompt and convert every scored model to a budget candidate."""
     all_model_count = len(router.models.all_models)
     route_result = router.route(prompt, priorities=priorities, top_k=all_model_count)
-    confidence = route_result.classification.confidence if route_result.classification else 0.0
-    confidence_factor = 0.75 + 0.25 * max(0.0, min(1.0, confidence))
     input_tokens = estimate_tokens(prompt)
 
-    candidate_inputs = []
+    # Price every model first so difficulty can be read off the (cost, quality)
+    # spread before utilities are assigned.
+    priced = []
     for score in route_result.scores:
         model = router.models.get_model(score.model_id)
         estimated_cost = estimate_generation_cost(model, input_tokens, output_tokens)
         if estimated_cost is None or not math.isfinite(estimated_cost):
             continue
-        utility = score.quality_score * confidence_factor
-        candidate_inputs.append((score, estimated_cost, utility))
+        priced.append((score, estimated_cost))
+
+    # Difficulty = capability sensitivity (see compute_difficulty). The factor
+    # scales every candidate of THIS prompt equally, so it only raises the
+    # prompt's weight in the cross-prompt knapsack -- which is how harder prompts
+    # win more budget. The old `confidence` multiplier is dropped on purpose: it
+    # tracked category-match clarity (often higher for easy prompts), not
+    # difficulty.
+    # Pick the difficulty signal. capability = how much model choice changes
+    # quality (compute_difficulty); intrinsic = content-based easy/hard centroid
+    # distance from the classifier; blend = mean of the two. Intrinsic falls back
+    # to capability when the classifier didn't supply it (e.g. an empty centroid set).
+    capability_difficulty = compute_difficulty(
+        [{"quality": score.quality_score, "cost": cost} for score, cost in priced]
+    )
+    intrinsic_difficulty = (
+        route_result.classification.difficulty
+        if route_result.classification is not None
+        else capability_difficulty
+    )
+    difficulty = _resolve_difficulty(
+        difficulty_source, capability_difficulty, intrinsic_difficulty
+    )
+    # gamma is applied later in route_dataset_with_budget, AFTER batch-normalizing
+    # difficulty across all prompts; here utility is just raw quality.
+    candidate_inputs = [
+        (score, cost, score.quality_score) for score, cost in priced
+    ]
 
     # Tie-break: highest utility, then lowest cost, then smallest modelId
     # (Unicode code point order). Using min over negated utility keeps the
@@ -347,6 +453,7 @@ def build_budget_candidates(
                 final_score=score.final_score,
                 reasoning=score.reasoning,
                 normal_best_model=quality_best_model,
+                difficulty=difficulty,
             )
         )
     return route_result, candidates
@@ -359,6 +466,8 @@ def route_dataset_with_budget(
     max_price: float,
     output_tokens: int,
     budget_mode: str = "strict",
+    difficulty_gamma: float = DEFAULT_DIFFICULTY_GAMMA,
+    difficulty_source: str = DEFAULT_DIFFICULTY_SOURCE,
     progress_callback: Optional[Callable[[int, int], None]] = None,
 ) -> tuple[list[BudgetedRouteResult], BudgetOptimizationResult]:
     """Route a dataset with a shared generation budget."""
@@ -380,6 +489,7 @@ def route_dataset_with_budget(
             idx,
             quality_priorities,
             output_tokens,
+            difficulty_source,
         )
         route_times.append(round((time.perf_counter() - started) * 1000, 2))
         route_results.append(route_result)
@@ -397,6 +507,26 @@ def route_dataset_with_budget(
         )
         if progress_callback:
             progress_callback(idx + 1, len(prompts))
+
+    # Fix 1: batch-normalize difficulty to each prompt's rank within the batch
+    # (0 = easiest, 1 = hardest), then apply utility *= 1 + gamma * rank. Raw
+    # capability-sensitivity is compressed (cheap models are strong), so ranking
+    # stretches the signal to a full range and lets the knapsack reallocate toward
+    # the relatively-harder prompts. Must stay in sync with the Node SDK.
+    raw_difficulties = [group[0].difficulty if group else 0.0 for group in candidate_groups]
+    difficulty_ranks = _batch_percentile_ranks(raw_difficulties)
+    candidate_groups = [
+        [
+            BudgetCandidate(
+                **{
+                    **c.__dict__,
+                    "utility": c.utility * (1.0 + difficulty_gamma * difficulty_ranks[i]),
+                }
+            )
+            for c in group
+        ]
+        for i, group in enumerate(candidate_groups)
+    ]
 
     requested_output_tokens = output_tokens
     optimization = optimize_budget_candidates(candidate_groups, max_price, cost_unit)

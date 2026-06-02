@@ -75,11 +75,16 @@ export type { DashboardSummary, DashboardLinks } from './dashboard/index.js';
 
 // Budget optimization
 export {
+  batchPercentileRanks,
+  computeDifficulty,
   costUnitForBudget,
+  DEFAULT_DIFFICULTY_GAMMA,
+  DEFAULT_DIFFICULTY_SOURCE,
   estimateGenerationCost,
   estimateTokens,
   optimizeBudgetCandidates,
   paretoPrune,
+  resolveDifficulty,
   routeDatasetWithBudget,
 } from './budget.js';
 export type {
@@ -87,5 +92,6 @@ export type {
   BudgetedRouteResult,
   BudgetMode,
   BudgetOptimizationResult,
+  DifficultySource,
   RouteDatasetWithBudgetOptions,
 } from './budget.js';
