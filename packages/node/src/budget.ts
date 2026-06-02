@@ -104,6 +104,23 @@ export type DifficultySource = 'intrinsic' | 'capability' | 'blend';
 export const DEFAULT_DIFFICULTY_SOURCE: DifficultySource = 'intrinsic';
 
 /**
+ * Combine the two difficulty signals according to the chosen source:
+ *   - 'capability' -> model-spread difficulty only
+ *   - 'intrinsic'  -> content-based difficulty only (default)
+ *   - 'blend'      -> their mean
+ * Must stay in sync with the Python SDK's _resolve_difficulty (budget.py).
+ */
+export function resolveDifficulty(
+  source: DifficultySource,
+  capability: number,
+  intrinsic: number,
+): number {
+  if (source === 'capability') return capability;
+  if (source === 'blend') return 0.5 * (capability + intrinsic);
+  return intrinsic;
+}
+
+/**
  * Per-prompt difficulty = capability sensitivity: how much the achievable quality
  * depends on which model you pick. We compare the best quality reachable with a
  * *cheap* model against the best quality reachable at all:
@@ -457,12 +474,7 @@ async function buildBudgetCandidates(
     priced.map((p) => ({ quality: p.score.qualityScore, cost: p.estimatedCost })),
   );
   const intrinsicDifficulty = routeResult.classification?.difficulty ?? capabilityDifficulty;
-  const difficulty =
-    difficultySource === 'capability'
-      ? capabilityDifficulty
-      : difficultySource === 'blend'
-        ? 0.5 * (capabilityDifficulty + intrinsicDifficulty)
-        : intrinsicDifficulty;
+  const difficulty = resolveDifficulty(difficultySource, capabilityDifficulty, intrinsicDifficulty);
   // gamma is applied later in routeDatasetWithBudget, AFTER batch-normalizing
   // difficulty across all prompts, so a compressed raw signal still produces
   // strong relative ordering. Here utility is just raw quality.

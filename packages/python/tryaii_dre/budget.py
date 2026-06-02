@@ -78,6 +78,17 @@ DEFAULT_DIFFICULTY_GAMMA = 1.0
 DEFAULT_DIFFICULTY_SOURCE = "intrinsic"
 
 
+def _resolve_difficulty(source: str, capability: float, intrinsic: float) -> float:
+    """Combine the two difficulty signals per the chosen source: 'capability'
+    (model-spread only), 'intrinsic' (content-based only, default), or 'blend'
+    (mean). Must stay in sync with the Node SDK's resolveDifficulty (budget.ts)."""
+    if source == "capability":
+        return capability
+    if source == "blend":
+        return 0.5 * (capability + intrinsic)
+    return intrinsic
+
+
 def compute_difficulty(points: list[dict]) -> float:
     """Per-prompt difficulty = capability sensitivity: how much achievable quality
     depends on which model you pick.
@@ -410,12 +421,9 @@ def build_budget_candidates(
         if route_result.classification is not None
         else capability_difficulty
     )
-    if difficulty_source == "capability":
-        difficulty = capability_difficulty
-    elif difficulty_source == "blend":
-        difficulty = 0.5 * (capability_difficulty + intrinsic_difficulty)
-    else:
-        difficulty = intrinsic_difficulty
+    difficulty = _resolve_difficulty(
+        difficulty_source, capability_difficulty, intrinsic_difficulty
+    )
     # gamma is applied later in route_dataset_with_budget, AFTER batch-normalizing
     # difficulty across all prompts; here utility is just raw quality.
     candidate_inputs = [

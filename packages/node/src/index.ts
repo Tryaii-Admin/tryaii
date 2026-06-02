@@ -84,6 +84,7 @@ export {
   estimateTokens,
   optimizeBudgetCandidates,
   paretoPrune,
+  resolveDifficulty,
   routeDatasetWithBudget,
 } from './budget.js';
 export type {

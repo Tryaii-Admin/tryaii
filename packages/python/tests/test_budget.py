@@ -98,3 +98,13 @@ def test_batch_percentile_ranks():
     assert _batch_percentile_ranks([5, 5]) == [0.5, 0.5]
     assert _batch_percentile_ranks([42]) == [0.0]
     assert _batch_percentile_ranks([]) == []
+
+
+def test_resolve_difficulty_selects_source():
+    from tryaii_dre.budget import _resolve_difficulty
+
+    assert _resolve_difficulty("capability", 0.8, 0.2) == 0.8
+    assert _resolve_difficulty("intrinsic", 0.8, 0.2) == 0.2
+    assert _resolve_difficulty("blend", 0.8, 0.2) == 0.5
+    # Unknown source falls back to intrinsic (matches the Node default arm).
+    assert _resolve_difficulty("???", 0.8, 0.2) == 0.2

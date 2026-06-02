@@ -115,3 +115,72 @@ class TestEmbeddingClassifier:
         # Different prompts should produce different scores (top-benchmark
         # ordering isn't guaranteed to differ with the mock provider).
         assert result1.benchmark_scores != result2.benchmark_scores
+
+
+class AxisDifficultyProvider(BaseEmbeddingProvider):
+    """Provider with a controllable intrinsic-difficulty axis.
+
+    EASY exemplars embed to e1, HARD exemplars to e0 (classifier batches easy
+    first, then hard). A probe prompt tagged 'HARD'/'EASY' leans toward the
+    matching axis; anything else is orthogonal to both.
+    """
+
+    def __init__(self, dim: int = 64):
+        self._dim = dim
+        self._batch_axis = 1  # first batch (easy) -> e1, second (hard) -> e0
+
+    def embed(self, text: str) -> np.ndarray:
+        v = np.zeros(self._dim, dtype=np.float32)
+        if "HARD" in text:
+            v[0] = 1.0
+        elif "EASY" in text:
+            v[1] = 1.0
+        else:
+            v[2] = 1.0
+        return v
+
+    def embed_batch(self, texts: list[str]) -> list[np.ndarray]:
+        axis = self._batch_axis
+        self._batch_axis = 0  # next batch (hard) -> e0
+        vecs = []
+        for _ in texts:
+            v = np.zeros(self._dim, dtype=np.float32)
+            v[axis] = 1.0
+            vecs.append(v)
+        return vecs
+
+    @property
+    def dimension(self) -> int:
+        return self._dim
+
+    @property
+    def model_name(self) -> str:
+        return "mock-model"
+
+
+class TestIntrinsicDifficulty:
+    def _make_classifier(self) -> EmbeddingClassifier:
+        provider = AxisDifficultyProvider(dim=64)
+        config = TryaiiDreConfig(embedding_model="mock-model")
+        loader = CentroidLoader(config, provider)
+        rng = np.random.RandomState(7)
+        loader._centroids = {
+            b: (lambda x: x / np.linalg.norm(x))(rng.randn(64).astype(np.float32))
+            for b in ["MMLU", "HumanEval", "GSM8K"]
+        }
+        return EmbeddingClassifier(provider, loader, config)
+
+    def test_hard_prompt_scores_higher_than_easy(self):
+        classifier = self._make_classifier()
+        hard = classifier.classify("HARD prompt")
+        easy = classifier.classify("EASY prompt")
+
+        for d in (hard.difficulty, easy.difficulty):
+            assert 0.0 <= d <= 1.0
+        assert hard.difficulty > easy.difficulty
+
+    def test_neutral_prompt_is_about_half(self):
+        classifier = self._make_classifier()
+        neutral = classifier.classify("something unrelated")
+        # sim_hard == sim_easy == 0 -> sigmoid(0) == 0.5
+        assert abs(neutral.difficulty - 0.5) < 1e-5

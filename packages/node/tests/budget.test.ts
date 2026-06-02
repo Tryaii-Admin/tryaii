@@ -3,6 +3,7 @@ import {
   batchPercentileRanks,
   computeDifficulty,
   optimizeBudgetCandidates,
+  resolveDifficulty,
   type BudgetCandidate,
 } from '../src/budget.js';
 
@@ -105,5 +106,19 @@ describe('batchPercentileRanks', () => {
   it('handles empty and single-element inputs', () => {
     expect(batchPercentileRanks([])).toEqual([]);
     expect(batchPercentileRanks([42])).toEqual([0]);
+  });
+});
+
+describe('resolveDifficulty', () => {
+  it("'capability' uses only the capability signal", () => {
+    expect(resolveDifficulty('capability', 0.8, 0.2)).toBe(0.8);
+  });
+
+  it("'intrinsic' uses only the intrinsic signal", () => {
+    expect(resolveDifficulty('intrinsic', 0.8, 0.2)).toBe(0.2);
+  });
+
+  it("'blend' averages the two", () => {
+    expect(resolveDifficulty('blend', 0.8, 0.2)).toBeCloseTo(0.5, 10);
   });
 });
