@@ -38,7 +38,34 @@ embeddings are computed on-device (`sentence-transformers` on Python, ONNX MiniL
 `@xenova/transformers` on Node), so no API key is needed just to rank models. An
 OpenRouter key is only required if you want the SDK to *call* the chosen model for you.
 
-## 30-second quickstart
+## Examples
+
+The most common use is `tryaii-dre eval` — route a whole dataset under a budget:
+
+```bash
+# Route a dataset -> writes results.jsonl + summary.json + an index.html dashboard
+tryaii-dre eval prompts.json --output results/run
+
+# Spend at most $0.50 total; invest more in the harder prompts (default: intrinsic difficulty)
+tryaii-dre eval prompts.json --max-price=0.50 --output-tokens=2000
+
+# Gauge difficulty from model disagreement instead, and push budget harder toward hard prompts
+tryaii-dre eval prompts.json --max-price=0.50 --difficulty-source=capability --difficulty-gamma=3
+
+# Shrink answers to fit a tight budget instead of failing
+tryaii-dre eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+```
+
+Or rank models for a single prompt:
+
+```bash
+tryaii-dre route "Debug this memory leak in my Node.js app" --quality=5 --cost=1 --speed=2
+tryaii-dre models --provider anthropic     # inspect the model catalog
+```
+
+Full flag reference is in the [command-line interface](#command-line-interface) section below.
+
+## 30-second quickstart (SDK)
 
 <table>
 <tr><th>Python</th><th>Node / TypeScript</th></tr>
@@ -157,33 +184,9 @@ tryaii-dre <command> [options]
 | `-v, --verbose` | Verbose logging (Python). |
 
 The banner prints to **stderr** and auto-suppresses when output is piped or redirected, so
-`tryaii-dre models --json > models.json` stays clean.
-
-### Examples
-
-```bash
-# Quality-first routing for a single prompt
-tryaii-dre route "Debug this memory leak in my Node.js app" --quality=5 --cost=1 --speed=2
-
-# Route a dataset, balanced priorities, into a named folder
-tryaii-dre eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
-
-# Spend at most $0.10 across the whole dataset, ~2000 tokens/answer, shrink answers to fit
-tryaii-dre eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
-
-# Complexity-aware budget: invest more in the harder prompts (intrinsic difficulty, the default)
-tryaii-dre eval prompts.json --max-price=0.50 --output-tokens=2000 --difficulty-source=intrinsic
-
-# Gauge difficulty from model disagreement instead, and push budget harder toward complex prompts
-tryaii-dre eval prompts.json --max-price=0.50 --difficulty-source=capability --difficulty-gamma=3
-
-# Inspect what's available
-tryaii-dre models --provider anthropic
-tryaii-dre benchmarks --json
-```
-
-Open the generated `index.html` to see a self-contained dashboard of which models were
-recommended, broken down by category — identical across the Python and Node SDKs.
+`tryaii-dre models --json > models.json` stays clean. See [Examples](#examples) (top of this
+README) for runnable commands; open the generated `index.html` for a self-contained dashboard
+of which models were recommended, broken down by category.
 
 ---
 
