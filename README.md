@@ -194,6 +194,10 @@ of which models were recommended, broken down by category.
 
 Copy–paste the block below into an agent (Claude Code, Cursor, a custom tool, etc.) to
 teach it how to use this project. The package name is **`tryaii-dre`** on both PyPI and npm.
+Expand it and use the copy button in its top-right corner.
+
+<details>
+<summary><b>📋 Full agent instructions</b></summary>
 
 ````text
 You can use TryAii-DRE to pick the best LLM for a prompt before you call it. It classifies
@@ -246,6 +250,50 @@ NOTES
   - Routing is local and free; only DREClient/OpenRouter calls hit the network.
   - In budget eval, --max-price is a hard cap and quality/cost/speed flags are ignored.
 ````
+
+</details>
+
+### Quick copy-paste prompts (evaluate LLMs per price)
+
+Expand a block and use the copy button in its top-right corner.
+
+<details>
+<summary><b>📋 pip / Python</b></summary>
+
+```text
+Install the `tryaii-dre` PyPI package (`pip install tryaii-dre`) — a local, no-API-key LLM
+router that ranks 33 models by quality, price, and latency. Demo evaluating LLMs per price:
+create prompts.json (an array of 5 example prompt strings), then run a budget eval where
+--max-price is the total $ cap for the whole dataset and the optimizer maximizes quality
+under it:
+  tryaii-dre eval prompts.json --output results/budget --max-price=0.10 --output-tokens=2000 --no-banner
+Open results/budget/index.html and read summary.json, then report which models win on
+quality-per-dollar. Also show the per-prompt tradeoff in Python:
+  from tryaii_dre import Router, Priorities
+  r = Router().route("Refactor this module", priorities=Priorities.budget(), top_k=5)
+  for s in r.scores: print(s.model_id, s.final_score, s.quality_score, s.cost_score)
+```
+
+</details>
+
+<details>
+<summary><b>📋 npm / Node</b></summary>
+
+```text
+Install the `tryaii-dre` npm package (`npm install tryaii-dre`) — a local, no-API-key LLM
+router that ranks 33 models by quality, price, and latency. Demo evaluating LLMs per price:
+create prompts.json (an array of 5 example prompt strings), then run a budget eval where
+--max-price is the total $ cap for the whole dataset and the optimizer maximizes quality
+under it:
+  tryaii-dre eval prompts.json --output results/budget --max-price=0.10 --output-tokens=2000 --no-banner
+Open results/budget/index.html and read summary.json, then report which models win on
+quality-per-dollar. Also show the per-prompt tradeoff in Node (route() is async):
+  import { Router, Priorities } from "tryaii-dre";
+  const r = await new Router().route("Refactor this module", { priorities: Priorities.budget(), topK: 5 });
+  for (const s of r.scores) console.log(s.modelId, s.finalScore, s.qualityScore, s.costScore);
+```
+
+</details>
 
 ---
 
