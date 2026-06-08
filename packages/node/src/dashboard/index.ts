@@ -100,7 +100,7 @@ export function renderDashboard(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>tryaii-dre eval — ${summary.totalPrompts} prompts</title>
+<title>tryaii eval — ${summary.totalPrompts} prompts</title>
 <style>
   :root {
     --bg: #0b0d10;
@@ -171,7 +171,7 @@ export function renderDashboard(
 <body>
 <main>
   <header class="top">
-    <h1>tryaii-dre routing eval <small>${summary.totalPrompts} prompts</small></h1>
+    <h1>tryaii routing eval <small>${summary.totalPrompts} prompts</small></h1>
     <span class="meta">${esc(generatedAt)}</span>
   </header>
   <div class="meta">input: <code>${esc(inputPath)}</code></div>

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.0 (2026-06-08)
+
+**Package renamed `tryaii-dre` → `tryaii`** on both PyPI and npm. The old
+`tryaii-dre` packages are deprecated and will receive no further updates; install
+`tryaii` going forward. This is a breaking change to the install name, import
+path, and CLI command — pin to `tryaii-dre` 0.2.x if you can't migrate yet.
+
+### Migration
+
+- **Install:** `pip install tryaii` / `npm install tryaii` (was `tryaii-dre`).
+- **Python import:** `from tryaii import Router, Priorities` (was
+  `from tryaii_dre import ...`). The import module is now `tryaii` (no underscore).
+- **Node import:** `import { Router } from "tryaii"` (was `"tryaii-dre"`).
+- **CLI:** the command is now `tryaii` (e.g. `tryaii route "..."`,
+  `tryaii eval prompts.json`) — previously `tryaii-dre`.
+- The public API (classes, methods, scoring, CLI subcommands and flags) is
+  otherwise unchanged; only the names moved. `DREClient` keeps its name.
+
 ## 0.2.1 (2026-05-31)
 
 Bugfix release. **The 0.2.0 PyPI wheel was broken and has been yanked** — please

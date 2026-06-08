@@ -2,12 +2,12 @@
 OpenAI Embeddings example.
 
 Setup:
-    pip install tryaii-dre[openai]
+    pip install tryaii[openai]
     export OPENAI_API_KEY=sk-...
 """
 
-from tryaii_dre import Router
-from tryaii_dre.embeddings import OpenAIEmbeddingProvider
+from tryaii import Router
+from tryaii.embeddings import OpenAIEmbeddingProvider
 
 router = Router(
     embedding_provider=OpenAIEmbeddingProvider(),

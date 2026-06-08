@@ -14,7 +14,7 @@ ROOT = Path(__file__).parent.parent
 
 FILES = {
     "pyproject": ROOT / "packages" / "python" / "pyproject.toml",
-    "python_init": ROOT / "packages" / "python" / "tryaii_dre" / "__init__.py",
+    "python_init": ROOT / "packages" / "python" / "tryaii" / "__init__.py",
     "node_package": ROOT / "packages" / "node" / "package.json",
 }
 

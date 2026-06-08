@@ -1,7 +1,7 @@
 <div align="center">
 
-![pip install tryaii-dre](https://img.shields.io/badge/pip-tryaii--dre-2563eb?style=flat-square&logo=pypi&logoColor=white)
-![npm install tryaii-dre](https://img.shields.io/badge/npm-tryaii--dre-ef4444?style=flat-square&logo=npm&logoColor=white)
+![pip install tryaii](https://img.shields.io/badge/pip-tryaii-2563eb?style=flat-square&logo=pypi&logoColor=white)
+![npm install tryaii](https://img.shields.io/badge/npm-tryaii-ef4444?style=flat-square&logo=npm&logoColor=white)
 ![python 3.9+](https://img.shields.io/badge/python-3.9%2B-2563eb?style=flat-square&logo=python&logoColor=white)
 ![node 18+](https://img.shields.io/badge/node-18%2B-ef4444?style=flat-square&logo=node.js&logoColor=white)
 ![license Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-555?style=flat-square)
@@ -20,7 +20,7 @@
 > **TryAii-DRE** reads your prompt, figures out *what kind of task it is* using local
 > embeddings, and routes it to the best LLM for the job — balancing benchmark quality,
 > price, and latency the way **you** tell it to. The same engine ships as a Python
-> package and a Node/TypeScript package, with one matching `tryaii-dre` CLI.
+> package and a Node/TypeScript package, with one matching `tryaii` CLI.
 >
 > _(The wordmark above animates in a blue→red gradient when you run the CLI in a real terminal.)_
 
@@ -29,38 +29,38 @@
 ## Install
 
 ```bash
-pip install tryaii-dre        # Python 3.9+
-npm install tryaii-dre        # Node 18+
+pip install tryaii        # Python 3.9+
+npm install tryaii        # Node 18+
 ```
 
-Both install a `tryaii-dre` command on your `PATH`. Routing runs **fully locally** —
+Both install a `tryaii` command on your `PATH`. Routing runs **fully locally** —
 embeddings are computed on-device (`sentence-transformers` on Python, ONNX MiniLM via
 `@xenova/transformers` on Node), so no API key is needed just to rank models. An
 OpenRouter key is only required if you want the SDK to *call* the chosen model for you.
 
 ## Examples
 
-The most common use is `tryaii-dre eval` — route a whole dataset under a budget:
+The most common use is `tryaii eval` — route a whole dataset under a budget:
 
 ```bash
 # Route a dataset -> writes results.jsonl + summary.json + an index.html dashboard
-tryaii-dre eval prompts.json --output results/run
+tryaii eval prompts.json --output results/run
 
 # Spend at most $0.50 total; invest more in the harder prompts (default: intrinsic difficulty)
-tryaii-dre eval prompts.json --max-price=0.50 --output-tokens=2000
+tryaii eval prompts.json --max-price=0.50 --output-tokens=2000
 
 # Gauge difficulty from model disagreement instead, and push budget harder toward hard prompts
-tryaii-dre eval prompts.json --max-price=0.50 --difficulty-source=capability --difficulty-gamma=3
+tryaii eval prompts.json --max-price=0.50 --difficulty-source=capability --difficulty-gamma=3
 
 # Shrink answers to fit a tight budget instead of failing
-tryaii-dre eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+tryaii eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
 ```
 
 Or rank models for a single prompt:
 
 ```bash
-tryaii-dre route "Debug this memory leak in my Node.js app" --quality=5 --cost=1 --speed=2
-tryaii-dre models --provider anthropic     # inspect the model catalog
+tryaii route "Debug this memory leak in my Node.js app" --quality=5 --cost=1 --speed=2
+tryaii models --provider anthropic     # inspect the model catalog
 ```
 
 Full flag reference is in the [command-line interface](#command-line-interface) section below.
@@ -72,7 +72,7 @@ Full flag reference is in the [command-line interface](#command-line-interface) 
 <tr valign="top"><td>
 
 ```python
-from tryaii_dre import Router, Priorities
+from tryaii import Router, Priorities
 
 router = Router()
 result = router.route(
@@ -87,7 +87,7 @@ print(result.best_reasoning)  # "Quality: 0.94 on [HumanEval ...]"
 </td><td>
 
 ```ts
-import { Router, Priorities } from "tryaii-dre";
+import { Router, Priorities } from "tryaii";
 
 const router = new Router();
 const result = await router.route(
@@ -105,14 +105,14 @@ console.log(result.scores[0].reasoning);  // "Quality: 0.94 ..."
 Want it to actually answer? Pass an OpenRouter key and let the client route **and** call:
 
 ```python
-from tryaii_dre import DREClient
+from tryaii import DREClient
 client = DREClient(api_key="sk-or-...")
 reply = client.chat("Write a quicksort implementation")
 print(reply.model_used, reply.content)
 ```
 
 ```ts
-import { DREClient } from "tryaii-dre";
+import { DREClient } from "tryaii";
 const client = new DREClient({ apiKey: process.env.OPENROUTER_API_KEY });
 const reply = await client.chat("Write a quicksort implementation");
 console.log(reply.content);
@@ -122,11 +122,11 @@ console.log(reply.content);
 
 ## Command-line interface
 
-Both the pip and npm packages expose the **same** `tryaii-dre` command. It opens with an
+Both the pip and npm packages expose the **same** `tryaii` command. It opens with an
 animated blue→red banner, then runs your command.
 
 ```bash
-tryaii-dre <command> [options]
+tryaii <command> [options]
 ```
 
 ### Commands
@@ -155,7 +155,7 @@ tryaii-dre <command> [options]
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `-o, --output <dir>`    | `./tryaii-dre-eval-<timestamp>` | Where to write the run artifacts. |
+| `-o, --output <dir>`    | `./tryaii-eval-<timestamp>` | Where to write the run artifacts. |
 | `--quality / --cost / --speed <1-5>` | `3` | Priorities (ignored in budget mode). |
 | `--top-k <n>`           | `5`      | Models recorded per prompt. |
 | `--max-price <usd>`     | _off_    | Total budget for the **whole dataset**. Switches eval into budget-optimized mode: price becomes a hard constraint and the optimizer maximizes quality under it. |
@@ -184,7 +184,7 @@ tryaii-dre <command> [options]
 | `-v, --verbose` | Verbose logging (Python). |
 
 The banner prints to **stderr** and auto-suppresses when output is piped or redirected, so
-`tryaii-dre models --json > models.json` stays clean. See [Examples](#examples) (top of this
+`tryaii models --json > models.json` stays clean. See [Examples](#examples) (top of this
 README) for runnable commands; open the generated `index.html` for a self-contained dashboard
 of which models were recommended, broken down by category.
 
@@ -193,7 +193,7 @@ of which models were recommended, broken down by category.
 ## Use TryAii-DRE from an AI agent
 
 Copy–paste the block below into an agent (Claude Code, Cursor, a custom tool, etc.) to
-teach it how to use this project. The package name is **`tryaii-dre`** on both PyPI and npm.
+teach it how to use this project. The package name is **`tryaii`** on both PyPI and npm.
 Expand it and use the copy button in its top-right corner.
 
 <details>
@@ -205,15 +205,15 @@ the prompt with local embeddings (no API key needed) and ranks models by benchma
 price, and latency according to priorities you choose.
 
 INSTALL
-  Python:  pip install tryaii-dre
-  Node:    npm install tryaii-dre
+  Python:  pip install tryaii
+  Node:    npm install tryaii
 
 PRIORITIES (1 = ignore, 3 = balanced, 5 = critical) for quality, cost, speed.
   Presets — Python: Priorities.balanced()/performance()/budget()/fast()
             Node:   Priorities.balanced()/performance()/budget()/fast()
 
 PYTHON
-  from tryaii_dre import Router, Priorities
+  from tryaii import Router, Priorities
   router = Router()
   r = router.route("<prompt>", priorities=Priorities(quality=5, cost=1, speed=2), top_k=5)
   r.best_model        # str  -> the model id to call
@@ -222,12 +222,12 @@ PYTHON
                       #         .cost_score .speed_score .reasoning
   r.classification    # .broad_category .subcategory .confidence
   # Optional: route AND call via OpenRouter
-  from tryaii_dre import DREClient
+  from tryaii import DREClient
   reply = DREClient(api_key="<OPENROUTER_KEY>").chat("<prompt>")
   reply.model_used, reply.content
 
 NODE / TYPESCRIPT
-  import { Router, Priorities, DREClient } from "tryaii-dre";
+  import { Router, Priorities, DREClient } from "tryaii";
   const router = new Router();
   const r = await router.route("<prompt>", { priorities: Priorities.performance(), topK: 5 });
   r.bestModel;                 // string
@@ -237,12 +237,12 @@ NODE / TYPESCRIPT
   reply.content;
 
 CLI (same command for both packages)
-  tryaii-dre route "<prompt>" --quality=5 --cost=1 --speed=2
-  tryaii-dre eval prompts.json --output results/run            # writes results.jsonl + summary.json + index.html
-  tryaii-dre eval prompts.json --max-price=0.10 --output-tokens=2000
-  tryaii-dre eval prompts.json --max-price=0.50 --difficulty-source=intrinsic   # spend more on harder prompts
-  tryaii-dre models --json        # machine-readable model catalog (stdout)
-  tryaii-dre benchmarks --json    # machine-readable benchmark catalog
+  tryaii route "<prompt>" --quality=5 --cost=1 --speed=2
+  tryaii eval prompts.json --output results/run            # writes results.jsonl + summary.json + index.html
+  tryaii eval prompts.json --max-price=0.10 --output-tokens=2000
+  tryaii eval prompts.json --max-price=0.50 --difficulty-source=intrinsic   # spend more on harder prompts
+  tryaii models --json        # machine-readable model catalog (stdout)
+  tryaii benchmarks --json    # machine-readable benchmark catalog
   # Add --no-banner (or set TRYAII_NO_BANNER=1) for clean, scriptable output.
 
 NOTES
@@ -261,15 +261,15 @@ Expand a block and use the copy button in its top-right corner.
 <summary><b>📋 pip / Python</b></summary>
 
 ```text
-Install the `tryaii-dre` PyPI package (`pip install tryaii-dre`) — a local, no-API-key LLM
+Install the `tryaii` PyPI package (`pip install tryaii`) — a local, no-API-key LLM
 router that ranks 33 models by quality, price, and latency. Demo evaluating LLMs per price:
 create prompts.json (an array of 5 example prompt strings), then run a budget eval where
 --max-price is the total $ cap for the whole dataset and the optimizer maximizes quality
 under it:
-  tryaii-dre eval prompts.json --output results/budget --max-price=0.10 --output-tokens=2000 --no-banner
+  tryaii eval prompts.json --output results/budget --max-price=0.10 --output-tokens=2000 --no-banner
 Open results/budget/index.html and read summary.json, then report which models win on
 quality-per-dollar. Also show the per-prompt tradeoff in Python:
-  from tryaii_dre import Router, Priorities
+  from tryaii import Router, Priorities
   r = Router().route("Refactor this module", priorities=Priorities.budget(), top_k=5)
   for s in r.scores: print(s.model_id, s.final_score, s.quality_score, s.cost_score)
 ```
@@ -280,15 +280,15 @@ quality-per-dollar. Also show the per-prompt tradeoff in Python:
 <summary><b>📋 npm / Node</b></summary>
 
 ```text
-Install the `tryaii-dre` npm package (`npm install tryaii-dre`) — a local, no-API-key LLM
+Install the `tryaii` npm package (`npm install tryaii`) — a local, no-API-key LLM
 router that ranks 33 models by quality, price, and latency. Demo evaluating LLMs per price:
 create prompts.json (an array of 5 example prompt strings), then run a budget eval where
 --max-price is the total $ cap for the whole dataset and the optimizer maximizes quality
 under it:
-  tryaii-dre eval prompts.json --output results/budget --max-price=0.10 --output-tokens=2000 --no-banner
+  tryaii eval prompts.json --output results/budget --max-price=0.10 --output-tokens=2000 --no-banner
 Open results/budget/index.html and read summary.json, then report which models win on
 quality-per-dollar. Also show the per-prompt tradeoff in Node (route() is async):
-  import { Router, Priorities } from "tryaii-dre";
+  import { Router, Priorities } from "tryaii";
   const r = await new Router().route("Refactor this module", { priorities: Priorities.budget(), topK: 5 });
   for (const s of r.scores) console.log(s.modelId, s.finalScore, s.qualityScore, s.costScore);
 ```
@@ -318,14 +318,14 @@ Top-K ranked models, each with human-readable reasoning
 ## Architecture
 
 ```
-tryaii-dre/
+tryaii/
   shared/                  Single source of truth for model data
     models/                33 models with benchmarks and pricing
     benchmarks/            12 standard benchmark definitions
     centroids/             Pre-computed embedding centroids
   packages/
-    python/                pip install tryaii-dre
-    node/                  npm install tryaii-dre
+    python/                pip install tryaii
+    node/                  npm install tryaii
   scripts/                 Build and sync tooling
 ```
 
@@ -348,8 +348,8 @@ HumanEval, LiveBench, MMLU, MT-Bench, SWE-bench, SuperGLUE, TruthfulQA.
 
 | Package | Install | Docs |
 |---------|---------|------|
-| Python | `pip install tryaii-dre` | [packages/python](packages/python/) |
-| Node   | `npm install tryaii-dre` | [packages/node](packages/node/) |
+| Python | `pip install tryaii` | [packages/python](packages/python/) |
+| Node   | `npm install tryaii` | [packages/node](packages/node/) |
 
 ## Contributing
 

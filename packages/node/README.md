@@ -1,4 +1,4 @@
-# tryaii-dre
+# tryaii
 
 AI model router for Node.js and TypeScript.
 
@@ -7,13 +7,13 @@ Ranks models using benchmark performance, pricing, latency, and your quality/cos
 ## Installation
 
 ```bash
-npm install tryaii-dre
+npm install tryaii
 ```
 
 ## Quick Start
 
 ```typescript
-import { DREClient, Priorities, Router } from 'tryaii-dre';
+import { DREClient, Priorities, Router } from 'tryaii';
 
 // Embedding-based classifier using @xenova/transformers.
 const router = new Router();
@@ -36,17 +36,17 @@ console.log(response.content);
 
 ## CLI
 
-Installing the package adds a `tryaii-dre` command (same surface as the Python SDK). It
+Installing the package adds a `tryaii` command (same surface as the Python SDK). It
 opens with an animated blue→red banner, then runs your command. The banner prints to
 stderr and auto-suppresses when output is piped, so `--json` stays clean.
 
 ```bash
-tryaii-dre route "Write a Python function to merge sorted arrays" --quality=5 --cost=1
-tryaii-dre eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
-tryaii-dre eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
-tryaii-dre models --provider anthropic        # add --json for machine-readable output
-tryaii-dre benchmarks --json
-tryaii-dre setup                               # download the embedding model + warm centroids
+tryaii route "Write a Python function to merge sorted arrays" --quality=5 --cost=1
+tryaii eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
+tryaii eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+tryaii models --provider anthropic        # add --json for machine-readable output
+tryaii benchmarks --json
+tryaii setup                               # download the embedding model + warm centroids
 ```
 
 | Command | Key options |
@@ -143,7 +143,7 @@ await router.route('prompt', { filterCapability: 'vision' });
 Use `DREClient` when you want routing plus chat/streaming in one object:
 
 ```typescript
-import { DREClient } from 'tryaii-dre';
+import { DREClient } from 'tryaii';
 
 const client = new DREClient({ apiKey: process.env.OPENROUTER_API_KEY });
 
@@ -160,7 +160,7 @@ for await (const chunk of client.stream('Explain machine learning')) {
 Route prompts and call the selected model through OpenRouter:
 
 ```typescript
-import { OpenRouterIntegration, Router } from 'tryaii-dre';
+import { OpenRouterIntegration, Router } from 'tryaii';
 
 const router = new Router();
 const openrouter = new OpenRouterIntegration(router, {
@@ -189,11 +189,11 @@ User Prompt
 
 ## Eval Dashboard
 
-The `tryaii-dre eval` command (above) supports a shared generation budget:
+The `tryaii eval` command (above) supports a shared generation budget:
 
 ```bash
-tryaii-dre eval prompts.json --output results/node-budget --max-price=0.10 --output-tokens=2000
-tryaii-dre eval prompts.json --output results/node-budget-fit --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+tryaii eval prompts.json --output results/node-budget --max-price=0.10 --output-tokens=2000
+tryaii eval prompts.json --output results/node-budget-fit --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
 ```
 
 This treats `--max-price` as the total budget for the whole dataset and
@@ -211,7 +211,7 @@ to `summary.json` / `results.jsonl` to make the run dir an openable artifact.
 ```ts
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { renderDashboard, type DashboardSummary } from 'tryaii-dre';
+import { renderDashboard, type DashboardSummary } from 'tryaii';
 
 const runDir = './runs/quality';
 const summary: DashboardSummary = JSON.parse(

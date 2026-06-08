@@ -252,8 +252,8 @@ def main() -> int:
     )
 
     # --- Generate centroids (reuse the package pipeline) ---
-    from tryaii_dre.centroids.generator import CentroidGenerator
-    from tryaii_dre.embeddings.local import LocalEmbeddingProvider
+    from tryaii.centroids.generator import CentroidGenerator
+    from tryaii.embeddings.local import LocalEmbeddingProvider
 
     provider = LocalEmbeddingProvider(model_name=EMBED_MODEL)
     generator = CentroidGenerator(provider)

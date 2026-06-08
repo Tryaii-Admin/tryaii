@@ -12,7 +12,7 @@ def setup_logging(level: int | str | None = None) -> logging.Logger:
     Configure root logging with an informative format.
 
     Log level can be overridden via the LOG_LEVEL env var (DEBUG, INFO, ...).
-    Defaults to DEBUG so tryaii_dre internals are visible.
+    Defaults to DEBUG so tryaii internals are visible.
     """
     if level is None:
         level = os.environ.get("LOG_LEVEL", "DEBUG")

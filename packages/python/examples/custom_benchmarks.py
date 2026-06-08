@@ -6,7 +6,7 @@ You can define custom benchmarks with representative queries, and TryAii-DRE
 will generate centroids and include them in routing decisions.
 """
 
-from tryaii_dre import Router
+from tryaii import Router
 
 router = Router()
 

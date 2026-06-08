@@ -1,4 +1,4 @@
-from tryaii_dre.budget import (
+from tryaii.budget import (
     BudgetCandidate,
     compute_difficulty,
     optimize_budget_candidates,
@@ -91,7 +91,7 @@ def test_compute_difficulty_zero_for_empty_or_zero_ceiling():
 
 
 def test_batch_percentile_ranks():
-    from tryaii_dre.budget import _batch_percentile_ranks
+    from tryaii.budget import _batch_percentile_ranks
 
     assert _batch_percentile_ranks([10, 20, 30]) == [0.0, 0.5, 1.0]
     assert _batch_percentile_ranks([30, 10, 20]) == [1.0, 0.0, 0.5]
@@ -101,7 +101,7 @@ def test_batch_percentile_ranks():
 
 
 def test_resolve_difficulty_selects_source():
-    from tryaii_dre.budget import _resolve_difficulty
+    from tryaii.budget import _resolve_difficulty
 
     assert _resolve_difficulty("capability", 0.8, 0.2) == 0.8
     assert _resolve_difficulty("intrinsic", 0.8, 0.2) == 0.2

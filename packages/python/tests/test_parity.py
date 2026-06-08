@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from tryaii_dre.benchmarks.standard import STANDARD_BENCHMARKS
-from tryaii_dre.scoring.benchmarks import NORMALIZATION_RANGES
+from tryaii.benchmarks.standard import STANDARD_BENCHMARKS
+from tryaii.scoring.benchmarks import NORMALIZATION_RANGES
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 NODE_PRESET = (
@@ -29,7 +29,7 @@ PY_PRESET = (
     REPO_ROOT
     / "packages"
     / "python"
-    / "tryaii_dre"
+    / "tryaii"
     / "registry"
     / "presets"
     / "default_models.json"

@@ -9,8 +9,8 @@ import hashlib
 import numpy as np
 import pytest
 
-from tryaii_dre import Priorities, Router
-from tryaii_dre.config import TryaiiDreConfig
+from tryaii import Priorities, Router
+from tryaii.config import TryaiiDreConfig
 
 
 class FakeSentenceTransformer:

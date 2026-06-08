@@ -6,10 +6,10 @@ the real sentence-transformers model in CI.
 
 import numpy as np
 
-from tryaii_dre.centroids.loader import CentroidLoader
-from tryaii_dre.classifiers.embedding import EmbeddingClassifier, _cosine_similarity
-from tryaii_dre.config import TryaiiDreConfig
-from tryaii_dre.embeddings.base import BaseEmbeddingProvider
+from tryaii.centroids.loader import CentroidLoader
+from tryaii.classifiers.embedding import EmbeddingClassifier, _cosine_similarity
+from tryaii.config import TryaiiDreConfig
+from tryaii.embeddings.base import BaseEmbeddingProvider
 
 
 class MockEmbeddingProvider(BaseEmbeddingProvider):

@@ -1,11 +1,11 @@
 """
-End-to-end: JSON extraction routed through tryaii_dre.
+End-to-end: JSON extraction routed through tryaii.
 
 Same task as extract_direct.py, but instead of hard-coding a model we let
 TryAii-DRE pick the best one for the prompt, then dispatch via OpenRouter.
 
 Setup:
-    pip install tryaii-dre[openrouter]
+    pip install tryaii[openrouter]
     # Put your key in example/.env:  OPENROUTER_API_KEY=sk-or-...
 
 Run:
@@ -27,8 +27,8 @@ from _logging import setup_logging
 load_env()
 log = setup_logging()
 
-from tryaii_dre import Router
-from tryaii_dre.integrations import OpenRouterIntegration
+from tryaii import Router
+from tryaii.integrations import OpenRouterIntegration
 
 UNSTRUCTURED_TEXT = """
 Invoice #A-2048 issued on 2026-04-12 to Acme Robotics Ltd.
@@ -79,7 +79,7 @@ def main() -> int:
     )
     log.info("Built prompt: %d chars, %d lines", len(prompt), prompt.count("\n") + 1)
 
-    log.info("Initializing tryaii_dre.Router (loads centroids, embedding provider)")
+    log.info("Initializing tryaii.Router (loads centroids, embedding provider)")
     t0 = time.perf_counter()
     router = Router()
     log.info("Router ready in %.1f ms", (time.perf_counter() - t0) * 1000)
@@ -88,7 +88,7 @@ def main() -> int:
     log.info("Routing priorities: %s", priorities)
 
     log.info("Peeking at router.route() before dispatch to surface scores")
-    from tryaii_dre.scoring.priorities import Priorities
+    from tryaii.scoring.priorities import Priorities
     route_result = router.route(prompt, priorities=Priorities.from_dict(priorities))
     log.info("Router picked: %s", route_result.best_model)
     for i, s in enumerate(route_result.scores[:3], 1):
@@ -100,7 +100,7 @@ def main() -> int:
             getattr(s, "reasoning", ""),
         )
 
-    with OpenRouterIntegration(router, app_name="tryaii-dre-example") as openrouter:
+    with OpenRouterIntegration(router, app_name="tryaii-example") as openrouter:
         log.info("Dispatching chat() via OpenRouter (quality-leaning)")
         t1 = time.perf_counter()
         response = openrouter.chat(

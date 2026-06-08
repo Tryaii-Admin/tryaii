@@ -64,5 +64,5 @@ jobs:
       - name: Pack and check tarball
         run: |
           npm pack
-          tar tzf tryaii-dre-*.tgz | head -20
+          tar tzf tryaii-*.tgz | head -20
           echo "Pack succeeded"

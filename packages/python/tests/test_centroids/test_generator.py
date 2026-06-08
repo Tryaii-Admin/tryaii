@@ -5,8 +5,8 @@ from pathlib import Path
 
 import numpy as np
 
-from tryaii_dre.centroids.generator import CentroidGenerator
-from tryaii_dre.embeddings.base import BaseEmbeddingProvider
+from tryaii.centroids.generator import CentroidGenerator
+from tryaii.embeddings.base import BaseEmbeddingProvider
 
 
 class MockProvider(BaseEmbeddingProvider):

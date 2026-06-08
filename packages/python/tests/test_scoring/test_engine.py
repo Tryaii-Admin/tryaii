@@ -1,8 +1,8 @@
 """Tests for the scoring engine."""
 
-from tryaii_dre.registry.models import ModelInfo, ModelPricing
-from tryaii_dre.scoring.engine import ScoringEngine
-from tryaii_dre.scoring.priorities import Priorities
+from tryaii.registry.models import ModelInfo, ModelPricing
+from tryaii.scoring.engine import ScoringEngine
+from tryaii.scoring.priorities import Priorities
 
 
 def _make_models() -> list[ModelInfo]:

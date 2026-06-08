@@ -22,7 +22,7 @@ for (const relativePath of requiredPaths) {
   }
 }
 
-// The CLI must keep its shebang so `tryaii-dre` is directly executable.
+// The CLI must keep its shebang so `tryaii` is directly executable.
 const cliSource = readFileSync(join(packageDir, 'dist/cli.js'), 'utf-8');
 if (!cliSource.startsWith('#!/usr/bin/env node')) {
   throw new Error('dist/cli.js is missing its "#!/usr/bin/env node" shebang');

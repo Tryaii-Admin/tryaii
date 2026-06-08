@@ -1,11 +1,11 @@
 """
 TryAii-DRE Quickstart -- Minimum viable example.
 
-pip install tryaii-dre
+pip install tryaii
 python examples/quickstart.py
 """
 
-from tryaii_dre import Router, Priorities
+from tryaii import Router, Priorities
 
 # Create router (uses local embeddings, ships with 35+ models)
 router = Router()

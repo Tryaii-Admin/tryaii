@@ -39,7 +39,7 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Lint with ruff
-        run: ruff check tryaii_dre/ tests/
+        run: ruff check tryaii/ tests/
 
       - name: Run tests
         run: pytest tests/ -v --tb=short
@@ -71,7 +71,7 @@ jobs:
         run: |
           python -m venv /tmp/smoke-env
           /tmp/smoke-env/bin/pip install dist/*.whl
-          /tmp/smoke-env/bin/tryaii-dre --help >/dev/null
+          /tmp/smoke-env/bin/tryaii --help >/dev/null
           /tmp/smoke-env/bin/python - <<'PY'
           import numpy as np
           import sentence_transformers
@@ -104,7 +104,7 @@ jobs:
 
           sentence_transformers.SentenceTransformer = FakeSentenceTransformer
 
-          from tryaii_dre import Router
+          from tryaii import Router
 
           router = Router()
           result = router.route("Write a Python function to merge sorted arrays")

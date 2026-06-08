@@ -5,7 +5,7 @@
  * based on benchmarks, cost, speed, and quality priorities.
  *
  * Usage:
- *   import { Router } from 'tryaii-dre';
+ *   import { Router } from 'tryaii';
  *
  *   const router = new Router();
  *   const result = await router.route('Write a Python function to merge sorted arrays');
