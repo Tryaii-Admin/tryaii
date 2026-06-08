@@ -19,14 +19,14 @@ TARGETS = [
     (
         SHARED / "models" / "default_models.json",
         [
-            ROOT / "packages" / "python" / "tryaii_dre" / "registry" / "presets" / "default_models.json",
+            ROOT / "packages" / "python" / "tryaii" / "registry" / "presets" / "default_models.json",
             ROOT / "packages" / "node" / "src" / "registry" / "presets" / "defaultModels.json",
         ],
     ),
     (
         SHARED / "training" / "training_queries.json",
         [
-            ROOT / "packages" / "python" / "tryaii_dre" / "centroids" / "data" / "training_queries.json",
+            ROOT / "packages" / "python" / "tryaii" / "centroids" / "data" / "training_queries.json",
             ROOT / "packages" / "node" / "src" / "centroids" / "data" / "trainingQueries.json",
         ],
     ),
@@ -34,7 +34,7 @@ TARGETS = [
 
 # Centroids: copy all files in shared/centroids/ to both packages
 CENTROID_DESTS = [
-    ROOT / "packages" / "python" / "tryaii_dre" / "centroids" / "data",
+    ROOT / "packages" / "python" / "tryaii" / "centroids" / "data",
     ROOT / "packages" / "node" / "src" / "centroids" / "data",
 ]
 

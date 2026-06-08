@@ -36,7 +36,7 @@ describe('renderDashboard', () => {
     const html = renderDashboard(fixture, '/runs/quality');
 
     expect(html.startsWith('<!doctype html>')).toBe(true);
-    expect(html).toContain('<title>tryaii-dre eval — 12 prompts</title>');
+    expect(html).toContain('<title>tryaii eval — 12 prompts</title>');
     expect(html).toContain('anthropic/claude-opus-4');
     expect(html).toContain('gsm8k');
     expect(html).toContain('/runs/quality');

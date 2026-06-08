@@ -1,6 +1,6 @@
 """Tests for OpenRouter integration (mock-only, no real API calls)."""
 
-from tryaii_dre.integrations.openrouter import MODEL_ID_TO_OPENROUTER
+from tryaii.integrations.openrouter import MODEL_ID_TO_OPENROUTER
 
 
 class TestModelMapping:
@@ -18,7 +18,7 @@ class TestModelMapping:
 
     def test_all_default_models_have_mapping(self):
         """Verify that all models in default registry have OpenRouter mappings."""
-        from tryaii_dre.registry.models import ModelRegistry
+        from tryaii.registry.models import ModelRegistry
 
         registry = ModelRegistry.default()
         unmapped = []

@@ -3,7 +3,7 @@
 **Embedding-based AI model router.** Understands your prompt semantically and routes to the best model based on benchmarks, cost, speed, and quality.
 
 ```python
-from tryaii_dre import DREClient, Router
+from tryaii import DREClient, Router
 
 router = Router()
 result = router.route("Write a Python function to merge sorted arrays")
@@ -19,7 +19,7 @@ print(response.content)
 ## Install
 
 ```bash
-pip install tryaii-dre
+pip install tryaii
 ```
 
 The base install includes local embeddings via `sentence-transformers` - no API keys needed.
@@ -27,16 +27,16 @@ The base install includes local embeddings via `sentence-transformers` - no API 
 Optional extras for provider integrations:
 
 ```bash
-pip install tryaii-dre[openrouter]  # Route & call models via OpenRouter (adds httpx)
-pip install tryaii-dre[openai]      # Use OpenAI embeddings instead of local (adds openai)
-pip install tryaii-dre[redis]       # Redis client for planned distributed cache (not yet implemented)
-pip install tryaii-dre[all]         # All optional integrations
+pip install tryaii[openrouter]  # Route & call models via OpenRouter (adds httpx)
+pip install tryaii[openai]      # Use OpenAI embeddings instead of local (adds openai)
+pip install tryaii[redis]       # Redis client for planned distributed cache (not yet implemented)
+pip install tryaii[all]         # All optional integrations
 ```
 
 ## Quick Start
 
 ```python
-from tryaii_dre import Router, Priorities
+from tryaii import Router, Priorities
 
 router = Router()
 
@@ -59,16 +59,16 @@ result = router.route(
 
 ## CLI
 
-Installing the package adds a `tryaii-dre` command (same surface as the Node SDK). It opens
+Installing the package adds a `tryaii` command (same surface as the Node SDK). It opens
 with an animated blue→red banner, then runs your command. The banner prints to stderr and
 auto-suppresses when output is piped, so `--json` stays clean.
 
 ```bash
-tryaii-dre route "Write a Python function to merge sorted arrays" --quality=5 --cost=1
-tryaii-dre eval prompts.json --output results/my-run --quality=5 --cost=1 --speed=1
-tryaii-dre models --provider anthropic        # add --json for machine-readable output
-tryaii-dre benchmarks --json
-tryaii-dre setup                               # download the embedding model + warm centroids
+tryaii route "Write a Python function to merge sorted arrays" --quality=5 --cost=1
+tryaii eval prompts.json --output results/my-run --quality=5 --cost=1 --speed=1
+tryaii models --provider anthropic        # add --json for machine-readable output
+tryaii benchmarks --json
+tryaii setup                               # download the embedding model + warm centroids
 ```
 
 | Command | Key options |
@@ -85,11 +85,11 @@ Global flags: `--no-banner` (or `TRYAII_NO_BANNER=1`), `NO_COLOR=1`, `-v/--verbo
 
 ```bash
 # Balanced run into a named folder
-tryaii-dre eval prompts.json --output results/my-run --quality=5 --cost=1 --speed=1
+tryaii eval prompts.json --output results/my-run --quality=5 --cost=1 --speed=1
 
 # Budget-aware: --max-price is the total budget for the whole dataset
-tryaii-dre eval prompts.json --output results/budget --max-price=0.10 --output-tokens=2000
-tryaii-dre eval prompts.json --output results/budget-fit --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+tryaii eval prompts.json --output results/budget --max-price=0.10 --output-tokens=2000
+tryaii eval prompts.json --output results/budget-fit --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
 ```
 
 The input can be an array of strings or objects with `prompt`, optional `id`,
@@ -102,8 +102,8 @@ command writes `results.jsonl`, `summary.json`, and `index.html`.
 ## OpenRouter Integration
 
 ```python
-from tryaii_dre import Router
-from tryaii_dre.integrations import OpenRouterIntegration
+from tryaii import Router
+from tryaii.integrations import OpenRouterIntegration
 
 router = Router()
 openrouter = OpenRouterIntegration(router, api_key="sk-or-...")
@@ -116,8 +116,8 @@ print(response.content)     # Actual response
 ## OpenAI Embeddings
 
 ```python
-from tryaii_dre import Router
-from tryaii_dre.embeddings import OpenAIEmbeddingProvider
+from tryaii import Router
+from tryaii.embeddings import OpenAIEmbeddingProvider
 
 router = Router(
     embedding_provider=OpenAIEmbeddingProvider(),
@@ -130,7 +130,7 @@ print(result.best_model)
 Install the OpenAI client first:
 
 ```bash
-pip install tryaii-dre[openai]
+pip install tryaii[openai]
 ```
 
 ## License

@@ -2,12 +2,12 @@
 /**
  * TryAii-DRE CLI.
  *
- * Commands (kept in parity with the Python SDK's `tryaii-dre`):
- *   tryaii-dre route "your prompt here"   -- Route a prompt and show recommendations
- *   tryaii-dre eval prompts.json          -- Route a JSON prompt dataset
- *   tryaii-dre setup                      -- Download the embedding model + warm centroids
- *   tryaii-dre models                     -- List available models
- *   tryaii-dre benchmarks                 -- List available benchmarks
+ * Commands (kept in parity with the Python SDK's `tryaii`):
+ *   tryaii route "your prompt here"   -- Route a prompt and show recommendations
+ *   tryaii eval prompts.json          -- Route a JSON prompt dataset
+ *   tryaii setup                      -- Download the embedding model + warm centroids
+ *   tryaii models                     -- List available models
+ *   tryaii benchmarks                 -- List available benchmarks
  *
  * Global flags: --no-banner, --version, --help.
  */
@@ -66,7 +66,7 @@ async function cmdRoute(subArgs: string[]): Promise<void> {
 
   const prompt = positionals[0];
   if (!prompt) {
-    throw new CliError('route requires a prompt, e.g. tryaii-dre route "Write a quicksort"');
+    throw new CliError('route requires a prompt, e.g. tryaii route "Write a quicksort"');
   }
 
   const priorities = new Priorities(
@@ -406,7 +406,7 @@ function evalStampDir(): string {
   const now = new Date();
   const pad = (n: number): string => String(n).padStart(2, '0');
   return (
-    `tryaii-dre-eval-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
+    `tryaii-eval-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
     `-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
   );
 }
@@ -431,7 +431,7 @@ async function cmdEval(subArgs: string[]): Promise<void> {
 
   const inputArg = positionals[0];
   if (!inputArg) {
-    throw new CliError('eval requires an input JSON file, e.g. tryaii-dre eval prompts.json');
+    throw new CliError('eval requires an input JSON file, e.g. tryaii eval prompts.json');
   }
   const inputPath = resolve(inputArg);
   const outputDir = values.output ? resolve(values.output) : resolve(process.cwd(), evalStampDir());
@@ -638,10 +638,10 @@ async function cmdEval(subArgs: string[]): Promise<void> {
 // help / dispatch
 // ---------------------------------------------------------------------------
 
-const HELP = `tryaii-dre -- Embedding-based AI model router
+const HELP = `tryaii -- Embedding-based AI model router
 
 Usage:
-  tryaii-dre <command> [options]
+  tryaii <command> [options]
 
 Commands:
   route <prompt>        Route a prompt to the best model and show recommendations
@@ -658,7 +658,7 @@ Common options:
   --top-k <n>           Number of recommendations (default 5)
 
 Eval-only options:
-  -o, --output <dir>    Output directory (default: ./tryaii-dre-eval-<timestamp>)
+  -o, --output <dir>    Output directory (default: ./tryaii-eval-<timestamp>)
   --max-price <usd>     Total dataset budget; switches eval to budget-optimized mode
   --output-tokens <n>   Expected output tokens per prompt for budget estimation (default 1000)
   --budget-mode <mode>  'strict' (default) or 'fit-output'
@@ -671,10 +671,10 @@ Global flags:
   -h, --help            Show this help
 
 Examples:
-  tryaii-dre route "Write a Python function to merge sorted arrays" --quality=5 --cost=1
-  tryaii-dre eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
-  tryaii-dre eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
-  tryaii-dre eval prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
+  tryaii route "Write a Python function to merge sorted arrays" --quality=5 --cost=1
+  tryaii eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
+  tryaii eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+  tryaii eval prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
 `;
 
 function version(): string {
@@ -730,7 +730,7 @@ async function main(): Promise<void> {
       await cmdRegenerate(subArgs);
       break;
     default:
-      throw new CliError(`Unknown command: ${command}\nRun "tryaii-dre --help" for usage.`);
+      throw new CliError(`Unknown command: ${command}\nRun "tryaii --help" for usage.`);
   }
 }
 

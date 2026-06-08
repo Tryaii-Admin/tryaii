@@ -98,7 +98,7 @@ def main() -> int:
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
-                "X-Title": "tryaii-dre-example",
+                "X-Title": "tryaii-example",
             },
             json=payload,
         )

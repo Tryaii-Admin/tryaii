@@ -7,8 +7,8 @@
  * Uses the native fetch() API (available in Node 18+).
  *
  * Usage:
- *   import { Router } from 'tryaii-dre';
- *   import { OpenRouterIntegration } from 'tryaii-dre/integrations';
+ *   import { Router } from 'tryaii';
+ *   import { OpenRouterIntegration } from 'tryaii/integrations';
  *
  *   const router = new Router();
  *   const openrouter = new OpenRouterIntegration(router, { apiKey: 'sk-or-...' });
@@ -118,7 +118,7 @@ export class OpenRouterIntegration {
   ) {
     this._router = router;
     this._apiKey = opts?.apiKey ?? '';
-    this._appName = opts?.appName ?? 'tryaii-dre';
+    this._appName = opts?.appName ?? 'tryaii';
   }
 
   private _ensureApiKey(): void {

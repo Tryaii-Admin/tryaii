@@ -1,6 +1,6 @@
 """Tests for benchmark normalization."""
 
-from tryaii_dre.scoring.benchmarks import BenchmarkNormalizer, NormalizationRange
+from tryaii.scoring.benchmarks import BenchmarkNormalizer, NormalizationRange
 
 
 class TestNormalizationRange:

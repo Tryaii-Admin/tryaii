@@ -11,7 +11,7 @@
  * A 24-bit gradient is used when the terminal advertises truecolor
  * (COLORTERM=truecolor/24bit); otherwise a 256-color two-tone fallback is used.
  *
- * Kept intentionally in sync with the Python SDK banner (tryaii_dre/cli/banner.py)
+ * Kept intentionally in sync with the Python SDK banner (tryaii/cli/banner.py)
  * so both CLIs greet users identically.
  */
 

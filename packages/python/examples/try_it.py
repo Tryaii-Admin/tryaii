@@ -5,12 +5,12 @@ Shows the full flow: routing decisions, priority presets,
 filtering, and live OpenRouter calls.
 
 Setup:
-    pip install tryaii-dre[openrouter]
+    pip install tryaii[openrouter]
     set OPENROUTER_API_KEY=sk-or-...
 """
 
-from tryaii_dre import Router, Priorities
-from tryaii_dre.integrations import OpenRouterIntegration
+from tryaii import Router, Priorities
+from tryaii.integrations import OpenRouterIntegration
 
 # -- 1. See how routing works (no API key needed) --------------------
 
@@ -78,7 +78,7 @@ print("=" * 70)
 
 openrouter = OpenRouterIntegration(router)  # reads OPENROUTER_API_KEY from env
 
-# Auto-routed: tryaii-dre picks the model, OpenRouter calls it
+# Auto-routed: tryaii picks the model, OpenRouter calls it
 response = openrouter.chat(
     "Write a Python one-liner that flattens a nested list",
     priorities={"quality": 4, "cost": 3, "speed": 4},

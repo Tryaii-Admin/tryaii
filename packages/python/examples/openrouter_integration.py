@@ -4,12 +4,12 @@ OpenRouter Integration -- Active routing that actually calls the model.
 Combines TryAii-DRE's semantic routing with OpenRouter's multi-provider API.
 The router picks the best model, then OpenRouter handles the API call.
 
-pip install tryaii-dre[openrouter]
+pip install tryaii[openrouter]
 export OPENROUTER_API_KEY=sk-or-...
 """
 
-from tryaii_dre import Router
-from tryaii_dre.integrations import OpenRouterIntegration
+from tryaii import Router
+from tryaii.integrations import OpenRouterIntegration
 
 # Create router + OpenRouter integration
 router = Router()

@@ -4,7 +4,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from tryaii_dre.registry.models import ModelInfo, ModelPricing, ModelRegistry
+from tryaii.registry.models import ModelInfo, ModelPricing, ModelRegistry
 
 
 class TestModelInfo:

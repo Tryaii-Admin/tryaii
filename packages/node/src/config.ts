@@ -7,8 +7,8 @@ import { join } from 'node:path';
 
 import type { ScoringStrategy } from './types.js';
 
-/** Default data directory: ~/.tryaii_dre/ */
-export const DEFAULT_DATA_DIR = join(homedir(), '.tryaii_dre');
+/** Default data directory: ~/.tryaii/ */
+export const DEFAULT_DATA_DIR = join(homedir(), '.tryaii');
 
 /** Default embedding model -- small, fast, runs on any modern CPU. */
 export const DEFAULT_EMBEDDING_MODEL = 'all-MiniLM-L6-v2';

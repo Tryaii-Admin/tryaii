@@ -4,7 +4,7 @@ Advanced Routing -- Custom registries, filtering, and multi-step agents.
 Shows how to build sophisticated routing logic on top of TryAii-DRE.
 """
 
-from tryaii_dre import TryaiiDreConfig, ModelRegistry, Priorities, Router
+from tryaii import TryaiiDreConfig, ModelRegistry, Priorities, Router
 
 # ---- Custom model registry ----
 

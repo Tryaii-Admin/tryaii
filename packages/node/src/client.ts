@@ -1,7 +1,7 @@
 /**
  * DREClient -- unified high-level client for TryAii-DRE.
  *
- * Wraps prompt-aware model selection (via the `tryaii-dre` core `Router`) and
+ * Wraps prompt-aware model selection (via the `tryaii` core `Router`) and
  * the OpenRouter API into a single class so users do not have to manage
  * separate objects.
  *
@@ -11,7 +11,7 @@
  * completion.
  *
  * Usage:
- *   import { DREClient } from 'tryaii-dre';
+ *   import { DREClient } from 'tryaii';
  *
  *   const client = new DREClient({ apiKey: 'sk-or-...' });
  *   const response = await client.chat('Write a sorting algorithm');
@@ -159,7 +159,7 @@ export class DREClient {
       headers: {
         'Authorization': `Bearer ${this._apiKey}`,
         'Content-Type': 'application/json',
-        'X-Title': 'tryaii-dre',
+        'X-Title': 'tryaii',
       },
       body: JSON.stringify(payload),
     });
@@ -245,7 +245,7 @@ export class DREClient {
       headers: {
         'Authorization': `Bearer ${this._apiKey}`,
         'Content-Type': 'application/json',
-        'X-Title': 'tryaii-dre',
+        'X-Title': 'tryaii',
       },
       body: JSON.stringify(payload),
     });
