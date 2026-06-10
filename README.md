@@ -180,8 +180,12 @@ tryaii <command> [options]
 | `--no-banner` | Skip the startup banner (works before or after the command). |
 | `TRYAII_NO_BANNER=1` | Same as `--no-banner`, via the environment. |
 | `NO_COLOR=1` | Render the banner monochrome (color convention). |
-| `--version` | Print the version (Node). |
-| `-v, --verbose` | Verbose logging (Python). |
+| `-V, --version` | Print the version and exit. |
+| `-v, --verbose` | Verbose logging. |
+| `-h, --help` | Show help (works before or after the command, plus bare `tryaii help`). |
+
+All global flags work identically on the npm and PyPI CLIs and are accepted in any position.
+Exit codes also match: `0` success, `1` runtime failure, `2` usage error.
 
 The banner prints to **stderr** and auto-suppresses when output is piped or redirected, so
 `tryaii models --json > models.json` stays clean. See [Examples](#examples) (top of this

@@ -79,7 +79,8 @@ tryaii setup                               # download the embedding model + warm
 | `benchmarks` | `--json` |
 | `setup` / `regenerate` | `--model <name>` |
 
-Global flags: `--no-banner` (or `TRYAII_NO_BANNER=1`), `NO_COLOR=1`, `-v/--verbose`.
+Global flags: `--no-banner` (or `TRYAII_NO_BANNER=1`), `NO_COLOR=1`, `-v/--verbose`,
+`-V/--version`. All flags work in any position and match the npm CLI.
 
 ### Eval over a dataset
 

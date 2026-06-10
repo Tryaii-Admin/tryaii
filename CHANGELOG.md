@@ -18,6 +18,32 @@ path, and CLI command — pin to `tryaii-dre` 0.2.x if you can't migrate yet.
 - The public API (classes, methods, scoring, CLI subcommands and flags) is
   otherwise unchanged; only the names moved. `DREClient` keeps its name.
 
+### CLI surface parity (npm vs PyPI)
+
+The two CLIs accepted slightly different global flags and failed differently;
+they now behave identically:
+
+- `-V/--version` now works on the Python CLI too (was Node-only).
+- `-v/--verbose` now accepted by the Node CLI too (was Python-only), and works
+  in any position on both (Python previously required it before the
+  subcommand). Sets `TRYAII_VERBOSE=1` in Node; enables debug logging in
+  Python.
+- `-h/--help` works in any position on both (e.g. `tryaii eval --help`;
+  previously a parse error in Node), bare `tryaii help` works on both (was
+  Node-only), and both print byte-identical help text (guarded by
+  `test_parity.py`).
+- Exit codes unified: `0` success, `1` runtime failure, `2` usage error
+  (unknown command/option, missing argument, invalid value). Node previously
+  exited `1` for usage errors; it also no longer silently falls back to
+  defaults on non-numeric `--quality/--cost/--speed/--top-k` values.
+- Python runtime failures now print a clean one-line `error: ...` message
+  instead of a traceback, matching Node.
+- Python now rejects a negative `--difficulty-gamma` up front like Node
+  (previously it silently skewed budget allocation).
+- Python CLI default log level is now WARNING (use `--verbose` for more), so
+  `route`/`eval` output is as quiet as the Node CLI.
+- `setup` prints the same completion message on both SDKs.
+
 ## 0.2.1 (2026-05-31)
 
 Bugfix release. **The 0.2.0 PyPI wheel was broken and has been yanked** — please

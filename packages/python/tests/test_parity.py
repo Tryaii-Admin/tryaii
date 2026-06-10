@@ -34,6 +34,7 @@ PY_PRESET = (
     / "presets"
     / "default_models.json"
 )
+NODE_CLI = REPO_ROOT / "packages" / "node" / "src" / "cli.ts"
 
 
 def _by_model_id(raw: dict | list) -> dict[str, dict]:
@@ -104,3 +105,27 @@ def test_standalone_ranges_match_standard_benchmarks():
                 f"standard=({bench.normalization.min_score}, {bench.normalization.max_score})"
             )
     assert not diffs, "NORMALIZATION_RANGES disagree with STANDARD_BENCHMARKS:\n" + "\n".join(diffs)
+
+
+def test_cli_help_text_identical_across_sdks():
+    """Both CLIs must print byte-identical --help text.
+
+    The help text documents the full CLI surface (commands, flags, defaults),
+    so a drift here means users get a different experience per SDK -- exactly
+    the gap that previously shipped --version as Node-only and --verbose as
+    Python-only.
+    """
+    if not NODE_CLI.exists():
+        pytest.skip("Node CLI source not present (python-only checkout)")
+
+    from tryaii.cli.main import HELP
+
+    source = NODE_CLI.read_text(encoding="utf-8")
+    marker = "const HELP = `"
+    start = source.index(marker) + len(marker)
+    node_help = source[start : source.index("`;", start)]
+
+    assert node_help == HELP, (
+        "CLI help text diverged between packages/node/src/cli.ts and "
+        "packages/python/tryaii/cli/main.py -- keep both HELP blocks identical"
+    )

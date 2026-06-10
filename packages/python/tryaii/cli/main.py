@@ -1,13 +1,18 @@
 """
 TryAii-DRE CLI.
 
-Commands:
+Commands (kept in parity with the Node SDK's `tryaii`):
     tryaii route "your prompt here"     -- Route a prompt and show recommendations
     tryaii eval prompts.json             -- Route a JSON prompt dataset
     tryaii setup                         -- Pre-generate centroids for faster first use
     tryaii models                        -- List available models
     tryaii benchmarks                    -- List available benchmarks
     tryaii regenerate                    -- Regenerate centroids (after model change)
+
+Global flags: --no-banner, -v/--verbose, -V/--version, -h/--help.
+
+Exit codes (matched with the Node CLI): 0 success, 1 runtime failure,
+2 usage error (unknown command/option, missing argument, invalid value).
 """
 
 from __future__ import annotations
@@ -22,6 +27,48 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
+
+# Keep byte-identical to HELP in packages/node/src/cli.ts -- both CLIs must
+# print the same help text (guarded by tests/test_parity.py).
+HELP = """tryaii -- Embedding-based AI model router
+
+Usage:
+  tryaii <command> [options]
+
+Commands:
+  route <prompt>        Route a prompt to the best model and show recommendations
+  eval <input.json>     Route a JSON dataset; writes results.jsonl, summary.json, index.html
+  models                List available models (--provider <name>, --json)
+  benchmarks            List available benchmarks (--json)
+  setup                 Download the embedding model and warm centroids (--model <name>)
+  regenerate            Rebuild benchmark centroids, e.g. after changing the embedding model (--model <name>)
+
+Common options:
+  --quality <1-5>       Quality priority for route/eval (default 3)
+  --cost <1-5>          Cost priority for route/eval (default 3)
+  --speed <1-5>         Speed priority for route/eval (default 3)
+  --top-k <n>           Number of recommendations (default 5)
+
+Eval-only options:
+  -o, --output <dir>    Output directory (default: ./tryaii-eval-<timestamp>)
+  --max-price <usd>     Total dataset budget; switches eval to budget-optimized mode
+  --output-tokens <n>   Expected output tokens per prompt for budget estimation (default 1000)
+  --budget-mode <mode>  'strict' (default) or 'fit-output'
+  --difficulty-source <s>  Gauge task complexity: 'intrinsic' (default), 'capability', or 'blend'
+  --difficulty-gamma <n>   How hard to shift budget toward complex prompts (default 1; 0 disables)
+
+Global flags:
+  --no-banner           Disable the startup banner (also honored via TRYAII_NO_BANNER)
+  -v, --verbose         Enable verbose logging
+  -V, --version         Print the version and exit
+  -h, --help            Show this help
+
+Examples:
+  tryaii route "Write a Python function to merge sorted arrays" --quality=5 --cost=1
+  tryaii eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
+  tryaii eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+  tryaii eval prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
+"""
 
 
 def cmd_route(args):
@@ -388,9 +435,10 @@ def cmd_eval(args):
     from tryaii import Priorities, Router
     from tryaii.budget import route_dataset_with_budget
 
-    if not getattr(args, "verbose", False):
-        logging.getLogger("tryaii").setLevel(logging.WARNING)
-        logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+    if args.difficulty_gamma < 0:
+        # Usage error -> exit 2, matching both argparse and the Node CLI.
+        print("error: --difficulty-gamma must be a non-negative number", file=sys.stderr)
+        sys.exit(2)
 
     input_path = Path(args.input_json).resolve()
     if args.output:
@@ -587,14 +635,13 @@ def cmd_setup(args):
         config.embedding_model = args.model
 
     print(f"Setting up TryAii-DRE with embedding model: {config.embedding_model}")
-    print("This will download the model and generate centroids (one-time operation)...\n")
+    print("This will download the model and load benchmark centroids (one-time operation)...\n")
 
     provider = LocalEmbeddingProvider(model_name=config.embedding_model)
     loader = CentroidLoader(config=config, embedding_provider=provider)
     centroids = loader.get_centroids()
 
-    print(f"\nSetup complete! Generated {len(centroids)} benchmark centroids.")
-    print(f"Saved to: {config.centroid_file}")
+    print(f"Setup complete! {len(centroids)} benchmark centroids ready.")
 
 
 def cmd_models(args):
@@ -669,15 +716,12 @@ def cmd_regenerate(args):
 
 def cli():
     """Main CLI entry point."""
+    # -v/--verbose, --no-banner, -V/--version and -h/--help are handled before
+    # argparse runs (see below) so they work in any position, matching the Node
+    # CLI; they are intentionally not registered here.
     parser = argparse.ArgumentParser(
         prog="tryaii",
         description="TryAii-DRE -- Embedding-based AI model router",
-    )
-    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
-    parser.add_argument(
-        "--no-banner",
-        action="store_true",
-        help="Disable the startup banner (also honored via TRYAII_NO_BANNER)",
     )
 
     subparsers = parser.add_subparsers(dest="command")
@@ -742,38 +786,62 @@ def cli():
     regen_parser = subparsers.add_parser("regenerate", help="Regenerate centroids")
     regen_parser.add_argument("--model", help="Embedding model name")
 
-    # Accept --no-banner anywhere (before OR after the subcommand) by stripping
-    # it before argparse runs -- argparse would otherwise only honor a global
-    # flag that precedes the subcommand. Matches the Node CLI's behavior.
     raw_args = sys.argv[1:]
+
+    # --version short-circuits everything else (matches the Node CLI).
+    if "--version" in raw_args or "-V" in raw_args:
+        from tryaii import __version__
+
+        print(__version__)
+        return
+
+    # Accept --no-banner and -v/--verbose anywhere (before OR after the
+    # subcommand) by stripping them before argparse runs -- argparse would
+    # otherwise only honor a global flag that precedes the subcommand.
+    # Matches the Node CLI's behavior.
     no_banner = "--no-banner" in raw_args or bool(os.environ.get("TRYAII_NO_BANNER"))
-    args = parser.parse_args([a for a in raw_args if a != "--no-banner"])
+    verbose = "--verbose" in raw_args or "-v" in raw_args
+    filtered = [a for a in raw_args if a not in ("--no-banner", "--verbose", "-v")]
 
     if not no_banner:
         from tryaii.cli import banner
 
         banner.show()
 
+    # Default to WARNING so normal runs are as quiet as the Node CLI;
+    # --verbose opens everything up to DEBUG.
     logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
+        level=logging.DEBUG if verbose else logging.WARNING,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
         datefmt="%Y-%m-%dT%H:%M:%S",
     )
+    if not verbose:
+        logging.getLogger("tryaii").setLevel(logging.WARNING)
+        logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 
-    if args.command == "route":
-        cmd_route(args)
-    elif args.command == "eval":
-        cmd_eval(args)
-    elif args.command == "setup":
-        cmd_setup(args)
-    elif args.command == "models":
-        cmd_models(args)
-    elif args.command == "benchmarks":
-        cmd_benchmarks(args)
-    elif args.command == "regenerate":
-        cmd_regenerate(args)
-    else:
-        parser.print_help()
+    # Like --no-banner/--verbose, help is honored anywhere, including after a
+    # subcommand (e.g. `tryaii eval --help`), and as a bare `tryaii help`.
+    command = filtered[0] if filtered else None
+    if command is None or command == "help" or "-h" in filtered or "--help" in filtered:
+        sys.stdout.write(HELP)
+        return
+
+    args = parser.parse_args(filtered)
+
+    handlers = {
+        "route": cmd_route,
+        "eval": cmd_eval,
+        "setup": cmd_setup,
+        "models": cmd_models,
+        "benchmarks": cmd_benchmarks,
+        "regenerate": cmd_regenerate,
+    }
+    try:
+        handlers[args.command](args)
+    except Exception as exc:
+        # Show a clean one-line message instead of a traceback (matches Node).
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

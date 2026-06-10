@@ -9,7 +9,10 @@
  *   tryaii models                     -- List available models
  *   tryaii benchmarks                 -- List available benchmarks
  *
- * Global flags: --no-banner, --version, --help.
+ * Global flags: --no-banner, -v/--verbose, -V/--version, -h/--help.
+ *
+ * Exit codes (matched with the Python CLI): 0 success, 1 runtime failure,
+ * 2 usage error (unknown command/option, missing argument, invalid value).
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -36,11 +39,26 @@ import { Priorities } from './scoring/priorities.js';
 /** Error type whose message is shown to the user without a stack trace. */
 class CliError extends Error {}
 
+/** Bad invocation (unknown command/option, missing argument, invalid value); exits 2 like argparse. */
+class CliUsageError extends CliError {}
+
 const out = process.stdout;
 
-function intOpt(value: string | undefined, fallback = 0): number {
-  const parsed = Number.parseInt(String(value), 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
+function intFlag(name: string, value: string | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) {
+    throw new CliUsageError(`${name} expects an integer, got '${value}'`);
+  }
+  return parsed;
+}
+
+function floatFlag(name: string, value: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new CliUsageError(`${name} expects a number, got '${value}'`);
+  }
+  return parsed;
 }
 
 function round(value: number, digits: number): number {
@@ -66,15 +84,15 @@ async function cmdRoute(subArgs: string[]): Promise<void> {
 
   const prompt = positionals[0];
   if (!prompt) {
-    throw new CliError('route requires a prompt, e.g. tryaii route "Write a quicksort"');
+    throw new CliUsageError('route requires a prompt, e.g. tryaii route "Write a quicksort"');
   }
 
   const priorities = new Priorities(
-    intOpt(values.quality, 3),
-    intOpt(values.cost, 3),
-    intOpt(values.speed, 3),
+    intFlag('--quality', values.quality, 3),
+    intFlag('--cost', values.cost, 3),
+    intFlag('--speed', values.speed, 3),
   );
-  const topK = intOpt(values['top-k'], 5);
+  const topK = intFlag('--top-k', values['top-k'], 5);
 
   const router = new Router();
   const result = await router.route(prompt, { priorities, topK });
@@ -431,22 +449,23 @@ async function cmdEval(subArgs: string[]): Promise<void> {
 
   const inputArg = positionals[0];
   if (!inputArg) {
-    throw new CliError('eval requires an input JSON file, e.g. tryaii eval prompts.json');
+    throw new CliUsageError('eval requires an input JSON file, e.g. tryaii eval prompts.json');
   }
   const inputPath = resolve(inputArg);
   const outputDir = values.output ? resolve(values.output) : resolve(process.cwd(), evalStampDir());
 
   const priorities = new Priorities(
-    intOpt(values.quality, 3),
-    intOpt(values.cost, 3),
-    intOpt(values.speed, 3),
+    intFlag('--quality', values.quality, 3),
+    intFlag('--cost', values.cost, 3),
+    intFlag('--speed', values.speed, 3),
   );
-  const topK = intOpt(values['top-k'], 5);
-  const maxPrice = values['max-price'] != null ? Number(values['max-price']) : null;
-  const outputTokens = intOpt(values['output-tokens'], 1000);
+  const topK = intFlag('--top-k', values['top-k'], 5);
+  const maxPrice =
+    values['max-price'] != null ? floatFlag('--max-price', values['max-price']) : null;
+  const outputTokens = intFlag('--output-tokens', values['output-tokens'], 1000);
   const budgetMode = (values['budget-mode'] ?? 'strict') as BudgetMode;
   if (budgetMode !== 'strict' && budgetMode !== 'fit-output') {
-    throw new CliError("--budget-mode must be 'strict' or 'fit-output'");
+    throw new CliUsageError("--budget-mode must be 'strict' or 'fit-output'");
   }
   const difficultySource = (values['difficulty-source'] ?? 'intrinsic') as DifficultySource;
   if (
@@ -454,11 +473,11 @@ async function cmdEval(subArgs: string[]): Promise<void> {
     difficultySource !== 'capability' &&
     difficultySource !== 'blend'
   ) {
-    throw new CliError("--difficulty-source must be 'intrinsic', 'capability', or 'blend'");
+    throw new CliUsageError("--difficulty-source must be 'intrinsic', 'capability', or 'blend'");
   }
-  const difficultyGamma = Number(values['difficulty-gamma'] ?? '1');
-  if (!Number.isFinite(difficultyGamma) || difficultyGamma < 0) {
-    throw new CliError('--difficulty-gamma must be a non-negative number');
+  const difficultyGamma = floatFlag('--difficulty-gamma', values['difficulty-gamma'] ?? '1');
+  if (difficultyGamma < 0) {
+    throw new CliUsageError('--difficulty-gamma must be a non-negative number');
   }
 
   const rows = loadEvalPrompts(inputPath);
@@ -667,7 +686,8 @@ Eval-only options:
 
 Global flags:
   --no-banner           Disable the startup banner (also honored via TRYAII_NO_BANNER)
-  --version             Print the version and exit
+  -v, --verbose         Enable verbose logging
+  -V, --version         Print the version and exit
   -h, --help            Show this help
 
 Examples:
@@ -699,13 +719,27 @@ async function main(): Promise<void> {
   }
 
   const noBanner = argv.includes('--no-banner') || Boolean(process.env.TRYAII_NO_BANNER);
-  const filtered = argv.filter((arg) => arg !== '--no-banner');
+  // Accepted anywhere for cross-SDK compatibility; the Python CLI uses it to
+  // enable debug logging. The Node SDK has no logging today, so this only
+  // exposes the intent to downstream code via the environment.
+  const verbose = argv.includes('--verbose') || argv.includes('-v');
+  if (verbose) process.env.TRYAII_VERBOSE = '1';
+  const filtered = argv.filter(
+    (arg) => arg !== '--no-banner' && arg !== '--verbose' && arg !== '-v',
+  );
   const command = filtered[0];
   const subArgs = filtered.slice(1);
 
   if (!noBanner) await showBanner();
 
-  if (!command || command === '-h' || command === '--help' || command === 'help') {
+  // Like --no-banner/--verbose, help is honored anywhere, including after a
+  // subcommand (e.g. `tryaii eval --help`).
+  if (
+    !command ||
+    command === 'help' ||
+    filtered.includes('-h') ||
+    filtered.includes('--help')
+  ) {
     out.write(HELP);
     return;
   }
@@ -730,8 +764,14 @@ async function main(): Promise<void> {
       await cmdRegenerate(subArgs);
       break;
     default:
-      throw new CliError(`Unknown command: ${command}\nRun "tryaii --help" for usage.`);
+      throw new CliUsageError(`Unknown command: ${command}\nRun "tryaii --help" for usage.`);
   }
+}
+
+/** parseArgs error codes that indicate a bad invocation rather than a runtime failure. */
+function isParseArgsUsageError(error: unknown): boolean {
+  const code = (error as { code?: string }).code ?? '';
+  return code.startsWith('ERR_PARSE_ARGS_');
 }
 
 main().catch((error) => {
@@ -742,5 +782,5 @@ main().catch((error) => {
         ? error.message
         : String(error);
   process.stderr.write(`error: ${message}\n`);
-  process.exitCode = 1;
+  process.exitCode = error instanceof CliUsageError || isParseArgsUsageError(error) ? 2 : 1;
 });
