@@ -47,8 +47,11 @@ Thumbs.db
 # Local-only docs
 packages/python/CENTROIDS_AND_UPDATES.md
 
-# Local-only dev workspace (eval runner, datasets, scratch scripts)
-eval/
+# Local-only dev workspace (eval runner, datasets, scratch scripts).
+# Anchored with a leading slash to the repo root so it does NOT match the
+# docs/cli/eval/ reference docs (an unanchored `eval/` matches any directory
+# named eval at any depth — see the /cache/ note below for the same gotcha).
+/eval/
 
 # Local benchmark snapshot cache (fetched from the tryaii-bench API).
 # Anchored with a leading slash to the repo root so it does NOT match the
