@@ -8,7 +8,9 @@ Commands (kept in parity with the Node SDK's `tryaii`):
     tryaii models                        -- List available models
     tryaii benchmarks                    -- List available benchmarks
     tryaii regenerate                    -- Regenerate centroids (after model change)
+    tryaii help [command]                -- Global help, or detailed help for one command
 
+Per-command help is also reachable via `tryaii <command> -h/--help`.
 Global flags: --no-banner, -v/--verbose, -V/--version, -h/--help.
 
 Exit codes (matched with the Node CLI): 0 success, 1 runtime failure,
@@ -69,6 +71,206 @@ Examples:
   tryaii eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
   tryaii eval prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
 """
+
+# Per-command help. Each string must stay byte-identical to the matching
+# template literal in packages/node/src/cli.ts (guarded by tests/test_parity.py).
+HELP_ROUTE = """tryaii route -- Route one prompt to the best model
+
+Usage:
+  tryaii route <prompt> [options]
+
+Classify a prompt with local embeddings and print the top-K model
+recommendations. Runs locally -- no API key needed, nothing is called.
+
+Arguments:
+  <prompt>              The prompt to route (required)
+
+Options:
+  --quality <1-5>       Quality priority (default 3; out-of-range clamped)
+  --cost <1-5>          Cost priority (default 3; out-of-range clamped)
+  --speed <1-5>         Speed priority (default 3; out-of-range clamped)
+  --top-k <n>           Number of recommendations shown (default 5)
+
+Notes:
+  Text output only -- there is no --json for route (use 'eval' or the SDK
+  for machine-readable output). Scores are relative per call; do not
+  compare them across prompts.
+
+Examples:
+  tryaii route "Write a Python function to merge sorted arrays"
+  tryaii route "Summarize this contract" --quality=5 --cost=1
+
+Exit codes:
+  0 success, 1 routing/embedding failure, 2 missing prompt or bad flag.
+
+Docs: docs/cli/route.md
+"""
+
+HELP_EVAL = """tryaii eval -- Route a JSON prompt dataset
+
+Usage:
+  tryaii eval <input.json> [options]
+
+Route every prompt in a JSON file and write three artifacts into the output
+directory: results.jsonl (per-prompt), summary.json (aggregate), and a
+self-contained index.html dashboard. Runs locally -- no model APIs called.
+
+Two modes:
+  priority (default)    Route each prompt independently using your
+                        quality/cost/speed weights.
+  budget (--max-price)  Jointly maximize quality across the dataset under a
+                        total USD budget. Priority weights are ignored.
+
+Arguments:
+  <input.json>          JSON array of prompt strings or {id,prompt,category}
+
+Options:
+  -o, --output <dir>    Output directory (default ./tryaii-eval-<timestamp>)
+  --quality <1-5>       Quality priority (default 3; priority mode only)
+  --cost <1-5>          Cost priority (default 3; priority mode only)
+  --speed <1-5>         Speed priority (default 3; priority mode only)
+  --top-k <n>           Models recorded per row (default 5)
+  --max-price <usd>     Total dataset budget; switches eval to budget mode
+  --output-tokens <n>   Assumed output tokens per prompt for costing (default 1000)
+  --budget-mode <mode>  'strict' (default) or 'fit-output'
+  --difficulty-source <s>  'intrinsic' (default), 'capability', or 'blend'
+  --difficulty-gamma <n>   Shift budget toward harder prompts (default 1; 0 disables)
+
+Examples:
+  tryaii eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
+  tryaii eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+  tryaii eval prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
+
+Exit codes:
+  0 success (incl. partial per-prompt failures), 1 bad input / warmup / all
+  prompts failed, 2 usage error.
+
+Docs: docs/cli/eval/README.md
+"""
+
+HELP_MODELS = """tryaii models -- List the model catalog
+
+Usage:
+  tryaii models [options]
+
+Print every model in the default registry, grouped by provider. Each line
+shows: model_id [latency-tier] | $input/output per 1k tokens (price omitted
+when the model has no pricing).
+
+Options:
+  --provider <name>     Filter to one provider (case-insensitive exact match)
+  --json                Print the (filtered) models as pretty-printed JSON
+
+Examples:
+  tryaii models
+  tryaii models --provider anthropic
+  tryaii models --json
+
+Exit codes:
+  0 success, 1 runtime failure, 2 bad flag.
+
+Docs: docs/cli/models.md
+"""
+
+HELP_BENCHMARKS = """tryaii benchmarks -- List registered benchmarks
+
+Usage:
+  tryaii benchmarks [options]
+
+Print the standard benchmarks the router scores prompts against. Each line
+shows the benchmark name, its normalization range, and a description.
+
+Options:
+  --json                Print the benchmarks as pretty-printed JSON
+
+Examples:
+  tryaii benchmarks
+  tryaii benchmarks --json
+
+Exit codes:
+  0 success, 1 runtime failure, 2 bad flag.
+
+Docs: docs/cli/benchmarks.md
+"""
+
+HELP_SETUP = """tryaii setup -- Download the embedding model and warm centroids
+
+Usage:
+  tryaii setup [options]
+
+One-time initialization: download the embedding model and load or generate
+the benchmark centroids so the first real route/eval is fast. Optional --
+the same work happens lazily on first use.
+
+Options:
+  --model <name>        Embedding model name (default all-MiniLM-L6-v2)
+
+Examples:
+  tryaii setup
+  tryaii setup --model all-mpnet-base-v2
+
+Exit codes:
+  0 success, 1 runtime failure, 2 bad flag.
+
+Docs: docs/cli/setup.md
+"""
+
+HELP_REGENERATE = """tryaii regenerate -- Rebuild benchmark centroids
+
+Usage:
+  tryaii regenerate [options]
+
+Force-regenerate the benchmark centroids from the bundled training queries,
+overwriting the user cache. Unlike setup (which only builds what is missing),
+regenerate always rebuilds -- use it after changing the embedding model.
+
+Options:
+  --model <name>        Embedding model to generate with (default all-MiniLM-L6-v2)
+
+Examples:
+  tryaii regenerate
+  tryaii regenerate --model all-mpnet-base-v2
+
+Exit codes:
+  0 success, 1 runtime failure, 2 bad flag.
+
+Docs: docs/cli/regenerate.md
+"""
+
+HELP_HELP = """tryaii help -- Show help for tryaii or a specific command
+
+Usage:
+  tryaii help [command]
+  tryaii <command> --help
+
+With no argument, prints the global overview. With a command name, prints
+detailed help for that command. The flags -h/--help after any command do
+the same thing.
+
+Topics:
+  route, eval, models, benchmarks, setup, regenerate, help
+
+Examples:
+  tryaii help
+  tryaii help eval
+  tryaii route --help
+
+Exit codes:
+  0 success, 2 unknown help topic.
+
+Docs: docs/cli/README.md
+"""
+
+# Per-command help, keyed by command name. Mirrors COMMAND_HELP in the Node CLI.
+COMMAND_HELP = {
+    "route": HELP_ROUTE,
+    "eval": HELP_EVAL,
+    "models": HELP_MODELS,
+    "benchmarks": HELP_BENCHMARKS,
+    "setup": HELP_SETUP,
+    "regenerate": HELP_REGENERATE,
+    "help": HELP_HELP,
+}
 
 
 def cmd_route(args):
@@ -820,10 +1022,39 @@ def cli():
         logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 
     # Like --no-banner/--verbose, help is honored anywhere, including after a
-    # subcommand (e.g. `tryaii eval --help`), and as a bare `tryaii help`.
+    # subcommand (e.g. `tryaii eval --help`). All four git-style paths work:
+    #   tryaii help            -> global overview
+    #   tryaii help <command>  -> that command's detailed help
+    #   tryaii <command> -h/--help -> that command's detailed help
+    #   tryaii (bare)          -> global overview
     command = filtered[0] if filtered else None
-    if command is None or command == "help" or "-h" in filtered or "--help" in filtered:
+    wants_help = "-h" in filtered or "--help" in filtered
+
+    if command == "help":
+        # First non-flag token is the topic; `tryaii help --help` falls back to global.
+        topics = [a for a in filtered[1:] if not a.startswith("-")]
+        topic = topics[0] if topics else None
+        if topic is None:
+            sys.stdout.write(HELP)
+            return
+        topic_help = COMMAND_HELP.get(topic)
+        if topic_help is None:
+            print(
+                f'error: unknown help topic: {topic}. '
+                'Run "tryaii help" for the list of commands.',
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        sys.stdout.write(topic_help)
+        return
+
+    if command is None:
         sys.stdout.write(HELP)
+        return
+
+    if wants_help:
+        # Unknown command + --help still gets the global overview.
+        sys.stdout.write(COMMAND_HELP.get(command, HELP))
         return
 
     args = parser.parse_args(filtered)

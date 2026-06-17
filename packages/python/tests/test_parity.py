@@ -107,6 +107,18 @@ def test_standalone_ranges_match_standard_benchmarks():
     assert not diffs, "NORMALIZATION_RANGES disagree with STANDARD_BENCHMARKS:\n" + "\n".join(diffs)
 
 
+def _node_template_literal(source: str, const_name: str) -> str:
+    """Extract the raw text of a `const <NAME> = `...`;` template literal.
+
+    The help strings are deliberately backtick-free and ${-free, so the raw
+    source between the backticks equals the runtime string -- which lets us
+    compare it directly to the Python value without evaluating JS.
+    """
+    marker = f"const {const_name} = `"
+    start = source.index(marker) + len(marker)
+    return source[start : source.index("`;", start)]
+
+
 def test_cli_help_text_identical_across_sdks():
     """Both CLIs must print byte-identical --help text.
 
@@ -121,11 +133,51 @@ def test_cli_help_text_identical_across_sdks():
     from tryaii.cli.main import HELP
 
     source = NODE_CLI.read_text(encoding="utf-8")
-    marker = "const HELP = `"
-    start = source.index(marker) + len(marker)
-    node_help = source[start : source.index("`;", start)]
+    node_help = _node_template_literal(source, "HELP")
 
     assert node_help == HELP, (
         "CLI help text diverged between packages/node/src/cli.ts and "
         "packages/python/tryaii/cli/main.py -- keep both HELP blocks identical"
+    )
+
+
+# command name -> the constant that holds its help text in both CLIs.
+COMMAND_HELP_CONSTANTS = {
+    "route": "HELP_ROUTE",
+    "eval": "HELP_EVAL",
+    "models": "HELP_MODELS",
+    "benchmarks": "HELP_BENCHMARKS",
+    "setup": "HELP_SETUP",
+    "regenerate": "HELP_REGENERATE",
+    "help": "HELP_HELP",
+}
+
+
+def test_command_help_text_identical_across_sdks():
+    """Per-command help (`tryaii help <cmd>` / `tryaii <cmd> --help`) must match.
+
+    Same rationale as the global help: a drift means npm and pip users see a
+    different help page for the same command.
+    """
+    if not NODE_CLI.exists():
+        pytest.skip("Node CLI source not present (python-only checkout)")
+
+    from tryaii.cli.main import COMMAND_HELP
+
+    assert set(COMMAND_HELP) == set(COMMAND_HELP_CONSTANTS), (
+        "Python COMMAND_HELP keys differ from the expected command set: "
+        f"python={sorted(COMMAND_HELP)} expected={sorted(COMMAND_HELP_CONSTANTS)}"
+    )
+
+    source = NODE_CLI.read_text(encoding="utf-8")
+    diffs: list[str] = []
+    for command, const_name in COMMAND_HELP_CONSTANTS.items():
+        node_text = _node_template_literal(source, const_name)
+        if node_text != COMMAND_HELP[command]:
+            diffs.append(command)
+
+    assert not diffs, (
+        "Per-command help diverged between Node and Python for: "
+        + ", ".join(diffs)
+        + " -- keep the HELP_<CMD> blocks identical across both CLIs"
     )

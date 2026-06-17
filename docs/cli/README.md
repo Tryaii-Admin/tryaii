@@ -14,8 +14,9 @@ tryaii <command> [options]
 | [`benchmarks`](benchmarks.md) | List registered benchmarks (`--json`) |
 | [`setup`](setup.md) | Download the embedding model and warm centroids (one-time) |
 | [`regenerate`](regenerate.md) | Force-rebuild benchmark centroids (e.g. after changing the embedding model) |
+| [`help [command]`](help.md) | Global help, or detailed help for one command |
 
-Running bare `tryaii`, `tryaii help`, or `tryaii -h/--help` prints the global help. There is no per-command help — `tryaii eval --help` prints the same global text.
+Running bare `tryaii`, `tryaii help`, or `tryaii -h/--help` prints the global help. Per-command help is available two ways — `tryaii help <command>` or `tryaii <command> -h/--help` — both printing the same detailed page for that command (see [`help`](help.md)). An unknown topic (`tryaii help bogus`) exits 2.
 
 ## Global flags
 
