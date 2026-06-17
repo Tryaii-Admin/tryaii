@@ -35,13 +35,39 @@ def test_version_short_flag(monkeypatch, capsys):
     assert capsys.readouterr().out.strip() == __version__
 
 
-@pytest.mark.parametrize(
-    "argv",
-    [(), ("help",), ("--help",), ("-h",), ("eval", "--help"), ("route", "-h")],
-)
-def test_help_prints_shared_text_from_any_position(monkeypatch, capsys, argv):
+@pytest.mark.parametrize("argv", [(), ("help",), ("--help",), ("-h",)])
+def test_global_help_prints_shared_text_from_any_position(monkeypatch, capsys, argv):
     _run(monkeypatch, *argv)
     assert capsys.readouterr().out == cli_main.HELP
+
+
+@pytest.mark.parametrize(
+    "argv,command",
+    [
+        (("help", "route"), "route"),
+        (("help", "eval"), "eval"),
+        (("help", "help"), "help"),
+        (("eval", "--help"), "eval"),
+        (("route", "-h"), "route"),
+        (("models", "--help"), "models"),
+    ],
+)
+def test_command_help_prints_per_command_text(monkeypatch, capsys, argv, command):
+    _run(monkeypatch, *argv)
+    assert capsys.readouterr().out == cli_main.COMMAND_HELP[command]
+
+
+def test_help_with_flag_only_falls_back_to_global(monkeypatch, capsys):
+    # `tryaii help --help` has no topic token -> global overview, not an error.
+    _run(monkeypatch, "help", "--help")
+    assert capsys.readouterr().out == cli_main.HELP
+
+
+def test_unknown_help_topic_is_usage_error(monkeypatch, capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        _run(monkeypatch, "help", "frobnicate")
+    assert excinfo.value.code == 2
+    assert "unknown help topic" in capsys.readouterr().err
 
 
 def test_unknown_command_is_usage_error(monkeypatch):
