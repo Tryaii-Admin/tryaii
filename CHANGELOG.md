@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Scoring: benchmark normalization fit to the catalog (more routing spread)
+
+The benchmark normalization ranges were tightened from loose textbook bounds to
+the observed min/max of the shipped catalog, so models spread across most of
+0–1 instead of bunching into a narrow high band. Previously several benchmarks
+were badly compressed (LiveBench used only 18% of the 0–1 range, ARC 23%, Arena
+36%), so the quality dimension couldn't differentiate frontier models and
+balanced routing collapsed onto cost/speed — one model (`gpt-5-mini`) won 93% of
+the 1000-prompt eval. After the change, balanced routing spreads across several
+models (top model ~52%), while quality-max still picks the flagships and budget
+still picks the cheapest. Quality-only ranking on a single benchmark is
+unchanged (normalization is monotonic).
+
+- Updated `NORMALIZATION_RANGES` (`scoring/benchmarks.{ts,py}`) and the mirrored
+  `STANDARD_BENCHMARKS` (`benchmarks/standard.{ts,py}`) in both SDKs, kept in
+  sync (guarded by `test_parity.py`). Re-fit these when the catalog changes a lot.
+
 ### Scoring: cost/speed priorities are now fully suppressible
 
 The priority→weight mapping changed so that a priority of `1` (don't care) on

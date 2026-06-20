@@ -24,20 +24,27 @@ export class NormalizationRange {
   }
 }
 
-/** Standard benchmark normalization ranges. */
+/**
+ * Standard benchmark normalization ranges.
+ *
+ * Fit to the observed min/max of the shipped model catalog so it spreads across
+ * most of 0-1. Loose ranges crush frontier models into a narrow high band where
+ * quality can't differentiate them and routing collapses onto cost/speed; re-fit
+ * when the catalog changes substantially. Keep in sync with STANDARD_BENCHMARKS.
+ */
 export const NORMALIZATION_RANGES: Record<string, NormalizationRange> = {
-  'MMLU': new NormalizationRange(25, 95, 'Academic knowledge across 57 subjects'),
-  'HellaSwag': new NormalizationRange(50, 98, 'Commonsense reasoning'),
-  'HumanEval': new NormalizationRange(20, 95, 'Code generation'),
-  'SWE-bench': new NormalizationRange(5, 85, 'Real-world software engineering'),
-  'TruthfulQA': new NormalizationRange(20, 85, 'Truthful question answering'),
-  'ARC': new NormalizationRange(0, 95, 'Science exam questions'),
-  'GSM8K': new NormalizationRange(20, 98, 'Grade school math'),
-  'DROP': new NormalizationRange(30, 90, 'Reading comprehension with arithmetic'),
-  'SuperGLUE': new NormalizationRange(40, 95, 'Natural language understanding'),
-  'Chatbot Arena (LMSys)': new NormalizationRange(1000, 1550, 'Human-rated chat quality'),
-  'MT-Bench': new NormalizationRange(5, 10, 'Multi-turn conversation quality'),
-  'LiveBench': new NormalizationRange(0, 100, 'Fresh, contamination-resistant evaluation'),
+  'MMLU': new NormalizationRange(40, 96, 'Academic knowledge across 57 subjects'),
+  'HellaSwag': new NormalizationRange(68, 99, 'Commonsense reasoning'),
+  'HumanEval': new NormalizationRange(30, 97, 'Code generation'),
+  'SWE-bench': new NormalizationRange(8, 86, 'Real-world software engineering'),
+  'TruthfulQA': new NormalizationRange(40, 86, 'Truthful question answering'),
+  'ARC': new NormalizationRange(70, 96, 'Science exam questions'),
+  'GSM8K': new NormalizationRange(65, 99, 'Grade school math'),
+  'DROP': new NormalizationRange(48, 91, 'Reading comprehension with arithmetic'),
+  'SuperGLUE': new NormalizationRange(48, 95, 'Natural language understanding'),
+  'Chatbot Arena (LMSys)': new NormalizationRange(1300, 1520, 'Human-rated chat quality'),
+  'MT-Bench': new NormalizationRange(6, 10, 'Multi-turn conversation quality'),
+  'LiveBench': new NormalizationRange(58, 84, 'Fresh, contamination-resistant evaluation'),
 };
 
 /**
