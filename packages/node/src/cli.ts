@@ -945,10 +945,12 @@ async function main(): Promise<void> {
   const wantsHelp = filtered.includes('-h') || filtered.includes('--help');
 
   if (command === 'help') {
-    // First non-flag token is the topic; `tryaii help --help` falls back to global.
+    // First non-flag token is the topic. With no topic, bare `tryaii help`
+    // prints the global overview, but `tryaii help -h/--help` documents the
+    // help command itself -- consistent with `tryaii <command> --help`.
     const topic = subArgs.find((arg) => !arg.startsWith('-'));
     if (!topic) {
-      out.write(HELP);
+      out.write(wantsHelp ? COMMAND_HELP.help : HELP);
       return;
     }
     const topicHelp = COMMAND_HELP[topic];

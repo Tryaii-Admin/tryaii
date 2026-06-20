@@ -46,7 +46,6 @@ def test_global_help_prints_shared_text_from_any_position(monkeypatch, capsys, a
     [
         (("help", "route"), "route"),
         (("help", "eval"), "eval"),
-        (("help", "help"), "help"),
         (("eval", "--help"), "eval"),
         (("route", "-h"), "route"),
         (("models", "--help"), "models"),
@@ -57,9 +56,21 @@ def test_command_help_prints_per_command_text(monkeypatch, capsys, argv, command
     assert capsys.readouterr().out == cli_main.COMMAND_HELP[command]
 
 
-def test_help_with_flag_only_falls_back_to_global(monkeypatch, capsys):
-    # `tryaii help --help` has no topic token -> global overview, not an error.
-    _run(monkeypatch, "help", "--help")
+@pytest.mark.parametrize(
+    "argv",
+    [("help", "help"), ("help", "--help"), ("help", "-h")],
+)
+def test_help_command_documents_itself(monkeypatch, capsys, argv):
+    # The new help command is self-documenting both ways, like every other
+    # command: the subcommand form (`tryaii help help`) and the flag form
+    # (`tryaii help --help` / `tryaii help -h`) both print the help page.
+    _run(monkeypatch, *argv)
+    assert capsys.readouterr().out == cli_main.COMMAND_HELP["help"]
+
+
+def test_bare_help_still_prints_global_overview(monkeypatch, capsys):
+    # With no topic and no help flag, `tryaii help` stays the global overview.
+    _run(monkeypatch, "help")
     assert capsys.readouterr().out == cli_main.HELP
 
 

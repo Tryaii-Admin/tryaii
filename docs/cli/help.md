@@ -26,7 +26,7 @@ The `-h`/`--help` flag is honored anywhere in argv (it's stripped before parsing
 
 `route`, `eval`, `models`, `benchmarks`, `setup`, `regenerate`, `help`.
 
-`tryaii help <topic>` resolves to the matching page above. `tryaii help help` describes this command. A flag-only argument (`tryaii help --help`) has no topic token, so it falls back to the global overview rather than erroring.
+`tryaii help <topic>` resolves to the matching page above. The `help` command is self-documenting like any other: both `tryaii help help` (subcommand form) and `tryaii help --help` / `tryaii help -h` (flag form) print this page. Bare `tryaii help` with no topic and no flag stays the global overview.
 
 ## Exit codes
 

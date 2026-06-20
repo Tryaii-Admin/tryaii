@@ -1031,11 +1031,13 @@ def cli():
     wants_help = "-h" in filtered or "--help" in filtered
 
     if command == "help":
-        # First non-flag token is the topic; `tryaii help --help` falls back to global.
+        # First non-flag token is the topic. With no topic, bare `tryaii help`
+        # prints the global overview, but `tryaii help -h/--help` documents the
+        # help command itself -- consistent with `tryaii <command> --help`.
         topics = [a for a in filtered[1:] if not a.startswith("-")]
         topic = topics[0] if topics else None
         if topic is None:
-            sys.stdout.write(HELP)
+            sys.stdout.write(COMMAND_HELP["help"] if wants_help else HELP)
             return
         topic_help = COMMAND_HELP.get(topic)
         if topic_help is None:
