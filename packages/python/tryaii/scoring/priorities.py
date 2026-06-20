@@ -45,18 +45,30 @@ class Priorities:
 
     @property
     def quality_weight(self) -> float:
-        """Quality weight: 0.3 to 1.2 (always has baseline influence)."""
-        return 0.3 + (self.quality / 5) * 0.9
+        """Quality weight: 0.3 (priority 1) .. 1.2 (priority 5).
+
+        Quality always keeps a baseline influence so a prompt is never scored on
+        cost/speed alone -- this also guarantees the weight total is never zero
+        (no divide-by-zero in scoring even when cost and speed are both fully
+        suppressed).
+        """
+        return 0.3 + ((self.quality - 1) / 4) * 0.9
 
     @property
     def cost_weight(self) -> float:
-        """Cost weight: 0.1 to 1.0 (can be fully suppressed)."""
-        return 0.1 + (self.cost / 5) * 0.9
+        """Cost weight: 0 (priority 1) .. 1.0 (priority 5).
+
+        Fully suppressible -- a priority of 1 removes cost from the decision
+        entirely, so e.g. ``Priorities(5, 1, 1)`` is a true quality-only route
+        (previously cost/speed kept a 0.28 floor that let a cheaper model
+        out-rank a higher-quality one).
+        """
+        return ((self.cost - 1) / 4) * 1.0
 
     @property
     def speed_weight(self) -> float:
-        """Speed weight: 0.1 to 1.0 (can be fully suppressed)."""
-        return 0.1 + (self.speed / 5) * 0.9
+        """Speed weight: 0 (priority 1) .. 1.0 (priority 5). Suppressible, like cost."""
+        return ((self.speed - 1) / 4) * 1.0
 
     def to_dict(self) -> dict[str, int]:
         return {"quality": self.quality, "cost": self.cost, "speed": self.speed}

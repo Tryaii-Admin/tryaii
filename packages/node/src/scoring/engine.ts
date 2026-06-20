@@ -271,9 +271,13 @@ export class ScoringEngine {
     }
 
     // --- Combine with priority weights ---
+    // In the no-signal fallback, cost/speed must still break ties even if the
+    // user suppressed them (priority 1 -> weight 0): the fallback's whole point
+    // is to keep the prompt "routable on cost/speed". A small floor restores that
+    // without touching normal routing (noSignal is false there).
     const qWeight = priorities.qualityWeight;
-    const cWeight = priorities.costWeight;
-    const sWeight = priorities.speedWeight;
+    const cWeight = noSignal ? Math.max(priorities.costWeight, 0.1) : priorities.costWeight;
+    const sWeight = noSignal ? Math.max(priorities.speedWeight, 0.1) : priorities.speedWeight;
 
     const qContrib = qualityScore * qWeight;
     const cContrib = costScore * cWeight;
