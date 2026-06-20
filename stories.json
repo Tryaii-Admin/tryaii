@@ -1,0 +1,84 @@
+{
+  "language": "english",
+  "github_repo": "https://github.com/Tryaii-Admin/tryaii",
+  "jira_pushed_at": "2026-06-20",
+  "jira_cloud_id": "d3d01d35-5711-433b-9d94-8d0da2f2b447",
+  "epic": {
+    "jira_key": "TS-53",
+    "title": "CLI first-run onboarding & persisted default priorities",
+    "summary": "Add a one-time interactive onboarding to the tryaii CLI (both npm and pip) that, on first run or via `tryaii init`, asks consent to download the local embedding model, captures default quality/cost/speed priorities, and offers a quick inline route demo — then never re-prompts. Saved priorities become the routing baseline for route/eval.",
+    "outcome": "A developer installing tryaii for the first time is guided from install to a first successful route in one session: the model download is consented (not silent), their priority preferences are saved and applied automatically, and bare `tryaii` stops prompting once configured. Behavior stays byte-identical across the Node and Python CLIs.",
+    "persona": "First-time tryaii CLI user (developer)",
+    "github_repo": "https://github.com/Tryaii-Admin/tryaii"
+  },
+  "stories": [
+    {
+      "id": "s1",
+      "jira_key": "TS-54",
+      "title": "User-config persistence layer (config.json) in both SDKs",
+      "summary": "Add a small JSON user-config at <data-dir>/config.json with load/save/path helpers in both SDKs, storing `onboarded` and `defaultPriorities`.",
+      "user_story": "As a returning CLI user, I want my onboarding state and default priorities saved to disk, so that the tool remembers my setup across runs and never re-prompts unnecessarily.",
+      "requirements": [
+        "Add load/save/path helpers in packages/node/src/config.ts and packages/python/tryaii/config.py.",
+        "File lives at <data-dir>/config.json, where data-dir honors TRYAII_DRE_DATA_DIR (default ~/.tryaii) in BOTH SDKs (Node currently hard-codes the default).",
+        "Schema: { \"onboarded\": boolean, \"defaultPriorities\": { \"quality\": int, \"cost\": int, \"speed\": int } }.",
+        "A missing or corrupt file is treated as empty / not-onboarded — load never throws.",
+        "Writes are atomic (temp + rename) and create the data dir if absent."
+      ],
+      "confidence": "high",
+      "confidence_notes": "Mechanical, well-scoped; mirrors existing config patterns in both SDKs.",
+      "github_repo": "https://github.com/Tryaii-Admin/tryaii"
+    },
+    {
+      "id": "s2",
+      "jira_key": "TS-55",
+      "title": "Interactive onboarding flow + `tryaii init` command",
+      "summary": "Add `tryaii init` (always runs) and bare `tryaii` on first run (TTY only) launching a 3-step onboarding: model-download consent, default-priorities capture, and an optional quick inline route demo.",
+      "user_story": "As a first-time user, I want a guided setup the first time I run tryaii, so that I download the model intentionally, set my priorities, and see the router work — without reading the docs first.",
+      "requirements": [
+        "Three steps: (a) consent to download the embedding model — reuses the existing `setup` warmup (Router(); router.route('warmup')); (b) capture default quality/cost/speed; (c) optional demo routing ~4 bundled sample prompts at top_k=3, printing each bestModel.",
+        "Trigger: bare `tryaii` runs onboarding ONLY when no config exists AND stdin is a TTY; otherwise it prints the global help. `tryaii init` always runs it and is re-runnable.",
+        "Non-TTY `tryaii init` prints a short notice and exits 0 — it never blocks on input.",
+        "Persist `onboarded:true` + chosen priorities right after step (b), so onboarding counts even if the demo is skipped.",
+        "Add `init` to the command set in both CLIs: a line in global HELP, a HELP_INIT page, and a COMMAND_HELP entry."
+      ],
+      "confidence": "high",
+      "confidence_notes": "Flow is specified end-to-end in docs/cli-init-onboarding-plan.md; main risk is parity of prompt text.",
+      "github_repo": "https://github.com/Tryaii-Admin/tryaii"
+    },
+    {
+      "id": "s3",
+      "jira_key": "TS-56",
+      "title": "Saved default priorities become the route/eval baseline",
+      "summary": "Make route and eval fall back to the saved quality/cost/speed defaults when the flags are omitted, while keeping per-call overrides.",
+      "user_story": "As a configured user, I want route and eval to use my saved priorities by default, so that I don't have to pass --quality/--cost/--speed on every call.",
+      "requirements": [
+        "Remove the parse-time default of 3 (Node) / set argparse default=None (Python) for --quality/--cost/--speed on route and eval, so an omitted flag is detectable.",
+        "Resolution order per dimension: explicit flag > saved default > factory 3.",
+        "An explicit flag always wins over the saved default.",
+        "Help text keeps stating 'default 3' (the factory default); saved values surface in eval's printed priorities line.",
+        "Reuse the existing Priorities 1-5 clamp for all resolved values."
+      ],
+      "confidence": "high",
+      "confidence_notes": "Depends on s1 for the saved values; the omitted-vs-explicit flag detection is the crux.",
+      "github_repo": "https://github.com/Tryaii-Admin/tryaii"
+    },
+    {
+      "id": "s4",
+      "jira_key": "TS-57",
+      "title": "Docs + cross-SDK parity tests for the onboarding surface",
+      "summary": "Document `init`, update the CLI docs/help topics, and extend the parity + CLI test suites to cover the new surface.",
+      "user_story": "As a maintainer, I want the new init/onboarding surface documented and guarded by parity tests, so that the npm and pip CLIs cannot silently drift on it.",
+      "requirements": [
+        "Add docs/cli/init.md; add an `init` row to docs/cli/README.md and to the help.md topics list.",
+        "Add \"init\": \"HELP_INIT\" to COMMAND_HELP_CONSTANTS in tests/test_parity.py so the byte-identical help guard covers it.",
+        "New tests: priority-resolution (saved becomes baseline; explicit flag wins), user-config round-trip, and non-TTY `init` prints a notice and exits 0.",
+        "The existing bare-`tryaii`-prints-HELP test stays green via the TTY gate.",
+        "Note in the env-vars doc table that Node now also reads TRYAII_DRE_DATA_DIR (for config.json)."
+      ],
+      "confidence": "medium",
+      "confidence_notes": "Test wiring is clear; the medium reflects that exact HELP_INIT text must be authored byte-identically across both CLIs.",
+      "github_repo": "https://github.com/Tryaii-Admin/tryaii"
+    }
+  ]
+}
