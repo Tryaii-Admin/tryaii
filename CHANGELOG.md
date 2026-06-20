@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### Scoring: cost/speed priorities are now fully suppressible
+
+The priority→weight mapping changed so that a priority of `1` (don't care) on
+cost or speed now yields a weight of **0** instead of a `0.28` floor. Previously
+even `Priorities(quality=5, cost=1, speed=1)` kept ~32% of the decision on
+cost/speed, so a cheaper/faster model could out-rank a strictly higher-quality
+one — e.g. quality-max routing picked `gpt-5` over `gpt-5.5`. Now quality-max is
+a true quality-only route (the 1000-prompt eval flips from gpt-5/gpt-5.4 to
+`gpt-5.5` + `claude-fable-5`). Quality keeps a `0.3` baseline so it never drops
+to zero (no divide-by-zero) and a prompt is never scored on cost/speed alone.
+
+- Weight formula: `base + ((priority - 1) / 4) * span` — quality `0.3..1.2`,
+  cost/speed `0..1.0`. Balanced (3/3/3) routing is essentially unchanged.
+- The no-signal fallback (prompt matches no benchmark) still floors cost/speed
+  to `0.1` so it stays "routable on cost/speed" as designed, even when the user
+  suppressed them.
+- Applied identically to both SDKs (`scoring/priorities.{ts,py}`,
+  `scoring/engine.{ts,py}`).
+
 ### Model catalog resync (June 2026)
 
 Refreshed the bundled model catalog (`shared/models/default_models.json`, synced
