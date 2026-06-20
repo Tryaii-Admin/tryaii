@@ -54,7 +54,7 @@
         "input_per_1k": 0.00015,
         "output_per_1k": 0.0006
       },
-      "latency": "very fast",
+      "latency": "fast",
       "description": "GPT-4o Mini: Fast and cost-effective"
     },
     {
@@ -108,7 +108,7 @@
         "input_per_1k": 0.0011,
         "output_per_1k": 0.0044
       },
-      "latency": "medium",
+      "latency": "fast",
       "description": "O4 Mini: Fast reasoning"
     },
     {
@@ -136,7 +136,7 @@
         "input_per_1k": 0.00125,
         "output_per_1k": 0.01
       },
-      "latency": "fast",
+      "latency": "medium",
       "description": "GPT-5: Flagship model"
     },
     {
@@ -163,7 +163,7 @@
         "input_per_1k": 0.00025,
         "output_per_1k": 0.002
       },
-      "latency": "very fast",
+      "latency": "fast",
       "description": "GPT-5 Mini: Efficient lightweight"
     },
     {
