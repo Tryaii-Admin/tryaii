@@ -32,6 +32,14 @@ they now behave identically:
   previously a parse error in Node), bare `tryaii help` works on both (was
   Node-only), and both print byte-identical help text (guarded by
   `test_parity.py`).
+- **Per-command help.** `tryaii help <command>` now prints detailed,
+  per-command help (usage, arguments, flags, examples, exit codes), and
+  `tryaii <command> -h/--help` prints that same page instead of the global
+  overview — a behavior change from earlier 0.3.0 builds, where every
+  `--help` printed the global text. The `help` command is self-documenting
+  (`tryaii help help` / `tryaii help --help`), and an unknown topic
+  (`tryaii help bogus`) exits `2`. Every per-command page is kept
+  byte-identical across the npm and PyPI CLIs (guarded by `test_parity.py`).
 - Exit codes unified: `0` success, `1` runtime failure, `2` usage error
   (unknown command/option, missing argument, invalid value). Node previously
   exited `1` for usage errors; it also no longer silently falls back to
