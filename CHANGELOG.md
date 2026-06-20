@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Catalog: standardized OpenAI latency tiers
+
+Normalized inconsistent latency tiers in the OpenAI line so siblings rank
+consistently on speed: all `mini` models are now `fast` (`gpt-4o-mini`,
+`gpt-5-mini`, `o4-mini`; `gpt-5.4-mini` already was), and the regular full models
+are `medium` (`gpt-5` moved down; the rest already were). `nano` models stay
+`very fast`, giving a clean nano > mini > regular ordering. Previously
+`gpt-5-mini` was `very fast` while `gpt-5.4-mini` was `fast`, and `gpt-5` was
+`fast` while `gpt-5.4`/`gpt-5.5` were `medium`, which let an older sibling
+out-rank a newer one on balanced routing purely on a speed-tier gap.
+
 ### Scoring: benchmark normalization fit to the catalog (more routing spread)
 
 The benchmark normalization ranges were tightened from loose textbook bounds to
