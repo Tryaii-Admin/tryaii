@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Model catalog resync (June 2026)
+
+Refreshed the bundled model catalog (`shared/models/default_models.json`, synced
+to both SDKs) to match the tryai web app's 2026-06 lineup. **33 → 39 active
+models** (`"updated": "2026-06"`).
+
+- **Added (14):** `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`,
+  `claude-opus-4-8`, `claude-sonnet-4-6`, `claude-fable-5`, `gemini-3.5-flash`,
+  `gemini-3.1-pro-preview`, `gemini-3.1-flash-lite`, `deepseek-v4-pro`,
+  `deepseek-v4-flash`, `grok-4.3`, `mistral-medium-2508`.
+- **Removed (8):** `o1`, `claude-3-7-sonnet-20250219`, `gemini-2.0-flash`,
+  `gemini-3-pro-preview`, `grok-3-mini-latest` (retired upstream) and
+  `grok-4-fast`, `gpt-4.1-nano`, `grok-3-latest` (dropped from the active set).
+- **Re-priced/re-latency'd** several existing models from the upstream catalog
+  (notably `claude-opus-4-5` output $0.075→$0.25/1k, `o3`, `gemini-2.5-pro`,
+  `gpt-5.2`). This changes cost/latency-based routing for those models.
+- Added OpenRouter slug mappings for the 14 new models (both SDKs).
+- `ARC` scores stay DRE-owned (tryai's ARC column drifted to a different scale);
+  new models use peer-consistent ARC estimates. Scoring algorithm unchanged.
+
+See `docs/model-catalog-sync-2026-06.md` for the full transform, decisions, and
+flagged upstream pricing anomalies.
+
 ## 0.3.0 (2026-06-08)
 
 **Package renamed `tryaii-dre` → `tryaii`** on both PyPI and npm. The old

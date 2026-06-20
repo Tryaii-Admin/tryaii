@@ -1,6 +1,6 @@
 {
-  "version": "0.1.0",
-  "updated": "2026-01",
+  "version": "0.2.0",
+  "updated": "2026-06",
   "models": [
     {
       "model_id": "gpt-4o",
@@ -27,7 +27,7 @@
         "input_per_1k": 0.0025,
         "output_per_1k": 0.01
       },
-      "latency": "fast",
+      "latency": "medium",
       "description": "GPT-4o: High-capability multimodal model"
     },
     {
@@ -58,33 +58,6 @@
       "description": "GPT-4o Mini: Fast and cost-effective"
     },
     {
-      "model_id": "o1",
-      "provider": "OpenAI",
-      "benchmark_scores": {
-        "MMLU": 83.5,
-        "HellaSwag": 95.0,
-        "HumanEval": 92.0,
-        "SWE-bench": 48.9,
-        "TruthfulQA": 50.0,
-        "ARC": 85.0,
-        "GSM8K": 95.0,
-        "DROP": 60.0,
-        "SuperGLUE": 75.0,
-        "Chatbot Arena (LMSys)": 1398,
-        "MT-Bench": 8.0
-      },
-      "capabilities": [
-        "advanced-reasoning",
-        "complex-problem-solving"
-      ],
-      "pricing": {
-        "input_per_1k": 0.015,
-        "output_per_1k": 0.06
-      },
-      "latency": "slow",
-      "description": "O1: Advanced reasoning model"
-    },
-    {
       "model_id": "o3",
       "provider": "OpenAI",
       "benchmark_scores": {
@@ -105,10 +78,10 @@
         "latest-model"
       ],
       "pricing": {
-        "input_per_1k": 0.01,
-        "output_per_1k": 0.04
+        "input_per_1k": 0.002,
+        "output_per_1k": 0.008
       },
-      "latency": "medium",
+      "latency": "slow",
       "description": "O3: Latest reasoning model"
     },
     {
@@ -135,7 +108,7 @@
         "input_per_1k": 0.0011,
         "output_per_1k": 0.0044
       },
-      "latency": "fast",
+      "latency": "medium",
       "description": "O4 Mini: Fast reasoning"
     },
     {
@@ -163,7 +136,7 @@
         "input_per_1k": 0.00125,
         "output_per_1k": 0.01
       },
-      "latency": "medium",
+      "latency": "fast",
       "description": "GPT-5: Flagship model"
     },
     {
@@ -187,11 +160,65 @@
         "cost-effective"
       ],
       "pricing": {
-        "input_per_1k": 0.000375,
-        "output_per_1k": 0.0015
+        "input_per_1k": 0.00025,
+        "output_per_1k": 0.002
       },
-      "latency": "fast",
+      "latency": "very fast",
       "description": "GPT-5 Mini: Efficient lightweight"
+    },
+    {
+      "model_id": "gpt-5-nano",
+      "provider": "OpenAI",
+      "benchmark_scores": {
+        "MMLU": 80.0,
+        "HellaSwag": 85.0,
+        "HumanEval": 80.0,
+        "SWE-bench": 54.7,
+        "TruthfulQA": 50.0,
+        "ARC": 75.0,
+        "GSM8K": 90.0,
+        "DROP": 75.0,
+        "SuperGLUE": 70.0,
+        "Chatbot Arena (LMSys)": 1346,
+        "MT-Bench": 8.0
+      },
+      "capabilities": [
+        "fast-response",
+        "cost-effective"
+      ],
+      "pricing": {
+        "input_per_1k": 5e-05,
+        "output_per_1k": 0.0004
+      },
+      "latency": "very fast",
+      "description": "GPT-5 Nano: Smallest, cheapest GPT-5 variant"
+    },
+    {
+      "model_id": "gpt-4.1",
+      "provider": "OpenAI",
+      "benchmark_scores": {
+        "MMLU": 90.2,
+        "HellaSwag": 98.0,
+        "HumanEval": 90.0,
+        "SWE-bench": 54.6,
+        "TruthfulQA": 75.0,
+        "ARC": 88.0,
+        "GSM8K": 97.0,
+        "DROP": 85.4,
+        "SuperGLUE": 90.0,
+        "Chatbot Arena (LMSys)": 1406,
+        "MT-Bench": 9.2
+      },
+      "capabilities": [
+        "advanced-reasoning",
+        "multimodal"
+      ],
+      "pricing": {
+        "input_per_1k": 0.002,
+        "output_per_1k": 0.008
+      },
+      "latency": "medium",
+      "description": "GPT-4.1: Refined general-purpose model"
     },
     {
       "model_id": "gpt-5.1",
@@ -248,120 +275,130 @@
         "latest-model"
       ],
       "pricing": {
-        "input_per_1k": 0.00125,
-        "output_per_1k": 0.01
+        "input_per_1k": 0.00175,
+        "output_per_1k": 0.014
       },
       "latency": "medium",
       "description": "GPT-5.2: Latest flagship with agentic capabilities"
     },
     {
-      "model_id": "gpt-4.1",
+      "model_id": "gpt-5.4",
       "provider": "OpenAI",
       "benchmark_scores": {
-        "MMLU": 90.2,
-        "HellaSwag": 98.0,
-        "HumanEval": 90.0,
-        "SWE-bench": 54.6,
-        "TruthfulQA": 75.0,
-        "ARC": 88.0,
-        "GSM8K": 97.0,
-        "DROP": 85.4,
-        "SuperGLUE": 90.0,
-        "Chatbot Arena (LMSys)": 1406,
-        "MT-Bench": 9.2
+        "MMLU": 92.5,
+        "HellaSwag": 97.2,
+        "HumanEval": 96.0,
+        "SWE-bench": 80.5,
+        "TruthfulQA": 83.0,
+        "ARC": 92.0,
+        "GSM8K": 98.2,
+        "DROP": 89.5,
+        "SuperGLUE": 93.5,
+        "Chatbot Arena (LMSys)": 1495,
+        "MT-Bench": 9.85,
+        "LiveBench": 79.0
       },
       "capabilities": [
         "advanced-reasoning",
-        "multimodal"
+        "multimodal",
+        "vision",
+        "agentic",
+        "latest-model"
       ],
       "pricing": {
-        "input_per_1k": 0.002,
-        "output_per_1k": 0.008
-      },
-      "latency": "fast",
-      "description": "GPT-4.1: Refined general-purpose model"
-    },
-    {
-      "model_id": "gpt-4.1-nano",
-      "provider": "OpenAI",
-      "benchmark_scores": {
-        "MMLU": 80.1,
-        "HellaSwag": 88.0,
-        "HumanEval": 85.0,
-        "SWE-bench": 20.0,
-        "TruthfulQA": 50.0,
-        "ARC": 72.0,
-        "GSM8K": 80.0,
-        "DROP": 70.0,
-        "SuperGLUE": 70.0,
-        "Chatbot Arena (LMSys)": 1320,
-        "MT-Bench": 7.0
-      },
-      "capabilities": [
-        "fast-response",
-        "cost-effective"
-      ],
-      "pricing": {
-        "input_per_1k": 0.0001,
-        "output_per_1k": 0.0004
-      },
-      "latency": "very fast",
-      "description": "GPT-4.1 Nano: Ultra-cheap, ultra-fast"
-    },
-    {
-      "model_id": "gpt-5-nano",
-      "provider": "OpenAI",
-      "benchmark_scores": {
-        "MMLU": 80.0,
-        "HellaSwag": 85.0,
-        "HumanEval": 80.0,
-        "SWE-bench": 54.7,
-        "TruthfulQA": 50.0,
-        "ARC": 75.0,
-        "GSM8K": 90.0,
-        "DROP": 75.0,
-        "SuperGLUE": 70.0,
-        "Chatbot Arena (LMSys)": 1346,
-        "MT-Bench": 8.0
-      },
-      "capabilities": [
-        "fast-response",
-        "cost-effective"
-      ],
-      "pricing": {
-        "input_per_1k": 7.5e-05,
-        "output_per_1k": 0.0003
-      },
-      "latency": "very fast",
-      "description": "GPT-5 Nano: Smallest, cheapest GPT-5 variant"
-    },
-    {
-      "model_id": "claude-3-7-sonnet-20250219",
-      "provider": "Anthropic",
-      "benchmark_scores": {
-        "MMLU": 80.7,
-        "HellaSwag": 80.0,
-        "HumanEval": 85.0,
-        "SWE-bench": 62.3,
-        "TruthfulQA": 65.0,
-        "ARC": 84.0,
-        "GSM8K": 90.0,
-        "DROP": 80.0,
-        "SuperGLUE": 80.0,
-        "Chatbot Arena (LMSys)": 1385,
-        "MT-Bench": 8.5
-      },
-      "capabilities": [
-        "long-context",
-        "code-generation",
-        "analysis"
-      ],
-      "pricing": {
-        "input_per_1k": 0.003,
+        "input_per_1k": 0.0025,
         "output_per_1k": 0.015
       },
       "latency": "medium",
-      "description": "Claude 3.7 Sonnet: Strong all-rounder"
+      "description": "GPT-5.4: High-end agentic flagship"
+    },
+    {
+      "model_id": "gpt-5.4-mini",
+      "provider": "OpenAI",
+      "benchmark_scores": {
+        "MMLU": 86.0,
+        "HellaSwag": 90.0,
+        "HumanEval": 90.0,
+        "SWE-bench": 73.0,
+        "TruthfulQA": 65.0,
+        "ARC": 87.0,
+        "GSM8K": 94.0,
+        "DROP": 84.0,
+        "SuperGLUE": 82.0,
+        "Chatbot Arena (LMSys)": 1430,
+        "MT-Bench": 9.2,
+        "LiveBench": 73.0
+      },
+      "capabilities": [
+        "fast-response",
+        "cost-effective",
+        "multimodal"
+      ],
+      "pricing": {
+        "input_per_1k": 0.00075,
+        "output_per_1k": 0.0045
+      },
+      "latency": "fast",
+      "description": "GPT-5.4 Mini: Fast, capable, affordable"
+    },
+    {
+      "model_id": "gpt-5.4-nano",
+      "provider": "OpenAI",
+      "benchmark_scores": {
+        "MMLU": 82.0,
+        "HellaSwag": 86.0,
+        "HumanEval": 84.0,
+        "SWE-bench": 60.0,
+        "TruthfulQA": 55.0,
+        "ARC": 78.0,
+        "GSM8K": 91.0,
+        "DROP": 78.0,
+        "SuperGLUE": 73.0,
+        "Chatbot Arena (LMSys)": 1390,
+        "MT-Bench": 8.5,
+        "LiveBench": 68.0
+      },
+      "capabilities": [
+        "fast-response",
+        "cost-effective"
+      ],
+      "pricing": {
+        "input_per_1k": 0.0002,
+        "output_per_1k": 0.00125
+      },
+      "latency": "very fast",
+      "description": "GPT-5.4 Nano: Ultra-fast and cheap"
+    },
+    {
+      "model_id": "gpt-5.5",
+      "provider": "OpenAI",
+      "benchmark_scores": {
+        "MMLU": 93.0,
+        "HellaSwag": 97.5,
+        "HumanEval": 96.5,
+        "SWE-bench": 82.0,
+        "TruthfulQA": 84.0,
+        "ARC": 93.0,
+        "GSM8K": 98.5,
+        "DROP": 90.0,
+        "SuperGLUE": 94.0,
+        "Chatbot Arena (LMSys)": 1500,
+        "MT-Bench": 9.9,
+        "LiveBench": 80.0
+      },
+      "capabilities": [
+        "advanced-reasoning",
+        "multimodal",
+        "vision",
+        "agentic",
+        "latest-model"
+      ],
+      "pricing": {
+        "input_per_1k": 0.005,
+        "output_per_1k": 0.03
+      },
+      "latency": "medium",
+      "description": "GPT-5.5: Flagship multimodal model"
     },
     {
       "model_id": "claude-sonnet-4-20250514",
@@ -420,6 +457,35 @@
       "description": "Claude Sonnet 4.5: Enhanced reasoning"
     },
     {
+      "model_id": "claude-sonnet-4-6",
+      "provider": "Anthropic",
+      "benchmark_scores": {
+        "MMLU": 90.0,
+        "HellaSwag": 93.0,
+        "HumanEval": 94.0,
+        "SWE-bench": 79.0,
+        "TruthfulQA": 76.0,
+        "ARC": 90.0,
+        "GSM8K": 96.0,
+        "DROP": 86.0,
+        "SuperGLUE": 91.0,
+        "Chatbot Arena (LMSys)": 1455,
+        "MT-Bench": 9.6,
+        "LiveBench": 75.0
+      },
+      "capabilities": [
+        "advanced-reasoning",
+        "long-context",
+        "code-generation"
+      ],
+      "pricing": {
+        "input_per_1k": 0.003,
+        "output_per_1k": 0.015
+      },
+      "latency": "medium",
+      "description": "Claude Sonnet 4.6: Balanced reasoning and coding"
+    },
+    {
       "model_id": "claude-haiku-4-5-20251001",
       "provider": "Anthropic",
       "benchmark_scores": {
@@ -442,10 +508,10 @@
         "computer-use"
       ],
       "pricing": {
-        "input_per_1k": 0.0008,
-        "output_per_1k": 0.004
+        "input_per_1k": 0.001,
+        "output_per_1k": 0.005
       },
-      "latency": "fast",
+      "latency": "very fast",
       "description": "Claude Haiku 4.5: Fast and affordable"
     },
     {
@@ -473,11 +539,74 @@
         "code-generation"
       ],
       "pricing": {
-        "input_per_1k": 0.015,
-        "output_per_1k": 0.075
+        "input_per_1k": 0.005,
+        "output_per_1k": 0.25
       },
       "latency": "slow",
-      "description": "Claude Opus 4.5: Most capable Anthropic model"
+      "description": "Claude Opus 4.5: Highly capable Anthropic model"
+    },
+    {
+      "model_id": "claude-opus-4-8",
+      "provider": "Anthropic",
+      "benchmark_scores": {
+        "MMLU": 92.0,
+        "HellaSwag": 97.5,
+        "HumanEval": 95.0,
+        "SWE-bench": 83.0,
+        "TruthfulQA": 80.0,
+        "ARC": 94.0,
+        "GSM8K": 97.0,
+        "DROP": 89.0,
+        "SuperGLUE": 93.0,
+        "Chatbot Arena (LMSys)": 1505,
+        "MT-Bench": 9.8,
+        "LiveBench": 78.0
+      },
+      "capabilities": [
+        "advanced-reasoning",
+        "long-context",
+        "agentic",
+        "computer-use",
+        "code-generation"
+      ],
+      "pricing": {
+        "input_per_1k": 0.005,
+        "output_per_1k": 0.025
+      },
+      "latency": "slow",
+      "description": "Claude Opus 4.8: Anthropic's most capable model"
+    },
+    {
+      "model_id": "claude-fable-5",
+      "provider": "Anthropic",
+      "benchmark_scores": {
+        "MMLU": 92.5,
+        "HellaSwag": 98.0,
+        "HumanEval": 96.0,
+        "SWE-bench": 84.0,
+        "TruthfulQA": 82.0,
+        "ARC": 94.0,
+        "GSM8K": 97.5,
+        "DROP": 90.0,
+        "SuperGLUE": 94.0,
+        "Chatbot Arena (LMSys)": 1510,
+        "MT-Bench": 9.85,
+        "LiveBench": 79.0
+      },
+      "capabilities": [
+        "advanced-reasoning",
+        "long-context",
+        "agentic",
+        "multimodal",
+        "code-generation",
+        "latest-model"
+      ],
+      "pricing": {
+        "input_per_1k": 0.01,
+        "output_per_1k": 0.05
+      },
+      "latency": "slow",
+      "description": "Claude Fable 5: New flagship family"
     },
     {
       "model_id": "gemini-2.5-pro",
@@ -500,38 +629,11 @@
         "long-context"
       ],
       "pricing": {
-        "input_per_1k": 0.00075,
-        "output_per_1k": 0.003
+        "input_per_1k": 0.0025,
+        "output_per_1k": 0.015
       },
-      "latency": "medium",
+      "latency": "slow",
       "description": "Gemini 2.5 Pro: Strong multimodal model"
-    },
-    {
-      "model_id": "gemini-2.0-flash",
-      "provider": "Google",
-      "benchmark_scores": {
-        "MMLU": 82.0,
-        "HellaSwag": 90.0,
-        "HumanEval": 80.0,
-        "SWE-bench": 55.0,
-        "TruthfulQA": 68.0,
-        "ARC": 83.0,
-        "GSM8K": 90.0,
-        "DROP": 80.0,
-        "SuperGLUE": 82.0,
-        "Chatbot Arena (LMSys)": 1365,
-        "MT-Bench": 8.5
-      },
-      "capabilities": [
-        "fast-response",
-        "multimodal"
-      ],
-      "pricing": {
-        "input_per_1k": 0.0001,
-        "output_per_1k": 0.0004
-      },
-      "latency": "fast",
-      "description": "Gemini 2.0 Flash: Fast and affordable"
     },
     {
       "model_id": "gemini-2.5-flash",
@@ -554,8 +656,8 @@
         "multimodal"
       ],
       "pricing": {
-        "input_per_1k": 0.00015,
-        "output_per_1k": 0.00035
+        "input_per_1k": 0.0003,
+        "output_per_1k": 0.00025
       },
       "latency": "fast",
       "description": "Gemini 2.5 Flash: Balanced speed and quality"
@@ -582,42 +684,11 @@
         "multimodal"
       ],
       "pricing": {
-        "input_per_1k": 7.5e-05,
-        "output_per_1k": 0.0003
+        "input_per_1k": 0.0001,
+        "output_per_1k": 0.0004
       },
       "latency": "very fast",
       "description": "Gemini 2.5 Flash Lite: Ultra-affordable"
-    },
-    {
-      "model_id": "gemini-3-pro-preview",
-      "provider": "Google",
-      "benchmark_scores": {
-        "MMLU": 91.8,
-        "HellaSwag": 96.0,
-        "HumanEval": 92.0,
-        "SWE-bench": 76.2,
-        "TruthfulQA": 75.0,
-        "ARC": 93.0,
-        "GSM8K": 97.0,
-        "DROP": 87.0,
-        "SuperGLUE": 91.0,
-        "Chatbot Arena (LMSys)": 1501,
-        "MT-Bench": 9.5,
-        "LiveBench": 74.0
-      },
-      "capabilities": [
-        "advanced-reasoning",
-        "multimodal",
-        "long-context",
-        "agentic",
-        "deep-think"
-      ],
-      "pricing": {
-        "input_per_1k": 0.00075,
-        "output_per_1k": 0.003
-      },
-      "latency": "medium",
-      "description": "Gemini 3 Pro: Top-tier multimodal reasoning"
     },
     {
       "model_id": "gemini-3-flash-preview",
@@ -643,11 +714,100 @@
         "code-generation"
       ],
       "pricing": {
-        "input_per_1k": 0.00015,
-        "output_per_1k": 0.0006
+        "input_per_1k": 0.003,
+        "output_per_1k": 0.0005
       },
       "latency": "fast",
       "description": "Gemini 3 Flash: Fast agentic model"
+    },
+    {
+      "model_id": "gemini-3.5-flash",
+      "provider": "Google",
+      "benchmark_scores": {
+        "MMLU": 89.0,
+        "HellaSwag": 94.5,
+        "HumanEval": 88.5,
+        "SWE-bench": 78.5,
+        "TruthfulQA": 73.0,
+        "ARC": 88.0,
+        "GSM8K": 95.0,
+        "DROP": 85.0,
+        "SuperGLUE": 88.5,
+        "Chatbot Arena (LMSys)": 1470,
+        "MT-Bench": 9.3,
+        "LiveBench": 73.0
+      },
+      "capabilities": [
+        "fast-response",
+        "multimodal",
+        "agentic",
+        "code-generation"
+      ],
+      "pricing": {
+        "input_per_1k": 0.0015,
+        "output_per_1k": 0.009
+      },
+      "latency": "fast",
+      "description": "Gemini 3.5 Flash: Fast agentic model"
+    },
+    {
+      "model_id": "gemini-3.1-pro-preview",
+      "provider": "Google",
+      "benchmark_scores": {
+        "MMLU": 92.0,
+        "HellaSwag": 96.5,
+        "HumanEval": 92.5,
+        "SWE-bench": 77.5,
+        "TruthfulQA": 76.0,
+        "ARC": 93.0,
+        "GSM8K": 97.5,
+        "DROP": 87.5,
+        "SuperGLUE": 91.5,
+        "Chatbot Arena (LMSys)": 1505,
+        "MT-Bench": 9.6,
+        "LiveBench": 75.0
+      },
+      "capabilities": [
+        "advanced-reasoning",
+        "multimodal",
+        "long-context",
+        "agentic"
+      ],
+      "pricing": {
+        "input_per_1k": 0.002,
+        "output_per_1k": 0.012
+      },
+      "latency": "slow",
+      "description": "Gemini 3.1 Pro: Top-tier multimodal reasoning"
+    },
+    {
+      "model_id": "gemini-3.1-flash-lite",
+      "provider": "Google",
+      "benchmark_scores": {
+        "MMLU": 85.5,
+        "HellaSwag": 89.0,
+        "HumanEval": 75.0,
+        "SWE-bench": 50.0,
+        "TruthfulQA": 66.0,
+        "ARC": 80.0,
+        "GSM8K": 90.0,
+        "DROP": 77.0,
+        "SuperGLUE": 81.0,
+        "Chatbot Arena (LMSys)": 1360,
+        "MT-Bench": 8.2,
+        "LiveBench": 62.0
+      },
+      "capabilities": [
+        "fast-response",
+        "cost-effective",
+        "multimodal"
+      ],
+      "pricing": {
+        "input_per_1k": 0.00025,
+        "output_per_1k": 0.0015
+      },
+      "latency": "very fast",
+      "description": "Gemini 3.1 Flash Lite: Ultra-affordable"
     },
     {
       "model_id": "deepseek-reasoner",
@@ -673,7 +833,7 @@
         "input_per_1k": 0.00055,
         "output_per_1k": 0.00219
       },
-      "latency": "medium",
+      "latency": "slow",
       "description": "DeepSeek Reasoner: Strong math and reasoning"
     },
     {
@@ -704,58 +864,63 @@
       "description": "DeepSeek Chat: Affordable general-purpose"
     },
     {
-      "model_id": "grok-3-latest",
-      "provider": "xAI",
+      "model_id": "deepseek-v4-pro",
+      "provider": "DeepSeek",
       "benchmark_scores": {
-        "MMLU": 92.7,
-        "HellaSwag": 95.0,
-        "HumanEval": 86.5,
-        "SWE-bench": 60.0,
-        "TruthfulQA": 70.0,
+        "MMLU": 91.5,
+        "HellaSwag": 90.0,
+        "HumanEval": 90.0,
+        "SWE-bench": 70.0,
+        "TruthfulQA": 68.0,
         "ARC": 85.0,
-        "GSM8K": 89.3,
-        "DROP": 85.0,
-        "SuperGLUE": 88.0,
-        "Chatbot Arena (LMSys)": 1409,
-        "MT-Bench": 9.2
+        "GSM8K": 96.0,
+        "DROP": 84.0,
+        "SuperGLUE": 85.0,
+        "Chatbot Arena (LMSys)": 1480,
+        "MT-Bench": 9.0,
+        "LiveBench": 72.0
       },
       "capabilities": [
-        "real-time-info",
-        "web-access"
+        "advanced-reasoning",
+        "mathematical",
+        "agentic",
+        "code-generation"
       ],
       "pricing": {
-        "input_per_1k": 0.003,
-        "output_per_1k": 0.015
+        "input_per_1k": 0.000435,
+        "output_per_1k": 0.00087
       },
       "latency": "medium",
-      "description": "Grok 3: Real-time information access"
+      "description": "DeepSeek V4 Pro: Strong reasoning and code"
     },
     {
-      "model_id": "grok-3-mini-latest",
-      "provider": "xAI",
+      "model_id": "deepseek-v4-flash",
+      "provider": "DeepSeek",
       "benchmark_scores": {
-        "MMLU": 78.9,
-        "HellaSwag": 85.0,
-        "HumanEval": 50.0,
-        "SWE-bench": 40.0,
-        "TruthfulQA": 55.0,
-        "ARC": 75.0,
-        "GSM8K": 75.0,
-        "DROP": 65.0,
-        "SuperGLUE": 70.0,
-        "Chatbot Arena (LMSys)": 1362,
-        "MT-Bench": 7.5
+        "MMLU": 89.0,
+        "HellaSwag": 88.0,
+        "HumanEval": 86.0,
+        "SWE-bench": 60.0,
+        "TruthfulQA": 62.0,
+        "ARC": 82.0,
+        "GSM8K": 94.0,
+        "DROP": 80.0,
+        "SuperGLUE": 82.0,
+        "Chatbot Arena (LMSys)": 1436,
+        "MT-Bench": 8.7,
+        "LiveBench": 68.0
       },
       "capabilities": [
         "cost-effective",
-        "real-time-info"
+        "fast-response",
+        "code-generation"
       ],
       "pricing": {
-        "input_per_1k": 0.0003,
-        "output_per_1k": 0.0005
+        "input_per_1k": 9.8e-05,
+        "output_per_1k": 0.000196
       },
       "latency": "fast",
-      "description": "Grok 3 Mini: Affordable with web access"
+      "description": "DeepSeek V4 Flash: Fast and cost-effective"
     },
     {
       "model_id": "grok-4-latest",
@@ -780,39 +945,42 @@
         "tool-use"
       ],
       "pricing": {
-        "input_per_1k": 0.002,
-        "output_per_1k": 0.01
+        "input_per_1k": 0.003,
+        "output_per_1k": 0.015
       },
       "latency": "medium",
       "description": "Grok 4: Premium reasoning with web"
     },
     {
-      "model_id": "grok-4-fast",
+      "model_id": "grok-4.3",
       "provider": "xAI",
       "benchmark_scores": {
-        "MMLU": 90.5,
-        "HellaSwag": 93.0,
-        "HumanEval": 91.0,
-        "SWE-bench": 70.0,
-        "TruthfulQA": 68.0,
-        "ARC": 88.0,
-        "GSM8K": 92.0,
-        "DROP": 82.0,
-        "SuperGLUE": 85.0,
-        "Chatbot Arena (LMSys)": 1450,
-        "MT-Bench": 9.0
+        "MMLU": 93.0,
+        "HellaSwag": 95.5,
+        "HumanEval": 92.0,
+        "SWE-bench": 77.0,
+        "TruthfulQA": 72.0,
+        "ARC": 92.0,
+        "GSM8K": 96.0,
+        "DROP": 86.0,
+        "SuperGLUE": 88.0,
+        "Chatbot Arena (LMSys)": 1490,
+        "MT-Bench": 9.4,
+        "LiveBench": 73.0
       },
       "capabilities": [
-        "fast-response",
+        "advanced-reasoning",
         "real-time-info",
-        "web-access"
+        "web-access",
+        "tool-use",
+        "agentic"
       ],
       "pricing": {
-        "input_per_1k": 0.0005,
+        "input_per_1k": 0.00125,
         "output_per_1k": 0.0025
       },
-      "latency": "fast",
-      "description": "Grok 4 Fast: Balanced speed and capability"
+      "latency": "medium",
+      "description": "Grok 4.3: Premium reasoning with web access"
     },
     {
       "model_id": "grok-4-1-fast-reasoning-latest",
@@ -838,8 +1006,8 @@
         "real-time-info"
       ],
       "pricing": {
-        "input_per_1k": 0.0005,
-        "output_per_1k": 0.0025
+        "input_per_1k": 0.0002,
+        "output_per_1k": 0.0005
       },
       "latency": "fast",
       "description": "Grok 4.1 Fast Reasoning: Fast agentic reasoning"
@@ -868,8 +1036,8 @@
         "code-generation"
       ],
       "pricing": {
-        "input_per_1k": 0.00015,
-        "output_per_1k": 0.0006
+        "input_per_1k": 0.0002,
+        "output_per_1k": 0.0015
       },
       "latency": "fast",
       "description": "Grok Code Fast: Specialized for coding tasks"
@@ -923,10 +1091,38 @@
       ],
       "pricing": {
         "input_per_1k": 0.0001,
-        "output_per_1k": 0.0003
+        "output_per_1k": 0.0001
       },
       "latency": "very fast",
       "description": "Mistral Small: Ultra-affordable"
+    },
+    {
+      "model_id": "mistral-medium-2508",
+      "provider": "Mistral",
+      "benchmark_scores": {
+        "MMLU": 80.0,
+        "HellaSwag": 87.0,
+        "HumanEval": 70.0,
+        "SWE-bench": 42.0,
+        "TruthfulQA": 58.0,
+        "ARC": 78.0,
+        "GSM8K": 85.0,
+        "DROP": 75.0,
+        "SuperGLUE": 78.0,
+        "Chatbot Arena (LMSys)": 1340,
+        "MT-Bench": 8.0
+      },
+      "capabilities": [
+        "cost-effective",
+        "multimodal",
+        "code-capable"
+      ],
+      "pricing": {
+        "input_per_1k": 0.0004,
+        "output_per_1k": 0.002
+      },
+      "latency": "fast",
+      "description": "Mistral Medium 3.1: Affordable multimodal"
     }
   ]
 }
