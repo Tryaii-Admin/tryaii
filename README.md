@@ -44,16 +44,17 @@ The most common use is `tryaii eval` — route a whole dataset under a budget:
 
 ```bash
 # Route a dataset -> writes results.jsonl + summary.json + an index.html dashboard
-tryaii eval prompts.json --output results/run
+# (a ready-made 1000-prompt dataset ships at examples/prompts.json)
+tryaii eval examples/prompts.json --output results/run
 
 # Spend at most $0.50 total; invest more in the harder prompts (default: intrinsic difficulty)
-tryaii eval prompts.json --max-price=0.50 --output-tokens=2000
+tryaii eval examples/prompts.json --max-price=0.50 --output-tokens=2000
 
 # Gauge difficulty from model disagreement instead, and push budget harder toward hard prompts
-tryaii eval prompts.json --max-price=0.50 --difficulty-source=capability --difficulty-gamma=3
+tryaii eval examples/prompts.json --max-price=0.50 --difficulty-source=capability --difficulty-gamma=3
 
 # Shrink answers to fit a tight budget instead of failing
-tryaii eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+tryaii eval examples/prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
 ```
 
 Or rank models for a single prompt:
@@ -64,6 +65,27 @@ tryaii models --provider anthropic     # inspect the model catalog
 ```
 
 Full flag reference is in the [command-line interface](#command-line-interface) section below.
+
+## Fast repeated routing (daemon)
+
+Most of a `tryaii route` call is fixed startup: importing the embedding stack and
+loading the model takes seconds, while the routing itself takes under a
+millisecond. Because each CLI call is a fresh process, that cost can't be
+amortized on its own — so `route` and `eval` automatically start a small
+background **daemon** that keeps the model warm. The first call pays the load
+once; every call after it is near-instant.
+
+```bash
+tryaii route "what's greater, 5 or 5.5?"   # first call: loads the model, starts the daemon
+tryaii route "write a haiku about winter"  # subsequent calls: ~milliseconds of routing
+```
+
+It's fully transparent and safe to ignore — there are no daemon commands to
+learn. The daemon self-stops after 15 minutes idle (or on `SIGTERM`). To opt out
+for a single call use `--no-daemon`; to disable it everywhere set
+`TRYAII_NO_DAEMON=1`. Tune the idle shutdown with `TRYAII_DAEMON_IDLE=<seconds>`.
+The Python and Node SDKs run separate daemons (their embedding backends differ);
+see [`docs/daemon.md`](docs/daemon.md) for the protocol and state-file details.
 
 ## 30-second quickstart (SDK)
 
@@ -242,9 +264,9 @@ NODE / TYPESCRIPT
 
 CLI (same command for both packages)
   tryaii route "<prompt>" --quality=5 --cost=1 --speed=2
-  tryaii eval prompts.json --output results/run            # writes results.jsonl + summary.json + index.html
-  tryaii eval prompts.json --max-price=0.10 --output-tokens=2000
-  tryaii eval prompts.json --max-price=0.50 --difficulty-source=intrinsic   # spend more on harder prompts
+  tryaii eval examples/prompts.json --output results/run   # writes results.jsonl + summary.json + index.html
+  tryaii eval examples/prompts.json --max-price=0.10 --output-tokens=2000
+  tryaii eval examples/prompts.json --max-price=0.50 --difficulty-source=intrinsic   # spend more on harder prompts
   tryaii models --json        # machine-readable model catalog (stdout)
   tryaii benchmarks --json    # machine-readable benchmark catalog
   # Add --no-banner (or set TRYAII_NO_BANNER=1) for clean, scriptable output.
