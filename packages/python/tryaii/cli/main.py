@@ -75,9 +75,9 @@ Global flags:
 
 Examples:
   tryaii route "Write a Python function to merge sorted arrays" --quality=5 --cost=1
-  tryaii eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
-  tryaii eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
-  tryaii eval prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
+  tryaii eval examples/prompts.json --output results/run --quality=5 --cost=1 --speed=1
+  tryaii eval examples/prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+  tryaii eval examples/prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
 """
 
 # Per-command help. Each string must stay byte-identical to the matching
@@ -145,9 +145,9 @@ Options:
   --difficulty-gamma <n>   Shift budget toward harder prompts (default 1; 0 disables)
 
 Examples:
-  tryaii eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
-  tryaii eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
-  tryaii eval prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
+  tryaii eval examples/prompts.json --output results/run --quality=5 --cost=1 --speed=1
+  tryaii eval examples/prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+  tryaii eval examples/prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
 
 Exit codes:
   0 success (incl. partial per-prompt failures), 1 bad input / warmup / all
