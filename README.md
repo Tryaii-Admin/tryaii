@@ -44,16 +44,17 @@ The most common use is `tryaii eval` — route a whole dataset under a budget:
 
 ```bash
 # Route a dataset -> writes results.jsonl + summary.json + an index.html dashboard
-tryaii eval prompts.json --output results/run
+# (a ready-made 1000-prompt dataset ships at examples/prompts.json)
+tryaii eval examples/prompts.json --output results/run
 
 # Spend at most $0.50 total; invest more in the harder prompts (default: intrinsic difficulty)
-tryaii eval prompts.json --max-price=0.50 --output-tokens=2000
+tryaii eval examples/prompts.json --max-price=0.50 --output-tokens=2000
 
 # Gauge difficulty from model disagreement instead, and push budget harder toward hard prompts
-tryaii eval prompts.json --max-price=0.50 --difficulty-source=capability --difficulty-gamma=3
+tryaii eval examples/prompts.json --max-price=0.50 --difficulty-source=capability --difficulty-gamma=3
 
 # Shrink answers to fit a tight budget instead of failing
-tryaii eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+tryaii eval examples/prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
 ```
 
 Or rank models for a single prompt:
@@ -263,9 +264,9 @@ NODE / TYPESCRIPT
 
 CLI (same command for both packages)
   tryaii route "<prompt>" --quality=5 --cost=1 --speed=2
-  tryaii eval prompts.json --output results/run            # writes results.jsonl + summary.json + index.html
-  tryaii eval prompts.json --max-price=0.10 --output-tokens=2000
-  tryaii eval prompts.json --max-price=0.50 --difficulty-source=intrinsic   # spend more on harder prompts
+  tryaii eval examples/prompts.json --output results/run   # writes results.jsonl + summary.json + index.html
+  tryaii eval examples/prompts.json --max-price=0.10 --output-tokens=2000
+  tryaii eval examples/prompts.json --max-price=0.50 --difficulty-source=intrinsic   # spend more on harder prompts
   tryaii models --json        # machine-readable model catalog (stdout)
   tryaii benchmarks --json    # machine-readable benchmark catalog
   # Add --no-banner (or set TRYAII_NO_BANNER=1) for clean, scriptable output.
