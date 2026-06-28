@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-06-29)
 
 ### Catalog: bump flagship latency tier (claude-fable-5, claude-opus-4-8)
 
