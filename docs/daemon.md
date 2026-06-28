@@ -11,20 +11,24 @@ The daemon fixes this. A long-lived background process loads the model once and
 keeps it warm; subsequent `route`/`eval` calls become thin clients that send the
 prompt over a loopback socket and get the routing decision back near-instantly.
 
-Both SDKs (Python and Node) implement the same design and the same CLI surface.
-They run **separate** daemons: the Python SDK embeds with `sentence-transformers`
-and the Node SDK with `@xenova/transformers`, so their embeddings (and therefore
-routing) are not guaranteed bit-identical. A client only ever talks to a daemon
-started by the same runtime and for the same embedding model (verified on the
-ping handshake); otherwise it starts its own.
+Both SDKs (Python and Node) implement the same design. They run **separate**
+daemons: the Python SDK embeds with `sentence-transformers` and the Node SDK
+with `@xenova/transformers`, so their embeddings (and therefore routing) are not
+guaranteed bit-identical. A client only ever talks to a daemon started by the
+same runtime and for the same embedding model (verified on the ping handshake);
+otherwise it starts its own.
 
-## CLI surface
+## Behavior and controls
+
+The daemon is fully transparent -- there are no daemon-management subcommands.
+`route`/`eval` auto-start a daemon on first use, reuse it thereafter, and fall
+back to in-process routing if it can't start. It self-stops after an idle period
+(or on `SIGTERM`). The detached server process is launched directly as a module
+(`python -m tryaii.server` / `node .../server.js`), not via a CLI command.
 
 ```
-tryaii route "..."            # auto-starts a daemon on first call, then reuses it
+tryaii route "..."              # auto-starts a daemon on first call, then reuses it
 tryaii route "..." --no-daemon  # force in-process routing for this call
-tryaii serve                  # run the daemon in the foreground (Ctrl-C to stop)
-tryaii daemon start|stop|status|restart
 ```
 
 Environment variables:

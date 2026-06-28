@@ -211,9 +211,14 @@ def _release_spawn_lock(config) -> None:
 
 
 def _spawn_serve(config) -> "subprocess.Popen":
-    """Launch a detached `tryaii serve` process for this config."""
+    """Launch a detached server process for this config.
+
+    Runs the server module directly (`python -m tryaii.server`) rather than a
+    CLI subcommand -- there is no public `serve` command. The server reads its
+    model + data dir from the TRYAII_DRE_* env vars set below.
+    """
     config.ensure_dirs()
-    args = [sys.executable, "-m", "tryaii.cli.main", "serve", "--no-banner"]
+    args = [sys.executable, "-m", "tryaii.server"]
     env = os.environ.copy()
     env["TRYAII_DRE_EMBEDDING_MODEL"] = config.embedding_model
     env["TRYAII_DRE_DATA_DIR"] = str(config.data_dir)

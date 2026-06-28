@@ -3,8 +3,9 @@ Server side of the routing daemon (see docs/daemon.md).
 
 This module owns the heavy lifting: it builds a Router, warms the embedding
 model once, then serves routing requests over a loopback socket until it is
-idle for too long or asked to shut down. It is imported only by the daemon
-process (via `tryaii serve`), never on the client's hot path.
+idle for too long or asked to shut down. It is run as its own process by the
+daemon auto-start (`python -m tryaii.server`, see daemon._spawn_serve), never
+on the client's hot path.
 """
 
 from __future__ import annotations
@@ -161,7 +162,7 @@ def serve(
     _daemon.write_state(config, state)
     emit(
         f"[daemon] listening on {host}:{port} (pid {os.getpid()}); "
-        f"idle timeout {idle}s. Stop with: tryaii daemon stop"
+        f"idle timeout {idle}s. Stops when idle, on SIGTERM, or with TRYAII_NO_DAEMON=1"
     )
 
     should_stop = {"flag": False}
@@ -212,3 +213,10 @@ def serve(
         if current and current.get("port") == port and current.get("token") == token:
             _daemon.clear_state(config)
         emit("[daemon] stopped")
+
+
+if __name__ == "__main__":
+    # Entry point for the detached daemon process (daemon._spawn_serve). The
+    # embedding model and data dir arrive via the TRYAII_DRE_* env vars, which
+    # TryaiiDreConfig() reads, so serve() with no config picks them up.
+    serve()
