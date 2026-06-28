@@ -36,6 +36,7 @@ import * as daemon from './daemon.js';
 import { LocalEmbeddingProvider } from './embeddings/local.js';
 import { DashboardSummary, renderDashboard } from './dashboard/index.js';
 import { ModelInfo, ModelRegistry } from './registry/models.js';
+import { writePaced } from './output.js';
 import {
   Router,
   RouteResult,
@@ -94,34 +95,6 @@ class CliError extends Error {}
 class CliUsageError extends CliError {}
 
 const out = process.stdout;
-
-/** Per-line delay (ms) when revealing human-readable output in an interactive terminal. */
-const LINE_DELAY_MS = 22;
-
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * Write human-readable text to stdout, revealing it line-by-line at a
- * controlled pace when attached to an interactive terminal. Dumps instantly
- * (no delay) when stdout is piped/redirected or when the banner is suppressed,
- * so scripted use, `--json`, and `--no-banner` stay snappy and clean.
- *
- * Used for help screens and for command results (route/models/benchmarks/eval
- * summary). Live progress lines and operational logs are written directly so
- * they appear in real time.
- */
-async function writePaced(text: string): Promise<void> {
-  const animate = Boolean(out.isTTY) && !process.env.TRYAII_NO_BANNER;
-  if (!animate) {
-    out.write(text);
-    return;
-  }
-  const lines = text.split('\n');
-  for (let i = 0; i < lines.length; i++) {
-    out.write(i < lines.length - 1 ? lines[i] + '\n' : lines[i]);
-    await sleep(LINE_DELAY_MS);
-  }
-}
 
 function intFlag(name: string, value: string | undefined, fallback: number): number {
   if (value === undefined) return fallback;
