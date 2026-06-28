@@ -210,7 +210,7 @@ def _release_spawn_lock(config) -> None:
         pass
 
 
-def _spawn_serve(config) -> "subprocess.Popen":
+def _spawn_serve(config) -> subprocess.Popen:
     """Launch a detached server process for this config.
 
     Runs the server module directly (`python -m tryaii.server`) rather than a
