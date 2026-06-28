@@ -95,6 +95,34 @@ class CliUsageError extends CliError {}
 
 const out = process.stdout;
 
+/** Per-line delay (ms) when revealing human-readable output in an interactive terminal. */
+const LINE_DELAY_MS = 22;
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Write human-readable text to stdout, revealing it line-by-line at a
+ * controlled pace when attached to an interactive terminal. Dumps instantly
+ * (no delay) when stdout is piped/redirected or when the banner is suppressed,
+ * so scripted use, `--json`, and `--no-banner` stay snappy and clean.
+ *
+ * Used for help screens and for command results (route/models/benchmarks/eval
+ * summary). Live progress lines and operational logs are written directly so
+ * they appear in real time.
+ */
+async function writePaced(text: string): Promise<void> {
+  const animate = Boolean(out.isTTY) && !process.env.TRYAII_NO_BANNER;
+  if (!animate) {
+    out.write(text);
+    return;
+  }
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    out.write(i < lines.length - 1 ? lines[i] + '\n' : lines[i]);
+    await sleep(LINE_DELAY_MS);
+  }
+}
+
 function intFlag(name: string, value: string | undefined, fallback: number): number {
   if (value === undefined) return fallback;
   const parsed = Number(value);
@@ -155,32 +183,30 @@ async function cmdRoute(subArgs: string[]): Promise<void> {
   // daemon path doesn't need to ship them over the wire.
   const registry = ModelRegistry.default();
 
-  out.write(`\nPrompt: ${prompt}\n`);
-  out.write(
-    `Category: ${classification?.broadCategory ?? ''} > ${classification?.subcategory ?? ''}\n`,
-  );
-  out.write(`Confidence: ${(classification?.confidence ?? 0).toFixed(3)}\n`);
-  out.write(`Classifier: ${classification?.classifierUsed ?? ''}\n`);
-  out.write(`\nTop ${result.scores.length} Recommendations:\n`);
-  out.write('-'.repeat(70) + '\n');
+  let buf = `\nPrompt: ${prompt}\n`;
+  buf += `Category: ${classification?.broadCategory ?? ''} > ${classification?.subcategory ?? ''}\n`;
+  buf += `Confidence: ${(classification?.confidence ?? 0).toFixed(3)}\n`;
+  buf += `Classifier: ${classification?.classifierUsed ?? ''}\n`;
+  buf += `\nTop ${result.scores.length} Recommendations:\n`;
+  buf += '-'.repeat(70) + '\n';
 
   result.scores.forEach((score, index) => {
     const model = registry.getModel(score.modelId);
     const provider = model ? model.provider : '?';
-    out.write(`  ${index + 1}. ${score.modelId}\n`);
-    out.write(`     Provider: ${provider} | Score: ${score.finalScore.toFixed(3)}\n`);
-    out.write(
+    buf += `  ${index + 1}. ${score.modelId}\n`;
+    buf += `     Provider: ${provider} | Score: ${score.finalScore.toFixed(3)}\n`;
+    buf +=
       `     Quality: ${score.qualityScore.toFixed(3)} | ` +
-        `Cost: ${score.costScore.toFixed(3)} | Speed: ${score.speedScore.toFixed(3)}\n`,
-    );
+      `Cost: ${score.costScore.toFixed(3)} | Speed: ${score.speedScore.toFixed(3)}\n`;
     if (model?.pricing) {
-      out.write(
+      buf +=
         `     Pricing: $${model.pricing.inputPer1k.toFixed(4)}/` +
-          `$${model.pricing.outputPer1k.toFixed(4)} per 1k\n`,
-      );
+        `$${model.pricing.outputPer1k.toFixed(4)} per 1k\n`;
     }
-    out.write(`     Reason: ${score.reasoning}\n\n`);
+    buf += `     Reason: ${score.reasoning}\n\n`;
   });
+
+  await writePaced(buf);
 }
 
 // ---------------------------------------------------------------------------
@@ -209,8 +235,8 @@ async function cmdModels(subArgs: string[]): Promise<void> {
     return;
   }
 
-  out.write(`\nAvailable Models (${models.length}):\n`);
-  out.write('-'.repeat(70) + '\n');
+  let buf = `\nAvailable Models (${models.length}):\n`;
+  buf += '-'.repeat(70) + '\n';
 
   const byProvider = new Map<string, ModelInfo[]>();
   for (const model of models) {
@@ -221,16 +247,18 @@ async function cmdModels(subArgs: string[]): Promise<void> {
 
   for (const provider of [...byProvider.keys()].sort()) {
     const providerModels = byProvider.get(provider) as ModelInfo[];
-    out.write(`\n  ${provider} (${providerModels.length} models):\n`);
+    buf += `\n  ${provider} (${providerModels.length} models):\n`;
     for (const model of providerModels) {
       const latency = model.latency ?? '?';
       let price = '';
       if (model.pricing) {
         price = ` | $${model.pricing.inputPer1k.toFixed(4)}/${model.pricing.outputPer1k.toFixed(4)}`;
       }
-      out.write(`    - ${model.modelId} [${latency}]${price}\n`);
+      buf += `    - ${model.modelId} [${latency}]${price}\n`;
     }
   }
+
+  await writePaced(buf);
 }
 
 // ---------------------------------------------------------------------------
@@ -251,12 +279,14 @@ async function cmdBenchmarks(subArgs: string[]): Promise<void> {
     return;
   }
 
-  out.write(`\nAvailable Benchmarks (${registry.length}):\n`);
-  out.write('-'.repeat(60) + '\n');
+  let buf = `\nAvailable Benchmarks (${registry.length}):\n`;
+  buf += '-'.repeat(60) + '\n';
   for (const benchmark of registry.allBenchmarks) {
     const norm = `[${benchmark.normalization.minScore}-${benchmark.normalization.maxScore}]`;
-    out.write(`  ${benchmark.name.padEnd(30)} ${norm.padEnd(15)} ${benchmark.description}\n`);
+    buf += `  ${benchmark.name.padEnd(30)} ${norm.padEnd(15)} ${benchmark.description}\n`;
   }
+
+  await writePaced(buf);
 }
 
 // ---------------------------------------------------------------------------
@@ -687,24 +717,25 @@ async function cmdEval(subArgs: string[]): Promise<void> {
   writeFileSync(summaryPath, JSON.stringify(summary, null, 2), 'utf-8');
   writeFileSync(dashboardPath, renderDashboard(summary, inputPath), 'utf-8');
 
-  out.write('\n[eval] === Summary ===\n');
-  out.write(`Prompts        : ${summary.totalPrompts}\n`);
-  out.write(`Successes      : ${summary.successCount}\n`);
-  out.write(`Errors         : ${summary.errorCount}\n`);
-  out.write(`Distinct models: ${summary.distinctModels}\n`);
-  out.write(`Avg route time : ${summary.avgRouteMs} ms\n`);
+  let buf = '\n[eval] === Summary ===\n';
+  buf += `Prompts        : ${summary.totalPrompts}\n`;
+  buf += `Successes      : ${summary.successCount}\n`;
+  buf += `Errors         : ${summary.errorCount}\n`;
+  buf += `Distinct models: ${summary.distinctModels}\n`;
+  buf += `Avg route time : ${summary.avgRouteMs} ms\n`;
   if (budgetSummary) {
-    out.write(`Budget status  : ${budgetSummary.status}\n`);
-    out.write(`Estimated cost : $${Number(budgetSummary.totalEstimatedCost).toFixed(6)}\n`);
-    out.write(`Budget         : $${Number(budgetSummary.budget).toFixed(6)}\n`);
+    buf += `Budget status  : ${budgetSummary.status}\n`;
+    buf += `Estimated cost : $${Number(budgetSummary.totalEstimatedCost).toFixed(6)}\n`;
+    buf += `Budget         : $${Number(budgetSummary.budget).toFixed(6)}\n`;
   }
-  out.write('\nTop recommended models:\n');
+  buf += '\nTop recommended models:\n';
   for (const row of summary.distribution.slice(0, 10)) {
-    out.write(`  ${row.model.padEnd(40)} ${String(row.count).padStart(5)}  (${row.pct}%)\n`);
+    buf += `  ${row.model.padEnd(40)} ${String(row.count).padStart(5)}  (${row.pct}%)\n`;
   }
-  out.write(`\n[eval] per-prompt results -> ${resultsPath}\n`);
-  out.write(`[eval] summary            -> ${summaryPath}\n`);
-  out.write(`[eval] dashboard          -> ${dashboardPath}\n`);
+  buf += `\n[eval] per-prompt results -> ${resultsPath}\n`;
+  buf += `[eval] summary            -> ${summaryPath}\n`;
+  buf += `[eval] dashboard          -> ${dashboardPath}\n`;
+  await writePaced(buf);
 
   // Exit non-zero when every prompt errored so callers / CI can detect a total failure.
   if (summary.totalPrompts > 0 && summary.errorCount === summary.totalPrompts) {
@@ -1019,7 +1050,7 @@ async function main(): Promise<void> {
     // help command itself -- consistent with `tryaii <command> --help`.
     const topic = subArgs.find((arg) => !arg.startsWith('-'));
     if (!topic) {
-      out.write(wantsHelp ? COMMAND_HELP.help : HELP);
+      await writePaced(wantsHelp ? COMMAND_HELP.help : HELP);
       return;
     }
     const topicHelp = COMMAND_HELP[topic];
@@ -1028,18 +1059,18 @@ async function main(): Promise<void> {
         `unknown help topic: ${topic}. Run "tryaii help" for the list of commands.`,
       );
     }
-    out.write(topicHelp);
+    await writePaced(topicHelp);
     return;
   }
 
   if (!command) {
-    out.write(HELP);
+    await writePaced(HELP);
     return;
   }
 
   if (wantsHelp) {
     // Unknown command + --help still gets the global overview (then nothing else runs).
-    out.write(COMMAND_HELP[command] ?? HELP);
+    await writePaced(COMMAND_HELP[command] ?? HELP);
     return;
   }
 

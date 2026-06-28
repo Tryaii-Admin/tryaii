@@ -280,6 +280,34 @@ COMMAND_HELP = {
     "help": HELP_HELP,
 }
 
+# Per-line delay (seconds) when revealing human-readable output interactively.
+_LINE_DELAY = 0.022
+
+
+def _write_paced(text: str) -> None:
+    """Write human-readable text, revealing it line-by-line at a controlled pace.
+
+    Mirrors ``writePaced`` in the Node CLI: paces the output when stdout is an
+    interactive terminal, but dumps instantly (no delay) when stdout is
+    piped/redirected or when the banner is suppressed, so scripted use,
+    ``--json``, and ``--no-banner`` stay snappy and clean.
+
+    Used for help screens and command results (route/models/benchmarks/eval
+    summary). Live progress lines and operational logs are printed directly so
+    they appear in real time.
+    """
+    animate = bool(getattr(sys.stdout, "isatty", lambda: False)()) and not os.environ.get(
+        "TRYAII_NO_BANNER"
+    )
+    if not animate:
+        sys.stdout.write(text)
+        return
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        sys.stdout.write(line + "\n" if i < len(lines) - 1 else line)
+        sys.stdout.flush()
+        time.sleep(_LINE_DELAY)
+
 
 def _acquire_route_fn(config, no_daemon: bool):
     """Return (route_fn, source) where route_fn(prompt, priorities, top_k) -> RouteResult.
@@ -335,12 +363,12 @@ def cmd_route(args):
     # registry so the daemon path doesn't need to ship them over the wire.
     registry = ModelRegistry.default()
 
-    print(f"\nPrompt: {args.prompt}")
-    print(f"Category: {result.classification.broad_category} > {result.classification.subcategory}")
-    print(f"Confidence: {result.classification.confidence:.3f}")
-    print(f"Classifier: {result.classification.classifier_used}")
-    print(f"\nTop {len(result.scores)} Recommendations:")
-    print("-" * 70)
+    buf = f"\nPrompt: {args.prompt}\n"
+    buf += f"Category: {result.classification.broad_category} > {result.classification.subcategory}\n"
+    buf += f"Confidence: {result.classification.confidence:.3f}\n"
+    buf += f"Classifier: {result.classification.classifier_used}\n"
+    buf += f"\nTop {len(result.scores)} Recommendations:\n"
+    buf += "-" * 70 + "\n"
 
     for i, score in enumerate(result.scores, 1):
         model = registry.get_model(score.model_id)
@@ -349,13 +377,15 @@ def cmd_route(args):
         if model and model.pricing:
             price = f"${model.pricing.input_per_1k:.4f}/${model.pricing.output_per_1k:.4f} per 1k"
 
-        print(f"  {i}. {score.model_id}")
-        print(f"     Provider: {provider} | Score: {score.final_score:.3f}")
-        print(f"     Quality: {score.quality_score:.3f} | Cost: {score.cost_score:.3f} | Speed: {score.speed_score:.3f}")
+        buf += f"  {i}. {score.model_id}\n"
+        buf += f"     Provider: {provider} | Score: {score.final_score:.3f}\n"
+        buf += f"     Quality: {score.quality_score:.3f} | Cost: {score.cost_score:.3f} | Speed: {score.speed_score:.3f}\n"
         if price:
-            print(f"     Pricing: {price}")
-        print(f"     Reason: {score.reasoning}")
-        print()
+            buf += f"     Pricing: {price}\n"
+        buf += f"     Reason: {score.reasoning}\n"
+        buf += "\n"
+
+    _write_paced(buf)
 
 
 def _load_eval_prompts(path: Path) -> list[dict]:
@@ -852,22 +882,23 @@ def cmd_eval(args):
         encoding="utf-8",
     )
 
-    print("\n[eval] === Summary ===")
-    print(f"Prompts        : {summary['totalPrompts']}")
-    print(f"Successes      : {summary['successCount']}")
-    print(f"Errors         : {summary['errorCount']}")
-    print(f"Distinct models: {summary['distinctModels']}")
-    print(f"Avg route time : {summary['avgRouteMs']} ms")
+    buf = "\n[eval] === Summary ===\n"
+    buf += f"Prompts        : {summary['totalPrompts']}\n"
+    buf += f"Successes      : {summary['successCount']}\n"
+    buf += f"Errors         : {summary['errorCount']}\n"
+    buf += f"Distinct models: {summary['distinctModels']}\n"
+    buf += f"Avg route time : {summary['avgRouteMs']} ms\n"
     if budget_summary is not None:
-        print(f"Budget status  : {budget_summary['status']}")
-        print(f"Estimated cost : ${budget_summary['totalEstimatedCost']:.6f}")
-        print(f"Budget         : ${budget_summary['budget']:.6f}")
-    print("\nTop recommended models:")
+        buf += f"Budget status  : {budget_summary['status']}\n"
+        buf += f"Estimated cost : ${budget_summary['totalEstimatedCost']:.6f}\n"
+        buf += f"Budget         : ${budget_summary['budget']:.6f}\n"
+    buf += "\nTop recommended models:\n"
     for row in summary["distribution"][:10]:
-        print(f"  {row['model']:<40} {row['count']:>5}  ({row['pct']}%)")
-    print(f"\n[eval] per-prompt results -> {results_path}")
-    print(f"[eval] summary            -> {summary_path}")
-    print(f"[eval] dashboard          -> {dashboard_path}")
+        buf += f"  {row['model']:<40} {row['count']:>5}  ({row['pct']}%)\n"
+    buf += f"\n[eval] per-prompt results -> {results_path}\n"
+    buf += f"[eval] summary            -> {summary_path}\n"
+    buf += f"[eval] dashboard          -> {dashboard_path}\n"
+    _write_paced(buf)
 
     # Exit non-zero when every prompt errored so callers/CI can detect a total failure.
     total_prompts = summary["totalPrompts"]
@@ -915,21 +946,23 @@ def cmd_models(args):
         print(json.dumps(data, indent=2))
         return
 
-    print(f"\nAvailable Models ({len(models)}):")
-    print("-" * 70)
+    buf = f"\nAvailable Models ({len(models)}):\n"
+    buf += "-" * 70 + "\n"
 
     by_provider: dict[str, list] = {}
     for m in models:
         by_provider.setdefault(m.provider, []).append(m)
 
     for provider, provider_models in sorted(by_provider.items()):
-        print(f"\n  {provider} ({len(provider_models)} models):")
+        buf += f"\n  {provider} ({len(provider_models)} models):\n"
         for m in provider_models:
             latency = m.latency or "?"
             price = ""
             if m.pricing:
                 price = f" | ${m.pricing.input_per_1k:.4f}/{m.pricing.output_per_1k:.4f}"
-            print(f"    - {m.model_id} [{latency}]{price}")
+            buf += f"    - {m.model_id} [{latency}]{price}\n"
+
+    _write_paced(buf)
 
 
 def cmd_benchmarks(args):
@@ -943,12 +976,14 @@ def cmd_benchmarks(args):
         print(json.dumps(data, indent=2))
         return
 
-    print(f"\nAvailable Benchmarks ({len(registry)}):")
-    print("-" * 60)
+    buf = f"\nAvailable Benchmarks ({len(registry)}):\n"
+    buf += "-" * 60 + "\n"
 
     for b in registry.all_benchmarks:
         norm = f"[{b.normalization.min_score}-{b.normalization.max_score}]"
-        print(f"  {b.name:30s} {norm:15s} {b.description}")
+        buf += f"  {b.name:30s} {norm:15s} {b.description}\n"
+
+    _write_paced(buf)
 
 
 def cmd_regenerate(args):
@@ -1097,7 +1132,7 @@ def cli():
         topics = [a for a in filtered[1:] if not a.startswith("-")]
         topic = topics[0] if topics else None
         if topic is None:
-            sys.stdout.write(COMMAND_HELP["help"] if wants_help else HELP)
+            _write_paced(COMMAND_HELP["help"] if wants_help else HELP)
             return
         topic_help = COMMAND_HELP.get(topic)
         if topic_help is None:
@@ -1107,16 +1142,16 @@ def cli():
                 file=sys.stderr,
             )
             sys.exit(2)
-        sys.stdout.write(topic_help)
+        _write_paced(topic_help)
         return
 
     if command is None:
-        sys.stdout.write(HELP)
+        _write_paced(HELP)
         return
 
     if wants_help:
         # Unknown command + --help still gets the global overview.
-        sys.stdout.write(COMMAND_HELP.get(command, HELP))
+        _write_paced(COMMAND_HELP.get(command, HELP))
         return
 
     args = parser.parse_args(filtered)
