@@ -67,3 +67,5 @@ packages/python/CENTROIDS_AND_UPDATES.md
 MIGRATION.md
 docs/benchmarks-compare.html
 Jira/
+.jira-config.json
+stories.json

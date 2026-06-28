@@ -12,7 +12,11 @@ def _make_models() -> list[ModelInfo]:
             model_id="expensive-good",
             provider="TestProvider",
             benchmark_scores={"HumanEval": 95.0, "MMLU": 95.0, "GSM8K": 95.0},
-            pricing=ModelPricing(input_per_1k=0.01, output_per_1k=0.03),
+            # Genuinely premium pricing so cost-first routing can actually demote
+            # it below the cheap model. With quality normalization fit to the real
+            # catalog, a merely-2x price no longer flips the ranking (matches the
+            # realistic pricing the Node engine tests already use).
+            pricing=ModelPricing(input_per_1k=0.015, output_per_1k=0.075),
             latency="medium",
         ),
         ModelInfo(

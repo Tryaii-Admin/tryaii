@@ -44,8 +44,8 @@ class TestBenchmarkNormalizer:
 
     def test_normalize_elo_scale(self):
         normalizer = BenchmarkNormalizer()
-        # Chatbot Arena uses ELO: 1000-1550
-        score = normalizer.normalize("Chatbot Arena (LMSys)", 1275)
+        # Chatbot Arena uses ELO: 1300-1520
+        score = normalizer.normalize("Chatbot Arena (LMSys)", 1400)
         assert 0.0 < score < 1.0
 
     def test_unknown_benchmark_assumes_percentage(self):
@@ -63,21 +63,21 @@ class TestBenchmarkNormalizer:
         normalizer = BenchmarkNormalizer()
         r = normalizer.get_range("MMLU")
         assert r is not None
-        assert r.min_score == 25
-        assert r.max_score == 95
+        assert r.min_score == 40
+        assert r.max_score == 96
 
     def test_mt_bench_matches_original(self):
         normalizer = BenchmarkNormalizer()
         r = normalizer.get_range("MT-Bench")
         assert r is not None
         # Canonical MT-Bench range matches STANDARD_BENCHMARKS (the default
-        # routing path) and the Node SDK: NormalizationRange(5, 10).
-        assert r.min_score == 5.0
+        # routing path) and the Node SDK: NormalizationRange(6, 10).
+        assert r.min_score == 6.0
         assert r.max_score == 10
 
     def test_livebench_matches_original(self):
         normalizer = BenchmarkNormalizer()
         r = normalizer.get_range("LiveBench")
         assert r is not None
-        assert r.min_score == 0
-        assert r.max_score == 100
+        assert r.min_score == 58
+        assert r.max_score == 84

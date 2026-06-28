@@ -35,13 +35,50 @@ def test_version_short_flag(monkeypatch, capsys):
     assert capsys.readouterr().out.strip() == __version__
 
 
-@pytest.mark.parametrize(
-    "argv",
-    [(), ("help",), ("--help",), ("-h",), ("eval", "--help"), ("route", "-h")],
-)
-def test_help_prints_shared_text_from_any_position(monkeypatch, capsys, argv):
+@pytest.mark.parametrize("argv", [(), ("help",), ("--help",), ("-h",)])
+def test_global_help_prints_shared_text_from_any_position(monkeypatch, capsys, argv):
     _run(monkeypatch, *argv)
     assert capsys.readouterr().out == cli_main.HELP
+
+
+@pytest.mark.parametrize(
+    "argv,command",
+    [
+        (("help", "route"), "route"),
+        (("help", "eval"), "eval"),
+        (("eval", "--help"), "eval"),
+        (("route", "-h"), "route"),
+        (("models", "--help"), "models"),
+    ],
+)
+def test_command_help_prints_per_command_text(monkeypatch, capsys, argv, command):
+    _run(monkeypatch, *argv)
+    assert capsys.readouterr().out == cli_main.COMMAND_HELP[command]
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [("help", "help"), ("help", "--help"), ("help", "-h")],
+)
+def test_help_command_documents_itself(monkeypatch, capsys, argv):
+    # The new help command is self-documenting both ways, like every other
+    # command: the subcommand form (`tryaii help help`) and the flag form
+    # (`tryaii help --help` / `tryaii help -h`) both print the help page.
+    _run(monkeypatch, *argv)
+    assert capsys.readouterr().out == cli_main.COMMAND_HELP["help"]
+
+
+def test_bare_help_still_prints_global_overview(monkeypatch, capsys):
+    # With no topic and no help flag, `tryaii help` stays the global overview.
+    _run(monkeypatch, "help")
+    assert capsys.readouterr().out == cli_main.HELP
+
+
+def test_unknown_help_topic_is_usage_error(monkeypatch, capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        _run(monkeypatch, "help", "frobnicate")
+    assert excinfo.value.code == 2
+    assert "unknown help topic" in capsys.readouterr().err
 
 
 def test_unknown_command_is_usage_error(monkeypatch):
