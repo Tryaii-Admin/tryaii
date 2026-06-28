@@ -243,9 +243,13 @@ class ScoringEngine:
             speed_score = SPEED_SCORES.get(model.latency, 0.3)
 
         # --- Combine with priority weights ---
+        # In the no-signal fallback, cost/speed must still break ties even if the
+        # user suppressed them (priority 1 -> weight 0): the fallback's whole
+        # point is to keep the prompt "routable on cost/speed". A small floor
+        # restores that without touching normal routing (no_signal is False there).
         q_weight = priorities.quality_weight
-        c_weight = priorities.cost_weight
-        s_weight = priorities.speed_weight
+        c_weight = max(priorities.cost_weight, 0.1) if no_signal else priorities.cost_weight
+        s_weight = max(priorities.speed_weight, 0.1) if no_signal else priorities.speed_weight
 
         q_contrib = quality_score * q_weight
         c_contrib = cost_score * c_weight
