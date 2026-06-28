@@ -35,12 +35,19 @@ export const MODEL_ID_TO_OPENROUTER: Record<string, string> = {
   'gpt-4.1': 'openai/gpt-4.1',
   'gpt-4.1-nano': 'openai/gpt-4.1-nano',
   'gpt-5-nano': 'openai/gpt-5-nano',
+  'gpt-5.4': 'openai/gpt-5.4',
+  'gpt-5.4-mini': 'openai/gpt-5.4-mini',
+  'gpt-5.4-nano': 'openai/gpt-5.4-nano',
+  'gpt-5.5': 'openai/gpt-5.5',
   // Anthropic
   'claude-3-7-sonnet-20250219': 'anthropic/claude-3.7-sonnet',
   'claude-sonnet-4-20250514': 'anthropic/claude-sonnet-4',
   'claude-sonnet-4-5-20250929': 'anthropic/claude-sonnet-4.5',
   'claude-haiku-4-5-20251001': 'anthropic/claude-haiku-4.5',
   'claude-opus-4-5-20251101': 'anthropic/claude-opus-4.5',
+  'claude-sonnet-4-6': 'anthropic/claude-sonnet-4.6',
+  'claude-opus-4-8': 'anthropic/claude-opus-4.8',
+  'claude-fable-5': 'anthropic/claude-fable-5',
   // Google
   'gemini-2.5-pro': 'google/gemini-2.5-pro',
   'gemini-2.0-flash': 'google/gemini-2.0-flash',
@@ -48,19 +55,26 @@ export const MODEL_ID_TO_OPENROUTER: Record<string, string> = {
   'gemini-2.5-flash-lite': 'google/gemini-2.5-flash-lite',
   'gemini-3-pro-preview': 'google/gemini-3-pro-preview',
   'gemini-3-flash-preview': 'google/gemini-3-flash-preview',
+  'gemini-3.5-flash': 'google/gemini-3.5-flash',
+  'gemini-3.1-pro-preview': 'google/gemini-3.1-pro-preview',
+  'gemini-3.1-flash-lite': 'google/gemini-3.1-flash-lite',
   // DeepSeek
   'deepseek-reasoner': 'deepseek/deepseek-reasoner',
   'deepseek-chat': 'deepseek/deepseek-chat',
+  'deepseek-v4-pro': 'deepseek/deepseek-v4-pro',
+  'deepseek-v4-flash': 'deepseek/deepseek-v4-flash',
   // xAI
   'grok-3-latest': 'x-ai/grok-3',
   'grok-3-mini-latest': 'x-ai/grok-3-mini',
   'grok-4-latest': 'x-ai/grok-4',
+  'grok-4.3': 'x-ai/grok-4.3',
   'grok-4-fast': 'x-ai/grok-4-fast',
   'grok-4-1-fast-reasoning-latest': 'x-ai/grok-4.1-fast-reasoning',
   'grok-code-fast': 'x-ai/grok-code-fast',
   // Mistral
   'mistral-large-latest': 'mistralai/mistral-large',
   'mistral-small-latest': 'mistralai/mistral-small',
+  'mistral-medium-2508': 'mistralai/mistral-medium-3.1',
 };
 
 /** Response from an OpenRouter API call. */

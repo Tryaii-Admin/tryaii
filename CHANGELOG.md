@@ -19,6 +19,78 @@ from ~minute to ~milliseconds.
 - Implemented identically in the Python and Node SDKs (separate per-runtime
   daemons; loopback TCP + token auth). Protocol documented in `docs/daemon.md`.
 
+### Catalog: standardized OpenAI latency tiers
+
+Normalized inconsistent latency tiers in the OpenAI line so siblings rank
+consistently on speed: all `mini` models are now `fast` (`gpt-4o-mini`,
+`gpt-5-mini`, `o4-mini`; `gpt-5.4-mini` already was), and the regular full models
+are `medium` (`gpt-5` moved down; the rest already were). `nano` models stay
+`very fast`, giving a clean nano > mini > regular ordering. Previously
+`gpt-5-mini` was `very fast` while `gpt-5.4-mini` was `fast`, and `gpt-5` was
+`fast` while `gpt-5.4`/`gpt-5.5` were `medium`, which let an older sibling
+out-rank a newer one on balanced routing purely on a speed-tier gap.
+
+### Scoring: benchmark normalization fit to the catalog (more routing spread)
+
+The benchmark normalization ranges were tightened from loose textbook bounds to
+the observed min/max of the shipped catalog, so models spread across most of
+0–1 instead of bunching into a narrow high band. Previously several benchmarks
+were badly compressed (LiveBench used only 18% of the 0–1 range, ARC 23%, Arena
+36%), so the quality dimension couldn't differentiate frontier models and
+balanced routing collapsed onto cost/speed — one model (`gpt-5-mini`) won 93% of
+the 1000-prompt eval. After the change, balanced routing spreads across several
+models (top model ~52%), while quality-max still picks the flagships and budget
+still picks the cheapest. Quality-only ranking on a single benchmark is
+unchanged (normalization is monotonic).
+
+- Updated `NORMALIZATION_RANGES` (`scoring/benchmarks.{ts,py}`) and the mirrored
+  `STANDARD_BENCHMARKS` (`benchmarks/standard.{ts,py}`) in both SDKs, kept in
+  sync (guarded by `test_parity.py`). Re-fit these when the catalog changes a lot.
+
+### Scoring: cost/speed priorities are now fully suppressible
+
+The priority→weight mapping changed so that a priority of `1` (don't care) on
+cost or speed now yields a weight of **0** instead of a `0.28` floor. Previously
+even `Priorities(quality=5, cost=1, speed=1)` kept ~32% of the decision on
+cost/speed, so a cheaper/faster model could out-rank a strictly higher-quality
+one — e.g. quality-max routing picked `gpt-5` over `gpt-5.5`. Now quality-max is
+a true quality-only route (the 1000-prompt eval flips from gpt-5/gpt-5.4 to
+`gpt-5.5` + `claude-fable-5`). Quality keeps a `0.3` baseline so it never drops
+to zero (no divide-by-zero) and a prompt is never scored on cost/speed alone.
+
+- Weight formula: `base + ((priority - 1) / 4) * span` — quality `0.3..1.2`,
+  cost/speed `0..1.0`. Balanced (3/3/3) routing is essentially unchanged.
+- The no-signal fallback (prompt matches no benchmark) still floors cost/speed
+  to `0.1` so it stays "routable on cost/speed" as designed, even when the user
+  suppressed them.
+- Applied identically to both SDKs (`scoring/priorities.{ts,py}`,
+  `scoring/engine.{ts,py}`).
+
+### Model catalog resync (June 2026)
+
+Refreshed the bundled model catalog (`shared/models/default_models.json`, synced
+to both SDKs) to match the tryai web app's 2026-06 lineup. **33 → 39 active
+models** (`"updated": "2026-06"`).
+
+- **Added (14):** `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`,
+  `claude-opus-4-8`, `claude-sonnet-4-6`, `claude-fable-5`, `gemini-3.5-flash`,
+  `gemini-3.1-pro-preview`, `gemini-3.1-flash-lite`, `deepseek-v4-pro`,
+  `deepseek-v4-flash`, `grok-4.3`, `mistral-medium-2508`.
+- **Removed (8):** `o1`, `claude-3-7-sonnet-20250219`, `gemini-2.0-flash`,
+  `gemini-3-pro-preview`, `grok-3-mini-latest` (retired upstream) and
+  `grok-4-fast`, `gpt-4.1-nano`, `grok-3-latest` (dropped from the active set).
+- **Re-priced/re-latency'd** several existing models from the upstream catalog
+  (notably `claude-opus-4-5` output $0.075→$0.25/1k, `o3`, `gemini-2.5-pro`,
+  `gpt-5.2`). This changes cost/latency-based routing for those models.
+- **Corrected two upstream price typos** (input ≥ output): `gemini-2.5-flash`
+  output $0.00025→$0.0025 and `gemini-3-flash-preview` input $0.003→$0.0003.
+- Added OpenRouter slug mappings for the 14 new models (both SDKs).
+- `ARC` scores stay DRE-owned (tryai's ARC column drifted to a different scale);
+  new models use peer-consistent ARC estimates. Scoring algorithm unchanged.
+
+See `docs/model-catalog-sync-2026-06.md` for the full transform, decisions, and
+flagged upstream pricing anomalies.
+
 ## 0.3.0 (2026-06-08)
 
 **Package renamed `tryaii-dre` → `tryaii`** on both PyPI and npm. The old
@@ -51,6 +123,14 @@ they now behave identically:
   previously a parse error in Node), bare `tryaii help` works on both (was
   Node-only), and both print byte-identical help text (guarded by
   `test_parity.py`).
+- **Per-command help.** `tryaii help <command>` now prints detailed,
+  per-command help (usage, arguments, flags, examples, exit codes), and
+  `tryaii <command> -h/--help` prints that same page instead of the global
+  overview — a behavior change from earlier 0.3.0 builds, where every
+  `--help` printed the global text. The `help` command is self-documenting
+  (`tryaii help help` / `tryaii help --help`), and an unknown topic
+  (`tryaii help bogus`) exits `2`. Every per-command page is kept
+  byte-identical across the npm and PyPI CLIs (guarded by `test_parity.py`).
 - Exit codes unified: `0` success, `1` runtime failure, `2` usage error
   (unknown command/option, missing argument, invalid value). Node previously
   exited `1` for usage errors; it also no longer silently falls back to
