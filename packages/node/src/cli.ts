@@ -26,10 +26,17 @@ import { BudgetMode, DifficultySource, routeDatasetWithBudget } from './budget.j
 import { benchmarkToDict, BenchmarkRegistry } from './benchmarks/registry.js';
 import { CentroidGenerator } from './centroids/generator.js';
 import { ClassificationResult } from './classifiers/base.js';
-import { centroidFilePath, createDefaultConfig, DEFAULT_EMBEDDING_MODEL } from './config.js';
+import {
+  centroidFilePath,
+  createDefaultConfig,
+  DEFAULT_EMBEDDING_MODEL,
+  TryaiiDreConfig,
+} from './config.js';
+import * as daemon from './daemon.js';
 import { LocalEmbeddingProvider } from './embeddings/local.js';
 import { DashboardSummary, renderDashboard } from './dashboard/index.js';
 import { ModelInfo, ModelRegistry } from './registry/models.js';
+import { writePaced } from './output.js';
 import {
   Router,
   RouteResult,
@@ -37,6 +44,49 @@ import {
   routeResultBestScore,
 } from './router.js';
 import { Priorities } from './scoring/priorities.js';
+
+/** A routing call backed by either a warm daemon or an in-process Router. */
+type RouteFn = (prompt: string, priorities: Priorities, topK: number) => Promise<RouteResult>;
+
+/**
+ * Resolve a routing function, preferring a warm background daemon (auto-starting
+ * one if needed) so repeated CLI calls skip the embedding-model load. Falls back
+ * to an in-process Router when the daemon is disabled, unavailable, or slow to
+ * start.
+ */
+async function acquireRouteFn(
+  config: TryaiiDreConfig,
+  noDaemon: boolean,
+): Promise<{ routeFn: RouteFn; source: 'daemon' | 'inprocess' }> {
+  if (!noDaemon && !daemon.isDisabled()) {
+    let state: daemon.DaemonState | null = null;
+    try {
+      state = await daemon.ensureDaemon(config, {
+        onStarting: () =>
+          process.stderr.write(
+            '[tryaii] starting routing daemon (first run loads the embedding ' +
+              'model, this can take a minute)...\n',
+          ),
+      });
+    } catch {
+      state = null;
+    }
+    if (state) {
+      const ready = state;
+      return {
+        routeFn: (prompt, priorities, topK) =>
+          daemon.routeViaDaemon(ready, prompt, priorities, topK),
+        source: 'daemon',
+      };
+    }
+  }
+
+  const router = new Router({ config: { embeddingModel: config.embeddingModel } });
+  return {
+    routeFn: (prompt, priorities, topK) => router.route(prompt, { priorities, topK }),
+    source: 'inprocess',
+  };
+}
 
 /** Error type whose message is shown to the user without a stack trace. */
 class CliError extends Error {}
@@ -81,6 +131,7 @@ async function cmdRoute(subArgs: string[]): Promise<void> {
       cost: { type: 'string', default: '3' },
       speed: { type: 'string', default: '3' },
       'top-k': { type: 'string', default: '5' },
+      'no-daemon': { type: 'boolean', default: false },
     },
   });
 
@@ -96,36 +147,39 @@ async function cmdRoute(subArgs: string[]): Promise<void> {
   );
   const topK = intFlag('--top-k', values['top-k'], 5);
 
-  const router = new Router();
-  const result = await router.route(prompt, { priorities, topK });
+  const config = createDefaultConfig();
+  const { routeFn } = await acquireRouteFn(config, Boolean(values['no-daemon']));
+  const result = await routeFn(prompt, priorities, topK);
   const classification = result.classification;
 
-  out.write(`\nPrompt: ${prompt}\n`);
-  out.write(
-    `Category: ${classification?.broadCategory ?? ''} > ${classification?.subcategory ?? ''}\n`,
-  );
-  out.write(`Confidence: ${(classification?.confidence ?? 0).toFixed(3)}\n`);
-  out.write(`Classifier: ${classification?.classifierUsed ?? ''}\n`);
-  out.write(`\nTop ${result.scores.length} Recommendations:\n`);
-  out.write('-'.repeat(70) + '\n');
+  // Provider/pricing for display come from the (cheap) model registry so the
+  // daemon path doesn't need to ship them over the wire.
+  const registry = ModelRegistry.default();
+
+  let buf = `\nPrompt: ${prompt}\n`;
+  buf += `Category: ${classification?.broadCategory ?? ''} > ${classification?.subcategory ?? ''}\n`;
+  buf += `Confidence: ${(classification?.confidence ?? 0).toFixed(3)}\n`;
+  buf += `Classifier: ${classification?.classifierUsed ?? ''}\n`;
+  buf += `\nTop ${result.scores.length} Recommendations:\n`;
+  buf += '-'.repeat(70) + '\n';
 
   result.scores.forEach((score, index) => {
-    const model = router.models.getModel(score.modelId);
+    const model = registry.getModel(score.modelId);
     const provider = model ? model.provider : '?';
-    out.write(`  ${index + 1}. ${score.modelId}\n`);
-    out.write(`     Provider: ${provider} | Score: ${score.finalScore.toFixed(3)}\n`);
-    out.write(
+    buf += `  ${index + 1}. ${score.modelId}\n`;
+    buf += `     Provider: ${provider} | Score: ${score.finalScore.toFixed(3)}\n`;
+    buf +=
       `     Quality: ${score.qualityScore.toFixed(3)} | ` +
-        `Cost: ${score.costScore.toFixed(3)} | Speed: ${score.speedScore.toFixed(3)}\n`,
-    );
+      `Cost: ${score.costScore.toFixed(3)} | Speed: ${score.speedScore.toFixed(3)}\n`;
     if (model?.pricing) {
-      out.write(
+      buf +=
         `     Pricing: $${model.pricing.inputPer1k.toFixed(4)}/` +
-          `$${model.pricing.outputPer1k.toFixed(4)} per 1k\n`,
-      );
+        `$${model.pricing.outputPer1k.toFixed(4)} per 1k\n`;
     }
-    out.write(`     Reason: ${score.reasoning}\n\n`);
+    buf += `     Reason: ${score.reasoning}\n\n`;
   });
+
+  await writePaced(buf);
 }
 
 // ---------------------------------------------------------------------------
@@ -154,8 +208,8 @@ async function cmdModels(subArgs: string[]): Promise<void> {
     return;
   }
 
-  out.write(`\nAvailable Models (${models.length}):\n`);
-  out.write('-'.repeat(70) + '\n');
+  let buf = `\nAvailable Models (${models.length}):\n`;
+  buf += '-'.repeat(70) + '\n';
 
   const byProvider = new Map<string, ModelInfo[]>();
   for (const model of models) {
@@ -166,16 +220,18 @@ async function cmdModels(subArgs: string[]): Promise<void> {
 
   for (const provider of [...byProvider.keys()].sort()) {
     const providerModels = byProvider.get(provider) as ModelInfo[];
-    out.write(`\n  ${provider} (${providerModels.length} models):\n`);
+    buf += `\n  ${provider} (${providerModels.length} models):\n`;
     for (const model of providerModels) {
       const latency = model.latency ?? '?';
       let price = '';
       if (model.pricing) {
         price = ` | $${model.pricing.inputPer1k.toFixed(4)}/${model.pricing.outputPer1k.toFixed(4)}`;
       }
-      out.write(`    - ${model.modelId} [${latency}]${price}\n`);
+      buf += `    - ${model.modelId} [${latency}]${price}\n`;
     }
   }
+
+  await writePaced(buf);
 }
 
 // ---------------------------------------------------------------------------
@@ -196,12 +252,14 @@ async function cmdBenchmarks(subArgs: string[]): Promise<void> {
     return;
   }
 
-  out.write(`\nAvailable Benchmarks (${registry.length}):\n`);
-  out.write('-'.repeat(60) + '\n');
+  let buf = `\nAvailable Benchmarks (${registry.length}):\n`;
+  buf += '-'.repeat(60) + '\n';
   for (const benchmark of registry.allBenchmarks) {
     const norm = `[${benchmark.normalization.minScore}-${benchmark.normalization.maxScore}]`;
-    out.write(`  ${benchmark.name.padEnd(30)} ${norm.padEnd(15)} ${benchmark.description}\n`);
+    buf += `  ${benchmark.name.padEnd(30)} ${norm.padEnd(15)} ${benchmark.description}\n`;
   }
+
+  await writePaced(buf);
 }
 
 // ---------------------------------------------------------------------------
@@ -302,14 +360,14 @@ function topBenchmarksOf(
 }
 
 async function routeEvalRow(
-  router: Router,
+  routeFn: RouteFn,
   row: EvalRow,
   priorities: Priorities,
   topK: number,
 ): Promise<Record<string, unknown>> {
   const started = Date.now();
   try {
-    const result = await router.route(row.prompt, { priorities, topK });
+    const result = await routeFn(row.prompt, priorities, topK);
     const classification = result.classification;
     return {
       id: row.id,
@@ -446,6 +504,7 @@ async function cmdEval(subArgs: string[]): Promise<void> {
       'budget-mode': { type: 'string', default: 'strict' },
       'difficulty-source': { type: 'string', default: 'intrinsic' },
       'difficulty-gamma': { type: 'string', default: '1' },
+      'no-daemon': { type: 'boolean', default: false },
     },
   });
 
@@ -497,14 +556,16 @@ async function cmdEval(subArgs: string[]): Promise<void> {
   }
   out.write(`[eval] loaded ${rows.length} prompt(s)\n`);
 
-  const router = new Router();
-  out.write('[eval] warming up router...\n');
-  await router.route('warmup', { priorities, topK: 1 });
-
+  const config = createDefaultConfig();
   let results: Record<string, unknown>[];
   let budgetSummary: Record<string, unknown> | null = null;
 
   if (maxPrice != null) {
+    // Budget optimization drives the scoring engine directly, so it needs a
+    // real in-process Router rather than the daemon's route() surface.
+    const router = new Router({ config: { embeddingModel: config.embeddingModel } });
+    out.write('[eval] warming up router...\n');
+    await router.route('warmup', { priorities, topK: 1 });
     out.write(
       `[eval] budget     : $${maxPrice.toFixed(6)} total, ` +
         `${outputTokens} output tokens/prompt, mode=${budgetMode}, difficulty=${difficultySource}\n`,
@@ -595,11 +656,14 @@ async function cmdEval(subArgs: string[]): Promise<void> {
       );
     }
   } else {
+    const { routeFn } = await acquireRouteFn(config, Boolean(values['no-daemon']));
+    out.write('[eval] warming up router...\n');
+    await routeFn('warmup', priorities, 1);
     results = [];
     let nextPct = 10;
     const total = rows.length;
     for (let index = 0; index < rows.length; index++) {
-      results.push(await routeEvalRow(router, rows[index], priorities, topK));
+      results.push(await routeEvalRow(routeFn, rows[index], priorities, topK));
       const pct = Math.floor(((index + 1) / Math.max(1, total)) * 100);
       if (pct >= nextPct || index + 1 === total) {
         out.write(`[eval] routed ${index + 1}/${total} (${Math.min(pct, 100)}%)\n`);
@@ -626,24 +690,25 @@ async function cmdEval(subArgs: string[]): Promise<void> {
   writeFileSync(summaryPath, JSON.stringify(summary, null, 2), 'utf-8');
   writeFileSync(dashboardPath, renderDashboard(summary, inputPath), 'utf-8');
 
-  out.write('\n[eval] === Summary ===\n');
-  out.write(`Prompts        : ${summary.totalPrompts}\n`);
-  out.write(`Successes      : ${summary.successCount}\n`);
-  out.write(`Errors         : ${summary.errorCount}\n`);
-  out.write(`Distinct models: ${summary.distinctModels}\n`);
-  out.write(`Avg route time : ${summary.avgRouteMs} ms\n`);
+  let buf = '\n[eval] === Summary ===\n';
+  buf += `Prompts        : ${summary.totalPrompts}\n`;
+  buf += `Successes      : ${summary.successCount}\n`;
+  buf += `Errors         : ${summary.errorCount}\n`;
+  buf += `Distinct models: ${summary.distinctModels}\n`;
+  buf += `Avg route time : ${summary.avgRouteMs} ms\n`;
   if (budgetSummary) {
-    out.write(`Budget status  : ${budgetSummary.status}\n`);
-    out.write(`Estimated cost : $${Number(budgetSummary.totalEstimatedCost).toFixed(6)}\n`);
-    out.write(`Budget         : $${Number(budgetSummary.budget).toFixed(6)}\n`);
+    buf += `Budget status  : ${budgetSummary.status}\n`;
+    buf += `Estimated cost : $${Number(budgetSummary.totalEstimatedCost).toFixed(6)}\n`;
+    buf += `Budget         : $${Number(budgetSummary.budget).toFixed(6)}\n`;
   }
-  out.write('\nTop recommended models:\n');
+  buf += '\nTop recommended models:\n';
   for (const row of summary.distribution.slice(0, 10)) {
-    out.write(`  ${row.model.padEnd(40)} ${String(row.count).padStart(5)}  (${row.pct}%)\n`);
+    buf += `  ${row.model.padEnd(40)} ${String(row.count).padStart(5)}  (${row.pct}%)\n`;
   }
-  out.write(`\n[eval] per-prompt results -> ${resultsPath}\n`);
-  out.write(`[eval] summary            -> ${summaryPath}\n`);
-  out.write(`[eval] dashboard          -> ${dashboardPath}\n`);
+  buf += `\n[eval] per-prompt results -> ${resultsPath}\n`;
+  buf += `[eval] summary            -> ${summaryPath}\n`;
+  buf += `[eval] dashboard          -> ${dashboardPath}\n`;
+  await writePaced(buf);
 
   // Exit non-zero when every prompt errored so callers / CI can detect a total failure.
   if (summary.totalPrompts > 0 && summary.errorCount === summary.totalPrompts) {
@@ -686,6 +751,14 @@ Eval-only options:
   --difficulty-source <s>  Gauge task complexity: 'intrinsic' (default), 'capability', or 'blend'
   --difficulty-gamma <n>   How hard to shift budget toward complex prompts (default 1; 0 disables)
 
+Daemon (faster repeated routing):
+  route and eval auto-start a background daemon that keeps the embedding model
+  warm, so repeated calls skip the multi-second model load. The first call is
+  slow; the rest are near-instant.
+  --no-daemon           Route in-process for this call; do not use or start a daemon
+  TRYAII_NO_DAEMON=1    Disable the daemon globally (always route in-process)
+  TRYAII_DAEMON_IDLE=<s>  Shut the daemon down after this many idle seconds (default 900)
+
 Global flags:
   --no-banner           Disable the startup banner (also honored via TRYAII_NO_BANNER)
   -v, --verbose         Enable verbose logging
@@ -694,9 +767,9 @@ Global flags:
 
 Examples:
   tryaii route "Write a Python function to merge sorted arrays" --quality=5 --cost=1
-  tryaii eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
-  tryaii eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
-  tryaii eval prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
+  tryaii eval examples/prompts.json --output results/run --quality=5 --cost=1 --speed=1
+  tryaii eval examples/prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+  tryaii eval examples/prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
 `;
 
 // Per-command help. Each constant must stay byte-identical to the matching
@@ -766,9 +839,9 @@ Options:
   --difficulty-gamma <n>   Shift budget toward harder prompts (default 1; 0 disables)
 
 Examples:
-  tryaii eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
-  tryaii eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
-  tryaii eval prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
+  tryaii eval examples/prompts.json --output results/run --quality=5 --cost=1 --speed=1
+  tryaii eval examples/prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+  tryaii eval examples/prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
 
 Exit codes:
   0 success (incl. partial per-prompt failures), 1 bad input / warmup / all
@@ -950,7 +1023,7 @@ async function main(): Promise<void> {
     // help command itself -- consistent with `tryaii <command> --help`.
     const topic = subArgs.find((arg) => !arg.startsWith('-'));
     if (!topic) {
-      out.write(wantsHelp ? COMMAND_HELP.help : HELP);
+      await writePaced(wantsHelp ? COMMAND_HELP.help : HELP);
       return;
     }
     const topicHelp = COMMAND_HELP[topic];
@@ -959,18 +1032,18 @@ async function main(): Promise<void> {
         `unknown help topic: ${topic}. Run "tryaii help" for the list of commands.`,
       );
     }
-    out.write(topicHelp);
+    await writePaced(topicHelp);
     return;
   }
 
   if (!command) {
-    out.write(HELP);
+    await writePaced(HELP);
     return;
   }
 
   if (wantsHelp) {
     // Unknown command + --help still gets the global overview (then nothing else runs).
-    out.write(COMMAND_HELP[command] ?? HELP);
+    await writePaced(COMMAND_HELP[command] ?? HELP);
     return;
   }
 

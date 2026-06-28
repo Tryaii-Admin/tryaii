@@ -59,6 +59,14 @@ Eval-only options:
   --difficulty-source <s>  Gauge task complexity: 'intrinsic' (default), 'capability', or 'blend'
   --difficulty-gamma <n>   How hard to shift budget toward complex prompts (default 1; 0 disables)
 
+Daemon (faster repeated routing):
+  route and eval auto-start a background daemon that keeps the embedding model
+  warm, so repeated calls skip the multi-second model load. The first call is
+  slow; the rest are near-instant.
+  --no-daemon           Route in-process for this call; do not use or start a daemon
+  TRYAII_NO_DAEMON=1    Disable the daemon globally (always route in-process)
+  TRYAII_DAEMON_IDLE=<s>  Shut the daemon down after this many idle seconds (default 900)
+
 Global flags:
   --no-banner           Disable the startup banner (also honored via TRYAII_NO_BANNER)
   -v, --verbose         Enable verbose logging
@@ -67,9 +75,9 @@ Global flags:
 
 Examples:
   tryaii route "Write a Python function to merge sorted arrays" --quality=5 --cost=1
-  tryaii eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
-  tryaii eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
-  tryaii eval prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
+  tryaii eval examples/prompts.json --output results/run --quality=5 --cost=1 --speed=1
+  tryaii eval examples/prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+  tryaii eval examples/prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
 """
 
 # Per-command help. Each string must stay byte-identical to the matching
@@ -137,9 +145,9 @@ Options:
   --difficulty-gamma <n>   Shift budget toward harder prompts (default 1; 0 disables)
 
 Examples:
-  tryaii eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
-  tryaii eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
-  tryaii eval prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
+  tryaii eval examples/prompts.json --output results/run --quality=5 --cost=1 --speed=1
+  tryaii eval examples/prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
+  tryaii eval examples/prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
 
 Exit codes:
   0 success (incl. partial per-prompt failures), 1 bad input / warmup / all
@@ -272,42 +280,112 @@ COMMAND_HELP = {
     "help": HELP_HELP,
 }
 
+# Per-line delay (seconds) when revealing human-readable output interactively.
+_LINE_DELAY = 0.022
+
+
+def _write_paced(text: str) -> None:
+    """Write human-readable text, revealing it line-by-line at a controlled pace.
+
+    Mirrors ``writePaced`` in the Node CLI: paces the output when stdout is an
+    interactive terminal, but dumps instantly (no delay) when stdout is
+    piped/redirected or when the banner is suppressed, so scripted use,
+    ``--json``, and ``--no-banner`` stay snappy and clean.
+
+    Used for help screens and command results (route/models/benchmarks/eval
+    summary). Live progress lines and operational logs are printed directly so
+    they appear in real time.
+    """
+    animate = bool(getattr(sys.stdout, "isatty", lambda: False)()) and not os.environ.get(
+        "TRYAII_NO_BANNER"
+    )
+    if not animate:
+        sys.stdout.write(text)
+        return
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        sys.stdout.write(line + "\n" if i < len(lines) - 1 else line)
+        sys.stdout.flush()
+        time.sleep(_LINE_DELAY)
+
+
+def _acquire_route_fn(config, no_daemon: bool):
+    """Return (route_fn, source) where route_fn(prompt, priorities, top_k) -> RouteResult.
+
+    Prefers a warm background daemon (auto-starting one if needed) so repeated
+    CLI calls skip the embedding-model load. Falls back to an in-process Router
+    when the daemon is disabled, unavailable, or fails to start in time.
+    """
+    from tryaii import daemon as daemon_mod
+
+    if not no_daemon and not daemon_mod.is_disabled():
+        def _notice():
+            print(
+                "[tryaii] starting routing daemon (first run loads the embedding "
+                "model, this can take a minute)...",
+                file=sys.stderr,
+                flush=True,
+            )
+
+        try:
+            state = daemon_mod.ensure_daemon(config, on_starting=_notice)
+        except Exception as exc:  # noqa: BLE001 -- never let daemon issues break routing
+            logging.getLogger("tryaii").warning("daemon unavailable, routing in-process: %s", exc)
+            state = None
+        if state is not None:
+            return (lambda prompt, priorities, top_k: daemon_mod.route(
+                state, prompt, priorities, top_k)), "daemon"
+
+    from tryaii import Router
+
+    router = Router(config=config)
+    return (lambda prompt, priorities, top_k: router.route(
+        prompt, priorities=priorities, top_k=top_k)), "inprocess"
+
 
 def cmd_route(args):
     """Route a prompt and display results."""
-    from tryaii import Priorities, Router
+    from tryaii import Priorities
+    from tryaii.config import TryaiiDreConfig
+    from tryaii.registry.models import ModelRegistry
 
-    router = Router()
-
+    config = TryaiiDreConfig()
     priorities = Priorities(
         quality=args.quality,
         cost=args.cost,
         speed=args.speed,
     )
 
-    result = router.route(args.prompt, priorities=priorities, top_k=args.top_k)
+    route_fn, _source = _acquire_route_fn(config, getattr(args, "no_daemon", False))
+    result = route_fn(args.prompt, priorities, args.top_k)
 
-    print(f"\nPrompt: {args.prompt}")
-    print(f"Category: {result.classification.broad_category} > {result.classification.subcategory}")
-    print(f"Confidence: {result.classification.confidence:.3f}")
-    print(f"Classifier: {result.classification.classifier_used}")
-    print(f"\nTop {len(result.scores)} Recommendations:")
-    print("-" * 70)
+    # Provider/pricing for display come from the (cheap, torch-free) model
+    # registry so the daemon path doesn't need to ship them over the wire.
+    registry = ModelRegistry.default()
+
+    buf = f"\nPrompt: {args.prompt}\n"
+    buf += f"Category: {result.classification.broad_category} > {result.classification.subcategory}\n"
+    buf += f"Confidence: {result.classification.confidence:.3f}\n"
+    buf += f"Classifier: {result.classification.classifier_used}\n"
+    buf += f"\nTop {len(result.scores)} Recommendations:\n"
+    buf += "-" * 70 + "\n"
 
     for i, score in enumerate(result.scores, 1):
-        model = router.models.get_model(score.model_id)
+        model = registry.get_model(score.model_id)
         provider = model.provider if model else "?"
         price = ""
         if model and model.pricing:
             price = f"${model.pricing.input_per_1k:.4f}/${model.pricing.output_per_1k:.4f} per 1k"
 
-        print(f"  {i}. {score.model_id}")
-        print(f"     Provider: {provider} | Score: {score.final_score:.3f}")
-        print(f"     Quality: {score.quality_score:.3f} | Cost: {score.cost_score:.3f} | Speed: {score.speed_score:.3f}")
+        buf += f"  {i}. {score.model_id}\n"
+        buf += f"     Provider: {provider} | Score: {score.final_score:.3f}\n"
+        buf += f"     Quality: {score.quality_score:.3f} | Cost: {score.cost_score:.3f} | Speed: {score.speed_score:.3f}\n"
         if price:
-            print(f"     Pricing: {price}")
-        print(f"     Reason: {score.reasoning}")
-        print()
+            buf += f"     Pricing: {price}\n"
+        buf += f"     Reason: {score.reasoning}\n"
+        buf += "\n"
+
+    _write_paced(buf)
 
 
 def _load_eval_prompts(path: Path) -> list[dict]:
@@ -346,10 +424,10 @@ def _top_benchmarks(classification, limit: int = 5) -> list[dict]:
     return [{"name": name, "score": round(score, 4)} for name, score in pairs[:limit]]
 
 
-def _route_eval_row(router, row: dict, priorities, top_k: int) -> dict:
+def _route_eval_row(route_fn, row: dict, priorities, top_k: int) -> dict:
     started = time.perf_counter()
     try:
-        result = router.route(row["prompt"], priorities=priorities, top_k=top_k)
+        result = route_fn(row["prompt"], priorities, top_k)
         classification = result.classification
         return {
             "id": row["id"],
@@ -636,6 +714,7 @@ def cmd_eval(args):
     """Route a JSON prompt dataset and write results.jsonl + summary.json."""
     from tryaii import Priorities, Router
     from tryaii.budget import route_dataset_with_budget
+    from tryaii.config import TryaiiDreConfig
 
     if args.difficulty_gamma < 0:
         # Usage error -> exit 2, matching both argparse and the Node CLI.
@@ -664,12 +743,14 @@ def cmd_eval(args):
         print("[eval] priorities : ignored for budgeted runs")
     print(f"[eval] loaded {len(rows)} prompt(s)")
 
-    router = Router()
-    print("[eval] warming up router...")
-    router.route("warmup", priorities=priorities, top_k=1)
-
+    config = TryaiiDreConfig()
     budget_summary = None
     if args.max_price is not None:
+        # Budget optimization drives the scoring engine directly, so it needs a
+        # real in-process Router rather than the daemon's route() surface.
+        router = Router(config=config)
+        print("[eval] warming up router...")
+        router.route("warmup", priorities=priorities, top_k=1)
         print(
             f"[eval] budget     : ${args.max_price:.6f} total, "
             f"{args.output_tokens} output tokens/prompt, mode={args.budget_mode}, "
@@ -769,11 +850,14 @@ def cmd_eval(args):
                 f"{optimization.effective_output_tokens} tokens/prompt"
             )
     else:
+        route_fn, _source = _acquire_route_fn(config, getattr(args, "no_daemon", False))
+        print("[eval] warming up router...")
+        route_fn("warmup", priorities, 1)
         results = []
         next_progress_pct = 10
         total_rows = len(rows)
         for idx, row in enumerate(rows, start=1):
-            results.append(_route_eval_row(router, row, priorities, args.top_k))
+            results.append(_route_eval_row(route_fn, row, priorities, args.top_k))
             progress_pct = int((idx / max(1, total_rows)) * 100)
             if progress_pct >= next_progress_pct or idx == total_rows:
                 print(f"[eval] routed {idx}/{total_rows} ({min(progress_pct, 100)}%)")
@@ -798,22 +882,23 @@ def cmd_eval(args):
         encoding="utf-8",
     )
 
-    print("\n[eval] === Summary ===")
-    print(f"Prompts        : {summary['totalPrompts']}")
-    print(f"Successes      : {summary['successCount']}")
-    print(f"Errors         : {summary['errorCount']}")
-    print(f"Distinct models: {summary['distinctModels']}")
-    print(f"Avg route time : {summary['avgRouteMs']} ms")
+    buf = "\n[eval] === Summary ===\n"
+    buf += f"Prompts        : {summary['totalPrompts']}\n"
+    buf += f"Successes      : {summary['successCount']}\n"
+    buf += f"Errors         : {summary['errorCount']}\n"
+    buf += f"Distinct models: {summary['distinctModels']}\n"
+    buf += f"Avg route time : {summary['avgRouteMs']} ms\n"
     if budget_summary is not None:
-        print(f"Budget status  : {budget_summary['status']}")
-        print(f"Estimated cost : ${budget_summary['totalEstimatedCost']:.6f}")
-        print(f"Budget         : ${budget_summary['budget']:.6f}")
-    print("\nTop recommended models:")
+        buf += f"Budget status  : {budget_summary['status']}\n"
+        buf += f"Estimated cost : ${budget_summary['totalEstimatedCost']:.6f}\n"
+        buf += f"Budget         : ${budget_summary['budget']:.6f}\n"
+    buf += "\nTop recommended models:\n"
     for row in summary["distribution"][:10]:
-        print(f"  {row['model']:<40} {row['count']:>5}  ({row['pct']}%)")
-    print(f"\n[eval] per-prompt results -> {results_path}")
-    print(f"[eval] summary            -> {summary_path}")
-    print(f"[eval] dashboard          -> {dashboard_path}")
+        buf += f"  {row['model']:<40} {row['count']:>5}  ({row['pct']}%)\n"
+    buf += f"\n[eval] per-prompt results -> {results_path}\n"
+    buf += f"[eval] summary            -> {summary_path}\n"
+    buf += f"[eval] dashboard          -> {dashboard_path}\n"
+    _write_paced(buf)
 
     # Exit non-zero when every prompt errored so callers/CI can detect a total failure.
     total_prompts = summary["totalPrompts"]
@@ -861,21 +946,23 @@ def cmd_models(args):
         print(json.dumps(data, indent=2))
         return
 
-    print(f"\nAvailable Models ({len(models)}):")
-    print("-" * 70)
+    buf = f"\nAvailable Models ({len(models)}):\n"
+    buf += "-" * 70 + "\n"
 
     by_provider: dict[str, list] = {}
     for m in models:
         by_provider.setdefault(m.provider, []).append(m)
 
     for provider, provider_models in sorted(by_provider.items()):
-        print(f"\n  {provider} ({len(provider_models)} models):")
+        buf += f"\n  {provider} ({len(provider_models)} models):\n"
         for m in provider_models:
             latency = m.latency or "?"
             price = ""
             if m.pricing:
                 price = f" | ${m.pricing.input_per_1k:.4f}/{m.pricing.output_per_1k:.4f}"
-            print(f"    - {m.model_id} [{latency}]{price}")
+            buf += f"    - {m.model_id} [{latency}]{price}\n"
+
+    _write_paced(buf)
 
 
 def cmd_benchmarks(args):
@@ -889,12 +976,14 @@ def cmd_benchmarks(args):
         print(json.dumps(data, indent=2))
         return
 
-    print(f"\nAvailable Benchmarks ({len(registry)}):")
-    print("-" * 60)
+    buf = f"\nAvailable Benchmarks ({len(registry)}):\n"
+    buf += "-" * 60 + "\n"
 
     for b in registry.all_benchmarks:
         norm = f"[{b.normalization.min_score}-{b.normalization.max_score}]"
-        print(f"  {b.name:30s} {norm:15s} {b.description}")
+        buf += f"  {b.name:30s} {norm:15s} {b.description}\n"
+
+    _write_paced(buf)
 
 
 def cmd_regenerate(args):
@@ -935,6 +1024,9 @@ def cli():
     route_parser.add_argument("--cost", type=int, default=3, help="Cost priority (1-5)")
     route_parser.add_argument("--speed", type=int, default=3, help="Speed priority (1-5)")
     route_parser.add_argument("--top-k", type=int, default=5, help="Number of recommendations")
+    route_parser.add_argument(
+        "--no-daemon", action="store_true", help="Route in-process; do not use or start a daemon"
+    )
 
     # eval
     eval_parser = subparsers.add_parser("eval", help="Route a JSON prompt dataset")
@@ -969,6 +1061,9 @@ def cli():
         type=float,
         default=1.0,
         help="How hard to shift budget toward complex prompts (default 1; 0 disables)",
+    )
+    eval_parser.add_argument(
+        "--no-daemon", action="store_true", help="Route in-process; do not use or start a daemon"
     )
 
     # setup
@@ -1037,7 +1132,7 @@ def cli():
         topics = [a for a in filtered[1:] if not a.startswith("-")]
         topic = topics[0] if topics else None
         if topic is None:
-            sys.stdout.write(COMMAND_HELP["help"] if wants_help else HELP)
+            _write_paced(COMMAND_HELP["help"] if wants_help else HELP)
             return
         topic_help = COMMAND_HELP.get(topic)
         if topic_help is None:
@@ -1047,16 +1142,16 @@ def cli():
                 file=sys.stderr,
             )
             sys.exit(2)
-        sys.stdout.write(topic_help)
+        _write_paced(topic_help)
         return
 
     if command is None:
-        sys.stdout.write(HELP)
+        _write_paced(HELP)
         return
 
     if wants_help:
         # Unknown command + --help still gets the global overview.
-        sys.stdout.write(COMMAND_HELP.get(command, HELP))
+        _write_paced(COMMAND_HELP.get(command, HELP))
         return
 
     args = parser.parse_args(filtered)

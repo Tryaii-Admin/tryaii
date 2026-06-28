@@ -42,7 +42,7 @@ _DIM = "\x1b[2m"
 _TITLE = "Diff Routing Engine"
 _TAGLINE = "semantic, prompt-aware LLM routing  ·  benchmarks × cost × speed"
 
-_FRAME_DELAY = 0.022  # seconds between revealed rows
+_FRAME_DELAY = 0.033  # seconds between revealed wordmark rows
 
 
 def _enable_windows_ansi() -> bool:

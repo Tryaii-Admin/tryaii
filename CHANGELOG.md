@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Routing daemon — fast repeated `route`/`eval`
+
+`tryaii route` and `tryaii eval` previously paid the full embedding-stack import
+and model load on every invocation (tens of seconds), since each CLI call is a
+fresh process; the routing itself is sub-millisecond. Both SDKs now keep a warm
+background daemon so only the first call pays that cost — subsequent calls drop
+from ~minute to ~milliseconds.
+
+- **Fully transparent — no new commands:** `route`/`eval` auto-start a daemon on
+  first use and reuse it thereafter, falling back to in-process routing if it
+  can't start. The daemon self-stops when idle (or on `SIGTERM`); the detached
+  server runs as a module (`python -m tryaii.server` / `node .../server.js`).
+- **New flag / env:** `--no-daemon` (per-call opt-out), `TRYAII_NO_DAEMON=1`
+  (global opt-out), `TRYAII_DAEMON_IDLE=<seconds>` (idle shutdown, default 900).
+- Implemented identically in the Python and Node SDKs (separate per-runtime
+  daemons; loopback TCP + token auth). Protocol documented in `docs/daemon.md`.
+
 ### Catalog: standardized OpenAI latency tiers
 
 Normalized inconsistent latency tiers in the OpenAI line so siblings rank
@@ -65,6 +82,8 @@ models** (`"updated": "2026-06"`).
 - **Re-priced/re-latency'd** several existing models from the upstream catalog
   (notably `claude-opus-4-5` output $0.075→$0.25/1k, `o3`, `gemini-2.5-pro`,
   `gpt-5.2`). This changes cost/latency-based routing for those models.
+- **Corrected two upstream price typos** (input ≥ output): `gemini-2.5-flash`
+  output $0.00025→$0.0025 and `gemini-3-flash-preview` input $0.003→$0.0003.
 - Added OpenRouter slug mappings for the 14 new models (both SDKs).
 - `ARC` scores stay DRE-owned (tryai's ARC column drifted to a different scale);
   new models use peer-consistent ARC estimates. Scoring algorithm unchanged.

@@ -657,7 +657,7 @@
       ],
       "pricing": {
         "input_per_1k": 0.0003,
-        "output_per_1k": 0.00025
+        "output_per_1k": 0.0025
       },
       "latency": "fast",
       "description": "Gemini 2.5 Flash: Balanced speed and quality"
@@ -714,7 +714,7 @@
         "code-generation"
       ],
       "pricing": {
-        "input_per_1k": 0.003,
+        "input_per_1k": 0.0003,
         "output_per_1k": 0.0005
       },
       "latency": "fast",

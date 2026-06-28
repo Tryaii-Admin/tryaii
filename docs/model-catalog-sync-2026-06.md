@@ -87,14 +87,15 @@ place (harmless; avoids breaking callers still passing old IDs).
    DRE routable catalog (DRE recommends models; access enforcement is the
    caller's concern).
 
-## ⚠️ Upstream data anomalies (mirrored faithfully, flag for tryai owner)
+## ⚠️ Upstream data anomalies (corrected locally — flag for tryai owner)
 
-Two existing-model prices in `INITIAL_MODELS` look like upstream typos (input ≥
-output, which is backwards for every other model). They were mirrored as-is to
-keep DRE a faithful mirror; **verify and fix upstream**, then resync:
+Two existing-model prices in `INITIAL_MODELS` looked like upstream typos (input ≥
+output, which is backwards for every other model). They affect cost-based routing
+for those models, so DRE **corrected them locally** rather than mirror them; the
+upstream catalog should still be **verified and fixed**, then resynced:
 
-- `gemini-2.5-flash`: input $0.0003 / **output $0.00025** (output likely meant $0.0025).
-- `gemini-3-flash-preview`: **input $0.003** / output $0.0005 (input likely meant $0.0003).
+- `gemini-2.5-flash`: output $0.00025 → **$0.0025** (output was below input).
+- `gemini-3-flash-preview`: input $0.003 → **$0.0003** (input was above output).
 
 The new OpenRouter slugs for the 14 added models are best-effort (derived from
 existing naming patterns) and should be verified against OpenRouter's live
