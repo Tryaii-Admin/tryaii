@@ -28,19 +28,29 @@ export class Priorities {
     this.speed = Math.max(1, Math.min(5, Math.round(speed)));
   }
 
-  /** Quality weight: 0.3 to 1.2 (always has baseline influence). */
+  /**
+   * Quality weight: 0.3 (priority 1) .. 1.2 (priority 5). Quality always keeps a
+   * baseline influence so a prompt is never scored on cost/speed alone -- this
+   * also guarantees the weight total is never zero (no divide-by-zero in the
+   * scoring engine even when cost and speed are both fully suppressed).
+   */
   get qualityWeight(): number {
-    return 0.3 + (this.quality / 5) * 0.9;
+    return 0.3 + ((this.quality - 1) / 4) * 0.9;
   }
 
-  /** Cost weight: 0.1 to 1.0 (can be fully suppressed). */
+  /**
+   * Cost weight: 0 (priority 1) .. 1.0 (priority 5). Fully suppressible -- a
+   * priority of 1 removes cost from the decision entirely, so e.g.
+   * `Priorities(5, 1, 1)` is a true quality-only route (previously cost/speed
+   * kept a 0.28 floor that let a cheaper model out-rank a higher-quality one).
+   */
   get costWeight(): number {
-    return 0.1 + (this.cost / 5) * 0.9;
+    return ((this.cost - 1) / 4) * 1.0;
   }
 
-  /** Speed weight: 0.1 to 1.0 (can be fully suppressed). */
+  /** Speed weight: 0 (priority 1) .. 1.0 (priority 5). Fully suppressible, like cost. */
   get speedWeight(): number {
-    return 0.1 + (this.speed / 5) * 0.9;
+    return ((this.speed - 1) / 4) * 1.0;
   }
 
   toDict(): PrioritiesData {
