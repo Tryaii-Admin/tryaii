@@ -20,6 +20,7 @@ import {
 } from 'node:fs';
 import * as net from 'node:net';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import type { TryaiiDreConfig } from './config.js';
 import type { ClassificationResult } from './classifiers/base.js';
@@ -230,12 +231,13 @@ function releaseSpawnLock(config: TryaiiDreConfig): void {
 
 function spawnServe(config: TryaiiDreConfig): ChildProcess {
   mkdirSync(config.dataDir, { recursive: true });
-  // Re-run this same CLI entry as a detached `serve` process. The child writes
-  // its stdout/stderr to the daemon log via stdio file paths.
-  const cliEntry = process.argv[1];
+  // Launch the server module directly as a detached process -- there is no
+  // public `serve` subcommand. server.js reads its model + data dir from the
+  // env we hand it below, and runs the serve loop when invoked as the entry.
+  const serverEntry = fileURLToPath(new URL('./server.js', import.meta.url));
   const child = spawn(
     process.execPath,
-    [cliEntry, 'serve', '--no-banner', '--model', config.embeddingModel],
+    [serverEntry],
     {
       detached: true,
       stdio: 'ignore',

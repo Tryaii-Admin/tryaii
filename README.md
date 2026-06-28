@@ -77,17 +77,14 @@ once; every call after it is near-instant.
 ```bash
 tryaii route "what's greater, 5 or 5.5?"   # first call: loads the model, starts the daemon
 tryaii route "write a haiku about winter"  # subsequent calls: ~milliseconds of routing
-
-tryaii daemon status     # is it running? which model / port / uptime?
-tryaii daemon stop       # shut it down (it also self-stops after 15 min idle)
-tryaii serve             # or run it in the foreground (Ctrl-C to stop)
 ```
 
-It's fully transparent and safe to ignore. To opt out for a single call use
-`--no-daemon`; to disable it everywhere set `TRYAII_NO_DAEMON=1`. Tune the idle
-shutdown with `TRYAII_DAEMON_IDLE=<seconds>`. The Python and Node SDKs run
-separate daemons (their embedding backends differ); see
-[`docs/daemon.md`](docs/daemon.md) for the protocol and state-file details.
+It's fully transparent and safe to ignore — there are no daemon commands to
+learn. The daemon self-stops after 15 minutes idle (or on `SIGTERM`). To opt out
+for a single call use `--no-daemon`; to disable it everywhere set
+`TRYAII_NO_DAEMON=1`. Tune the idle shutdown with `TRYAII_DAEMON_IDLE=<seconds>`.
+The Python and Node SDKs run separate daemons (their embedding backends differ);
+see [`docs/daemon.md`](docs/daemon.md) for the protocol and state-file details.
 
 ## 30-second quickstart (SDK)
 

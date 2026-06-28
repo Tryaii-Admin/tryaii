@@ -2,13 +2,15 @@
  * Server side of the routing daemon (see docs/daemon.md).
  *
  * Builds a Router, warms the embedding model once, then serves routing
- * requests over a loopback socket until idle or shut down. Imported only by
- * the daemon process (via `tryaii serve`), never on the client's hot path.
+ * requests over a loopback socket until idle or shut down. Run as its own
+ * process by the daemon auto-start (see daemon.ts spawnServe), never on the
+ * client's hot path.
  */
 
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import * as net from 'node:net';
+import { fileURLToPath } from 'node:url';
 
 import type { ClassificationResult } from './classifiers/base.js';
 import { createDefaultConfig, type TryaiiDreConfig } from './config.js';
@@ -259,7 +261,7 @@ export async function serve(
       writeState(cfg, state);
       log(
         `[daemon] listening on ${addr.address}:${addr.port} (pid ${process.pid}); ` +
-          `idle timeout ${idle}s. Stop with: tryaii daemon stop`,
+          `idle timeout ${idle}s. Stops when idle, on SIGTERM, or with TRYAII_NO_DAEMON=1`,
       );
       resetIdle();
       opts.onReady?.(state);
@@ -267,5 +269,22 @@ export async function serve(
 
     process.on('SIGTERM', onSignal);
     process.on('SIGINT', onSignal);
+  });
+}
+
+// When launched as its own process by the daemon auto-start, run the serve
+// loop. The embedding model and data dir arrive via env vars set by the
+// spawning client (there is no public `serve` subcommand).
+if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {
+  const overrides: Partial<TryaiiDreConfig> = {};
+  const model = process.env.TRYAII_DRE_EMBEDDING_MODEL;
+  const dataDir = process.env.TRYAII_DRE_DATA_DIR;
+  if (model) overrides.embeddingModel = model;
+  if (dataDir) overrides.dataDir = dataDir;
+  void serve(overrides).catch((err: unknown) => {
+    process.stderr.write(
+      `[daemon] fatal: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    process.exitCode = 1;
   });
 }

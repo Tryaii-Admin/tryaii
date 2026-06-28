@@ -8,8 +8,6 @@ Commands (kept in parity with the Node SDK's `tryaii`):
     tryaii models                        -- List available models
     tryaii benchmarks                    -- List available benchmarks
     tryaii regenerate                    -- Regenerate centroids (after model change)
-    tryaii serve                         -- Run the routing daemon in the foreground
-    tryaii daemon <action>               -- Manage the background daemon (start/stop/status/restart)
 
 Global flags: --no-banner, -v/--verbose, -V/--version, -h/--help.
 
@@ -44,8 +42,6 @@ Commands:
   benchmarks            List available benchmarks (--json)
   setup                 Download the embedding model and warm centroids (--model <name>)
   regenerate            Rebuild benchmark centroids, e.g. after changing the embedding model (--model <name>)
-  serve                 Run the routing daemon in the foreground (Ctrl-C to stop)
-  daemon <action>       Manage the background daemon: start, stop, status, restart
 
 Common options:
   --quality <1-5>       Quality priority for route/eval (default 3)
@@ -80,7 +76,6 @@ Examples:
   tryaii eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
   tryaii eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
   tryaii eval prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
-  tryaii daemon status
 """
 
 
@@ -773,57 +768,6 @@ def cmd_regenerate(args):
     print(f"Done! Generated {len(centroids)} centroids at {config.centroid_file}")
 
 
-def cmd_serve(args):
-    """Run the routing daemon in the foreground."""
-    from tryaii import server
-    from tryaii.config import TryaiiDreConfig
-
-    config = TryaiiDreConfig()
-    if getattr(args, "model", None):
-        config.embedding_model = args.model
-    idle = getattr(args, "idle", None)
-    server.serve(config=config, idle_timeout=idle)
-
-
-def cmd_daemon(args):
-    """Manage the background routing daemon (start/stop/status/restart)."""
-    from tryaii import daemon as daemon_mod
-    from tryaii.config import TryaiiDreConfig
-
-    config = TryaiiDreConfig()
-    if getattr(args, "model", None):
-        config.embedding_model = args.model
-    action = args.action
-
-    if action == "status":
-        info = daemon_mod.status(config)
-        if info is None:
-            print("tryaii daemon: not running")
-        else:
-            uptime_s = int(info.get("uptimeMs", 0)) / 1000
-            print(
-                f"tryaii daemon: running (pid {info.get('pid')}, "
-                f"model {info.get('embeddingModel')}, "
-                f"{info.get('host')}:{info.get('port')}, up {uptime_s:.0f}s)"
-            )
-        return
-
-    if action == "stop":
-        print("tryaii daemon: stopped" if daemon_mod.stop(config) else "tryaii daemon: not running")
-        return
-
-    if action in ("start", "restart"):
-        if action == "restart":
-            daemon_mod.stop(config)
-        print("tryaii daemon: starting (loading the embedding model, this can take a minute)...")
-        state = daemon_mod.ensure_daemon(config, on_starting=lambda: None)
-        if state is None:
-            print("error: daemon failed to start; see daemon log in the data dir", file=sys.stderr)
-            sys.exit(1)
-        print(f"tryaii daemon: running ({state['host']}:{state['port']}, pid {state['pid']})")
-        return
-
-
 def cli():
     """Main CLI entry point."""
     # -v/--verbose, --no-banner, -V/--version and -h/--help are handled before
@@ -902,18 +846,6 @@ def cli():
     regen_parser = subparsers.add_parser("regenerate", help="Regenerate centroids")
     regen_parser.add_argument("--model", help="Embedding model name")
 
-    # serve
-    serve_parser = subparsers.add_parser("serve", help="Run the routing daemon in the foreground")
-    serve_parser.add_argument("--model", help="Embedding model name")
-    serve_parser.add_argument(
-        "--idle", type=int, help="Idle seconds before self-shutdown (default 900; 0 disables)"
-    )
-
-    # daemon
-    daemon_parser = subparsers.add_parser("daemon", help="Manage the background daemon")
-    daemon_parser.add_argument("action", choices=("start", "stop", "status", "restart"))
-    daemon_parser.add_argument("--model", help="Embedding model name")
-
     raw_args = sys.argv[1:]
 
     # --version short-circuits everything else (matches the Node CLI).
@@ -963,8 +895,6 @@ def cli():
         "models": cmd_models,
         "benchmarks": cmd_benchmarks,
         "regenerate": cmd_regenerate,
-        "serve": cmd_serve,
-        "daemon": cmd_daemon,
     }
     try:
         handlers[args.command](args)

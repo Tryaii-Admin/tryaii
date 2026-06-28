@@ -8,8 +8,6 @@
  *   tryaii setup                      -- Download the embedding model + warm centroids
  *   tryaii models                     -- List available models
  *   tryaii benchmarks                 -- List available benchmarks
- *   tryaii serve                      -- Run the routing daemon in the foreground
- *   tryaii daemon <action>            -- Manage the background daemon (start/stop/status/restart)
  *
  * Global flags: --no-banner, -v/--verbose, -V/--version, -h/--help.
  *
@@ -42,7 +40,6 @@ import {
   routeResultBestReasoning,
   routeResultBestScore,
 } from './router.js';
-import { serve } from './server.js';
 import { Priorities } from './scoring/priorities.js';
 
 /** A routing call backed by either a warm daemon or an in-process Router. */
@@ -305,68 +302,6 @@ async function cmdRegenerate(subArgs: string[]): Promise<void> {
   generator.save(centroids, path);
 
   out.write(`Done! Generated ${Object.keys(centroids).length} centroids at ${path}\n`);
-}
-
-// ---------------------------------------------------------------------------
-// serve / daemon
-// ---------------------------------------------------------------------------
-
-async function cmdServe(subArgs: string[]): Promise<void> {
-  const { values } = parseArgs({
-    args: subArgs,
-    allowPositionals: true,
-    options: {
-      model: { type: 'string' },
-      idle: { type: 'string' },
-    },
-  });
-
-  const embeddingModel = values.model ?? DEFAULT_EMBEDDING_MODEL;
-  const idleTimeout = values.idle != null ? intFlag('--idle', values.idle, daemon.idleSeconds()) : undefined;
-  await serve({ embeddingModel }, { idleTimeout });
-}
-
-async function cmdDaemon(subArgs: string[]): Promise<void> {
-  const { values, positionals } = parseArgs({
-    args: subArgs,
-    allowPositionals: true,
-    options: { model: { type: 'string' } },
-  });
-
-  const action = positionals[0];
-  if (!action || !['start', 'stop', 'status', 'restart'].includes(action)) {
-    throw new CliUsageError('daemon requires an action: start, stop, status, or restart');
-  }
-
-  const config = createDefaultConfig(values.model ? { embeddingModel: values.model } : undefined);
-
-  if (action === 'status') {
-    const info = await daemon.status(config);
-    if (!info) {
-      out.write('tryaii daemon: not running\n');
-    } else {
-      const uptimeS = Math.round(Number(info.uptimeMs ?? 0) / 1000);
-      out.write(
-        `tryaii daemon: running (pid ${info.pid}, model ${info.embeddingModel}, ` +
-          `${info.host}:${info.port}, up ${uptimeS}s)\n`,
-      );
-    }
-    return;
-  }
-
-  if (action === 'stop') {
-    out.write((await daemon.stop(config)) ? 'tryaii daemon: stopped\n' : 'tryaii daemon: not running\n');
-    return;
-  }
-
-  // start / restart
-  if (action === 'restart') await daemon.stop(config);
-  out.write('tryaii daemon: starting (loading the embedding model, this can take a minute)...\n');
-  const state = await daemon.ensureDaemon(config, { onStarting: () => {} });
-  if (!state) {
-    throw new CliError('daemon failed to start; see daemon log in the data dir');
-  }
-  out.write(`tryaii daemon: running (${state.host}:${state.port}, pid ${state.pid})\n`);
 }
 
 // ---------------------------------------------------------------------------
@@ -795,8 +730,6 @@ Commands:
   benchmarks            List available benchmarks (--json)
   setup                 Download the embedding model and warm centroids (--model <name>)
   regenerate            Rebuild benchmark centroids, e.g. after changing the embedding model (--model <name>)
-  serve                 Run the routing daemon in the foreground (Ctrl-C to stop)
-  daemon <action>       Manage the background daemon: start, stop, status, restart
 
 Common options:
   --quality <1-5>       Quality priority for route/eval (default 3)
@@ -831,7 +764,6 @@ Examples:
   tryaii eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
   tryaii eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
   tryaii eval prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
-  tryaii daemon status
 `;
 
 function version(): string {
@@ -899,12 +831,6 @@ async function main(): Promise<void> {
       break;
     case 'regenerate':
       await cmdRegenerate(subArgs);
-      break;
-    case 'serve':
-      await cmdServe(subArgs);
-      break;
-    case 'daemon':
-      await cmdDaemon(subArgs);
       break;
     default:
       throw new CliUsageError(`Unknown command: ${command}\nRun "tryaii --help" for usage.`);

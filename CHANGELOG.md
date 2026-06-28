@@ -10,10 +10,10 @@ fresh process; the routing itself is sub-millisecond. Both SDKs now keep a warm
 background daemon so only the first call pays that cost — subsequent calls drop
 from ~minute to ~milliseconds.
 
-- **Auto-start:** `route`/`eval` transparently start a daemon on first use and
-  reuse it thereafter, falling back to in-process routing if it can't start.
-- **New commands:** `tryaii serve` (foreground daemon) and
-  `tryaii daemon start|stop|status|restart`.
+- **Fully transparent — no new commands:** `route`/`eval` auto-start a daemon on
+  first use and reuse it thereafter, falling back to in-process routing if it
+  can't start. The daemon self-stops when idle (or on `SIGTERM`); the detached
+  server runs as a module (`python -m tryaii.server` / `node .../server.js`).
 - **New flag / env:** `--no-daemon` (per-call opt-out), `TRYAII_NO_DAEMON=1`
   (global opt-out), `TRYAII_DAEMON_IDLE=<seconds>` (idle shutdown, default 900).
 - Implemented identically in the Python and Node SDKs (separate per-runtime
