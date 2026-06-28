@@ -65,6 +65,27 @@ tryaii models --provider anthropic     # inspect the model catalog
 
 Full flag reference is in the [command-line interface](#command-line-interface) section below.
 
+## Fast repeated routing (daemon)
+
+Most of a `tryaii route` call is fixed startup: importing the embedding stack and
+loading the model takes seconds, while the routing itself takes under a
+millisecond. Because each CLI call is a fresh process, that cost can't be
+amortized on its own — so `route` and `eval` automatically start a small
+background **daemon** that keeps the model warm. The first call pays the load
+once; every call after it is near-instant.
+
+```bash
+tryaii route "what's greater, 5 or 5.5?"   # first call: loads the model, starts the daemon
+tryaii route "write a haiku about winter"  # subsequent calls: ~milliseconds of routing
+```
+
+It's fully transparent and safe to ignore — there are no daemon commands to
+learn. The daemon self-stops after 15 minutes idle (or on `SIGTERM`). To opt out
+for a single call use `--no-daemon`; to disable it everywhere set
+`TRYAII_NO_DAEMON=1`. Tune the idle shutdown with `TRYAII_DAEMON_IDLE=<seconds>`.
+The Python and Node SDKs run separate daemons (their embedding backends differ);
+see [`docs/daemon.md`](docs/daemon.md) for the protocol and state-file details.
+
 ## 30-second quickstart (SDK)
 
 <table>

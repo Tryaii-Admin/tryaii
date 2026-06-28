@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Routing daemon — fast repeated `route`/`eval`
+
+`tryaii route` and `tryaii eval` previously paid the full embedding-stack import
+and model load on every invocation (tens of seconds), since each CLI call is a
+fresh process; the routing itself is sub-millisecond. Both SDKs now keep a warm
+background daemon so only the first call pays that cost — subsequent calls drop
+from ~minute to ~milliseconds.
+
+- **Fully transparent — no new commands:** `route`/`eval` auto-start a daemon on
+  first use and reuse it thereafter, falling back to in-process routing if it
+  can't start. The daemon self-stops when idle (or on `SIGTERM`); the detached
+  server runs as a module (`python -m tryaii.server` / `node .../server.js`).
+- **New flag / env:** `--no-daemon` (per-call opt-out), `TRYAII_NO_DAEMON=1`
+  (global opt-out), `TRYAII_DAEMON_IDLE=<seconds>` (idle shutdown, default 900).
+- Implemented identically in the Python and Node SDKs (separate per-runtime
+  daemons; loopback TCP + token auth). Protocol documented in `docs/daemon.md`.
+
 ## 0.3.0 (2026-06-08)
 
 **Package renamed `tryaii-dre` → `tryaii`** on both PyPI and npm. The old
