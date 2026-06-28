@@ -38,7 +38,7 @@ const RED_256 = '\x1b[38;5;203m';
 const RESET = '\x1b[0m';
 const DIM = '\x1b[2m';
 
-const FRAME_DELAY_MS = 22;
+const FRAME_DELAY_MS = 33; // between revealed wordmark rows
 
 function supportsColor(stream: NodeJS.WriteStream): boolean {
   if (process.env.NO_COLOR) return false;
