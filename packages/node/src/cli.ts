@@ -8,6 +8,8 @@
  *   tryaii setup                      -- Download the embedding model + warm centroids
  *   tryaii models                     -- List available models
  *   tryaii benchmarks                 -- List available benchmarks
+ *   tryaii serve                      -- Run the routing daemon in the foreground
+ *   tryaii daemon <action>            -- Manage the background daemon (start/stop/status/restart)
  *
  * Global flags: --no-banner, -v/--verbose, -V/--version, -h/--help.
  *
@@ -24,7 +26,13 @@ import { BudgetMode, DifficultySource, routeDatasetWithBudget } from './budget.j
 import { benchmarkToDict, BenchmarkRegistry } from './benchmarks/registry.js';
 import { CentroidGenerator } from './centroids/generator.js';
 import { ClassificationResult } from './classifiers/base.js';
-import { centroidFilePath, createDefaultConfig, DEFAULT_EMBEDDING_MODEL } from './config.js';
+import {
+  centroidFilePath,
+  createDefaultConfig,
+  DEFAULT_EMBEDDING_MODEL,
+  TryaiiDreConfig,
+} from './config.js';
+import * as daemon from './daemon.js';
 import { LocalEmbeddingProvider } from './embeddings/local.js';
 import { DashboardSummary, renderDashboard } from './dashboard/index.js';
 import { ModelInfo, ModelRegistry } from './registry/models.js';
@@ -34,7 +42,51 @@ import {
   routeResultBestReasoning,
   routeResultBestScore,
 } from './router.js';
+import { serve } from './server.js';
 import { Priorities } from './scoring/priorities.js';
+
+/** A routing call backed by either a warm daemon or an in-process Router. */
+type RouteFn = (prompt: string, priorities: Priorities, topK: number) => Promise<RouteResult>;
+
+/**
+ * Resolve a routing function, preferring a warm background daemon (auto-starting
+ * one if needed) so repeated CLI calls skip the embedding-model load. Falls back
+ * to an in-process Router when the daemon is disabled, unavailable, or slow to
+ * start.
+ */
+async function acquireRouteFn(
+  config: TryaiiDreConfig,
+  noDaemon: boolean,
+): Promise<{ routeFn: RouteFn; source: 'daemon' | 'inprocess' }> {
+  if (!noDaemon && !daemon.isDisabled()) {
+    let state: daemon.DaemonState | null = null;
+    try {
+      state = await daemon.ensureDaemon(config, {
+        onStarting: () =>
+          process.stderr.write(
+            '[tryaii] starting routing daemon (first run loads the embedding ' +
+              'model, this can take a minute)...\n',
+          ),
+      });
+    } catch {
+      state = null;
+    }
+    if (state) {
+      const ready = state;
+      return {
+        routeFn: (prompt, priorities, topK) =>
+          daemon.routeViaDaemon(ready, prompt, priorities, topK),
+        source: 'daemon',
+      };
+    }
+  }
+
+  const router = new Router({ config: { embeddingModel: config.embeddingModel } });
+  return {
+    routeFn: (prompt, priorities, topK) => router.route(prompt, { priorities, topK }),
+    source: 'inprocess',
+  };
+}
 
 /** Error type whose message is shown to the user without a stack trace. */
 class CliError extends Error {}
@@ -79,6 +131,7 @@ async function cmdRoute(subArgs: string[]): Promise<void> {
       cost: { type: 'string', default: '3' },
       speed: { type: 'string', default: '3' },
       'top-k': { type: 'string', default: '5' },
+      'no-daemon': { type: 'boolean', default: false },
     },
   });
 
@@ -94,9 +147,14 @@ async function cmdRoute(subArgs: string[]): Promise<void> {
   );
   const topK = intFlag('--top-k', values['top-k'], 5);
 
-  const router = new Router();
-  const result = await router.route(prompt, { priorities, topK });
+  const config = createDefaultConfig();
+  const { routeFn } = await acquireRouteFn(config, Boolean(values['no-daemon']));
+  const result = await routeFn(prompt, priorities, topK);
   const classification = result.classification;
+
+  // Provider/pricing for display come from the (cheap) model registry so the
+  // daemon path doesn't need to ship them over the wire.
+  const registry = ModelRegistry.default();
 
   out.write(`\nPrompt: ${prompt}\n`);
   out.write(
@@ -108,7 +166,7 @@ async function cmdRoute(subArgs: string[]): Promise<void> {
   out.write('-'.repeat(70) + '\n');
 
   result.scores.forEach((score, index) => {
-    const model = router.models.getModel(score.modelId);
+    const model = registry.getModel(score.modelId);
     const provider = model ? model.provider : '?';
     out.write(`  ${index + 1}. ${score.modelId}\n`);
     out.write(`     Provider: ${provider} | Score: ${score.finalScore.toFixed(3)}\n`);
@@ -250,6 +308,68 @@ async function cmdRegenerate(subArgs: string[]): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// serve / daemon
+// ---------------------------------------------------------------------------
+
+async function cmdServe(subArgs: string[]): Promise<void> {
+  const { values } = parseArgs({
+    args: subArgs,
+    allowPositionals: true,
+    options: {
+      model: { type: 'string' },
+      idle: { type: 'string' },
+    },
+  });
+
+  const embeddingModel = values.model ?? DEFAULT_EMBEDDING_MODEL;
+  const idleTimeout = values.idle != null ? intFlag('--idle', values.idle, daemon.idleSeconds()) : undefined;
+  await serve({ embeddingModel }, { idleTimeout });
+}
+
+async function cmdDaemon(subArgs: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args: subArgs,
+    allowPositionals: true,
+    options: { model: { type: 'string' } },
+  });
+
+  const action = positionals[0];
+  if (!action || !['start', 'stop', 'status', 'restart'].includes(action)) {
+    throw new CliUsageError('daemon requires an action: start, stop, status, or restart');
+  }
+
+  const config = createDefaultConfig(values.model ? { embeddingModel: values.model } : undefined);
+
+  if (action === 'status') {
+    const info = await daemon.status(config);
+    if (!info) {
+      out.write('tryaii daemon: not running\n');
+    } else {
+      const uptimeS = Math.round(Number(info.uptimeMs ?? 0) / 1000);
+      out.write(
+        `tryaii daemon: running (pid ${info.pid}, model ${info.embeddingModel}, ` +
+          `${info.host}:${info.port}, up ${uptimeS}s)\n`,
+      );
+    }
+    return;
+  }
+
+  if (action === 'stop') {
+    out.write((await daemon.stop(config)) ? 'tryaii daemon: stopped\n' : 'tryaii daemon: not running\n');
+    return;
+  }
+
+  // start / restart
+  if (action === 'restart') await daemon.stop(config);
+  out.write('tryaii daemon: starting (loading the embedding model, this can take a minute)...\n');
+  const state = await daemon.ensureDaemon(config, { onStarting: () => {} });
+  if (!state) {
+    throw new CliError('daemon failed to start; see daemon log in the data dir');
+  }
+  out.write(`tryaii daemon: running (${state.host}:${state.port}, pid ${state.pid})\n`);
+}
+
+// ---------------------------------------------------------------------------
 // eval
 // ---------------------------------------------------------------------------
 
@@ -300,14 +420,14 @@ function topBenchmarksOf(
 }
 
 async function routeEvalRow(
-  router: Router,
+  routeFn: RouteFn,
   row: EvalRow,
   priorities: Priorities,
   topK: number,
 ): Promise<Record<string, unknown>> {
   const started = Date.now();
   try {
-    const result = await router.route(row.prompt, { priorities, topK });
+    const result = await routeFn(row.prompt, priorities, topK);
     const classification = result.classification;
     return {
       id: row.id,
@@ -444,6 +564,7 @@ async function cmdEval(subArgs: string[]): Promise<void> {
       'budget-mode': { type: 'string', default: 'strict' },
       'difficulty-source': { type: 'string', default: 'intrinsic' },
       'difficulty-gamma': { type: 'string', default: '1' },
+      'no-daemon': { type: 'boolean', default: false },
     },
   });
 
@@ -495,14 +616,16 @@ async function cmdEval(subArgs: string[]): Promise<void> {
   }
   out.write(`[eval] loaded ${rows.length} prompt(s)\n`);
 
-  const router = new Router();
-  out.write('[eval] warming up router...\n');
-  await router.route('warmup', { priorities, topK: 1 });
-
+  const config = createDefaultConfig();
   let results: Record<string, unknown>[];
   let budgetSummary: Record<string, unknown> | null = null;
 
   if (maxPrice != null) {
+    // Budget optimization drives the scoring engine directly, so it needs a
+    // real in-process Router rather than the daemon's route() surface.
+    const router = new Router({ config: { embeddingModel: config.embeddingModel } });
+    out.write('[eval] warming up router...\n');
+    await router.route('warmup', { priorities, topK: 1 });
     out.write(
       `[eval] budget     : $${maxPrice.toFixed(6)} total, ` +
         `${outputTokens} output tokens/prompt, mode=${budgetMode}, difficulty=${difficultySource}\n`,
@@ -593,11 +716,14 @@ async function cmdEval(subArgs: string[]): Promise<void> {
       );
     }
   } else {
+    const { routeFn } = await acquireRouteFn(config, Boolean(values['no-daemon']));
+    out.write('[eval] warming up router...\n');
+    await routeFn('warmup', priorities, 1);
     results = [];
     let nextPct = 10;
     const total = rows.length;
     for (let index = 0; index < rows.length; index++) {
-      results.push(await routeEvalRow(router, rows[index], priorities, topK));
+      results.push(await routeEvalRow(routeFn, rows[index], priorities, topK));
       const pct = Math.floor(((index + 1) / Math.max(1, total)) * 100);
       if (pct >= nextPct || index + 1 === total) {
         out.write(`[eval] routed ${index + 1}/${total} (${Math.min(pct, 100)}%)\n`);
@@ -669,6 +795,8 @@ Commands:
   benchmarks            List available benchmarks (--json)
   setup                 Download the embedding model and warm centroids (--model <name>)
   regenerate            Rebuild benchmark centroids, e.g. after changing the embedding model (--model <name>)
+  serve                 Run the routing daemon in the foreground (Ctrl-C to stop)
+  daemon <action>       Manage the background daemon: start, stop, status, restart
 
 Common options:
   --quality <1-5>       Quality priority for route/eval (default 3)
@@ -684,6 +812,14 @@ Eval-only options:
   --difficulty-source <s>  Gauge task complexity: 'intrinsic' (default), 'capability', or 'blend'
   --difficulty-gamma <n>   How hard to shift budget toward complex prompts (default 1; 0 disables)
 
+Daemon (faster repeated routing):
+  route and eval auto-start a background daemon that keeps the embedding model
+  warm, so repeated calls skip the multi-second model load. The first call is
+  slow; the rest are near-instant.
+  --no-daemon           Route in-process for this call; do not use or start a daemon
+  TRYAII_NO_DAEMON=1    Disable the daemon globally (always route in-process)
+  TRYAII_DAEMON_IDLE=<s>  Shut the daemon down after this many idle seconds (default 900)
+
 Global flags:
   --no-banner           Disable the startup banner (also honored via TRYAII_NO_BANNER)
   -v, --verbose         Enable verbose logging
@@ -695,6 +831,7 @@ Examples:
   tryaii eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
   tryaii eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
   tryaii eval prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
+  tryaii daemon status
 `;
 
 function version(): string {
@@ -762,6 +899,12 @@ async function main(): Promise<void> {
       break;
     case 'regenerate':
       await cmdRegenerate(subArgs);
+      break;
+    case 'serve':
+      await cmdServe(subArgs);
+      break;
+    case 'daemon':
+      await cmdDaemon(subArgs);
       break;
     default:
       throw new CliUsageError(`Unknown command: ${command}\nRun "tryaii --help" for usage.`);

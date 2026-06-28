@@ -8,6 +8,8 @@ Commands (kept in parity with the Node SDK's `tryaii`):
     tryaii models                        -- List available models
     tryaii benchmarks                    -- List available benchmarks
     tryaii regenerate                    -- Regenerate centroids (after model change)
+    tryaii serve                         -- Run the routing daemon in the foreground
+    tryaii daemon <action>               -- Manage the background daemon (start/stop/status/restart)
 
 Global flags: --no-banner, -v/--verbose, -V/--version, -h/--help.
 
@@ -42,6 +44,8 @@ Commands:
   benchmarks            List available benchmarks (--json)
   setup                 Download the embedding model and warm centroids (--model <name>)
   regenerate            Rebuild benchmark centroids, e.g. after changing the embedding model (--model <name>)
+  serve                 Run the routing daemon in the foreground (Ctrl-C to stop)
+  daemon <action>       Manage the background daemon: start, stop, status, restart
 
 Common options:
   --quality <1-5>       Quality priority for route/eval (default 3)
@@ -57,6 +61,14 @@ Eval-only options:
   --difficulty-source <s>  Gauge task complexity: 'intrinsic' (default), 'capability', or 'blend'
   --difficulty-gamma <n>   How hard to shift budget toward complex prompts (default 1; 0 disables)
 
+Daemon (faster repeated routing):
+  route and eval auto-start a background daemon that keeps the embedding model
+  warm, so repeated calls skip the multi-second model load. The first call is
+  slow; the rest are near-instant.
+  --no-daemon           Route in-process for this call; do not use or start a daemon
+  TRYAII_NO_DAEMON=1    Disable the daemon globally (always route in-process)
+  TRYAII_DAEMON_IDLE=<s>  Shut the daemon down after this many idle seconds (default 900)
+
 Global flags:
   --no-banner           Disable the startup banner (also honored via TRYAII_NO_BANNER)
   -v, --verbose         Enable verbose logging
@@ -68,22 +80,63 @@ Examples:
   tryaii eval prompts.json --output results/run --quality=5 --cost=1 --speed=1
   tryaii eval prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
   tryaii eval prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
+  tryaii daemon status
 """
+
+
+def _acquire_route_fn(config, no_daemon: bool):
+    """Return (route_fn, source) where route_fn(prompt, priorities, top_k) -> RouteResult.
+
+    Prefers a warm background daemon (auto-starting one if needed) so repeated
+    CLI calls skip the embedding-model load. Falls back to an in-process Router
+    when the daemon is disabled, unavailable, or fails to start in time.
+    """
+    from tryaii import daemon as daemon_mod
+
+    if not no_daemon and not daemon_mod.is_disabled():
+        def _notice():
+            print(
+                "[tryaii] starting routing daemon (first run loads the embedding "
+                "model, this can take a minute)...",
+                file=sys.stderr,
+                flush=True,
+            )
+
+        try:
+            state = daemon_mod.ensure_daemon(config, on_starting=_notice)
+        except Exception as exc:  # noqa: BLE001 -- never let daemon issues break routing
+            logging.getLogger("tryaii").warning("daemon unavailable, routing in-process: %s", exc)
+            state = None
+        if state is not None:
+            return (lambda prompt, priorities, top_k: daemon_mod.route(
+                state, prompt, priorities, top_k)), "daemon"
+
+    from tryaii import Router
+
+    router = Router(config=config)
+    return (lambda prompt, priorities, top_k: router.route(
+        prompt, priorities=priorities, top_k=top_k)), "inprocess"
 
 
 def cmd_route(args):
     """Route a prompt and display results."""
-    from tryaii import Priorities, Router
+    from tryaii import Priorities
+    from tryaii.config import TryaiiDreConfig
+    from tryaii.registry.models import ModelRegistry
 
-    router = Router()
-
+    config = TryaiiDreConfig()
     priorities = Priorities(
         quality=args.quality,
         cost=args.cost,
         speed=args.speed,
     )
 
-    result = router.route(args.prompt, priorities=priorities, top_k=args.top_k)
+    route_fn, _source = _acquire_route_fn(config, getattr(args, "no_daemon", False))
+    result = route_fn(args.prompt, priorities, args.top_k)
+
+    # Provider/pricing for display come from the (cheap, torch-free) model
+    # registry so the daemon path doesn't need to ship them over the wire.
+    registry = ModelRegistry.default()
 
     print(f"\nPrompt: {args.prompt}")
     print(f"Category: {result.classification.broad_category} > {result.classification.subcategory}")
@@ -93,7 +146,7 @@ def cmd_route(args):
     print("-" * 70)
 
     for i, score in enumerate(result.scores, 1):
-        model = router.models.get_model(score.model_id)
+        model = registry.get_model(score.model_id)
         provider = model.provider if model else "?"
         price = ""
         if model and model.pricing:
@@ -144,10 +197,10 @@ def _top_benchmarks(classification, limit: int = 5) -> list[dict]:
     return [{"name": name, "score": round(score, 4)} for name, score in pairs[:limit]]
 
 
-def _route_eval_row(router, row: dict, priorities, top_k: int) -> dict:
+def _route_eval_row(route_fn, row: dict, priorities, top_k: int) -> dict:
     started = time.perf_counter()
     try:
-        result = router.route(row["prompt"], priorities=priorities, top_k=top_k)
+        result = route_fn(row["prompt"], priorities, top_k)
         classification = result.classification
         return {
             "id": row["id"],
@@ -434,6 +487,7 @@ def cmd_eval(args):
     """Route a JSON prompt dataset and write results.jsonl + summary.json."""
     from tryaii import Priorities, Router
     from tryaii.budget import route_dataset_with_budget
+    from tryaii.config import TryaiiDreConfig
 
     if args.difficulty_gamma < 0:
         # Usage error -> exit 2, matching both argparse and the Node CLI.
@@ -462,12 +516,14 @@ def cmd_eval(args):
         print("[eval] priorities : ignored for budgeted runs")
     print(f"[eval] loaded {len(rows)} prompt(s)")
 
-    router = Router()
-    print("[eval] warming up router...")
-    router.route("warmup", priorities=priorities, top_k=1)
-
+    config = TryaiiDreConfig()
     budget_summary = None
     if args.max_price is not None:
+        # Budget optimization drives the scoring engine directly, so it needs a
+        # real in-process Router rather than the daemon's route() surface.
+        router = Router(config=config)
+        print("[eval] warming up router...")
+        router.route("warmup", priorities=priorities, top_k=1)
         print(
             f"[eval] budget     : ${args.max_price:.6f} total, "
             f"{args.output_tokens} output tokens/prompt, mode={args.budget_mode}, "
@@ -567,11 +623,14 @@ def cmd_eval(args):
                 f"{optimization.effective_output_tokens} tokens/prompt"
             )
     else:
+        route_fn, _source = _acquire_route_fn(config, getattr(args, "no_daemon", False))
+        print("[eval] warming up router...")
+        route_fn("warmup", priorities, 1)
         results = []
         next_progress_pct = 10
         total_rows = len(rows)
         for idx, row in enumerate(rows, start=1):
-            results.append(_route_eval_row(router, row, priorities, args.top_k))
+            results.append(_route_eval_row(route_fn, row, priorities, args.top_k))
             progress_pct = int((idx / max(1, total_rows)) * 100)
             if progress_pct >= next_progress_pct or idx == total_rows:
                 print(f"[eval] routed {idx}/{total_rows} ({min(progress_pct, 100)}%)")
@@ -714,6 +773,57 @@ def cmd_regenerate(args):
     print(f"Done! Generated {len(centroids)} centroids at {config.centroid_file}")
 
 
+def cmd_serve(args):
+    """Run the routing daemon in the foreground."""
+    from tryaii import server
+    from tryaii.config import TryaiiDreConfig
+
+    config = TryaiiDreConfig()
+    if getattr(args, "model", None):
+        config.embedding_model = args.model
+    idle = getattr(args, "idle", None)
+    server.serve(config=config, idle_timeout=idle)
+
+
+def cmd_daemon(args):
+    """Manage the background routing daemon (start/stop/status/restart)."""
+    from tryaii import daemon as daemon_mod
+    from tryaii.config import TryaiiDreConfig
+
+    config = TryaiiDreConfig()
+    if getattr(args, "model", None):
+        config.embedding_model = args.model
+    action = args.action
+
+    if action == "status":
+        info = daemon_mod.status(config)
+        if info is None:
+            print("tryaii daemon: not running")
+        else:
+            uptime_s = int(info.get("uptimeMs", 0)) / 1000
+            print(
+                f"tryaii daemon: running (pid {info.get('pid')}, "
+                f"model {info.get('embeddingModel')}, "
+                f"{info.get('host')}:{info.get('port')}, up {uptime_s:.0f}s)"
+            )
+        return
+
+    if action == "stop":
+        print("tryaii daemon: stopped" if daemon_mod.stop(config) else "tryaii daemon: not running")
+        return
+
+    if action in ("start", "restart"):
+        if action == "restart":
+            daemon_mod.stop(config)
+        print("tryaii daemon: starting (loading the embedding model, this can take a minute)...")
+        state = daemon_mod.ensure_daemon(config, on_starting=lambda: None)
+        if state is None:
+            print("error: daemon failed to start; see daemon log in the data dir", file=sys.stderr)
+            sys.exit(1)
+        print(f"tryaii daemon: running ({state['host']}:{state['port']}, pid {state['pid']})")
+        return
+
+
 def cli():
     """Main CLI entry point."""
     # -v/--verbose, --no-banner, -V/--version and -h/--help are handled before
@@ -733,6 +843,9 @@ def cli():
     route_parser.add_argument("--cost", type=int, default=3, help="Cost priority (1-5)")
     route_parser.add_argument("--speed", type=int, default=3, help="Speed priority (1-5)")
     route_parser.add_argument("--top-k", type=int, default=5, help="Number of recommendations")
+    route_parser.add_argument(
+        "--no-daemon", action="store_true", help="Route in-process; do not use or start a daemon"
+    )
 
     # eval
     eval_parser = subparsers.add_parser("eval", help="Route a JSON prompt dataset")
@@ -768,6 +881,9 @@ def cli():
         default=1.0,
         help="How hard to shift budget toward complex prompts (default 1; 0 disables)",
     )
+    eval_parser.add_argument(
+        "--no-daemon", action="store_true", help="Route in-process; do not use or start a daemon"
+    )
 
     # setup
     setup_parser = subparsers.add_parser("setup", help="Initialize centroids")
@@ -785,6 +901,18 @@ def cli():
     # regenerate
     regen_parser = subparsers.add_parser("regenerate", help="Regenerate centroids")
     regen_parser.add_argument("--model", help="Embedding model name")
+
+    # serve
+    serve_parser = subparsers.add_parser("serve", help="Run the routing daemon in the foreground")
+    serve_parser.add_argument("--model", help="Embedding model name")
+    serve_parser.add_argument(
+        "--idle", type=int, help="Idle seconds before self-shutdown (default 900; 0 disables)"
+    )
+
+    # daemon
+    daemon_parser = subparsers.add_parser("daemon", help="Manage the background daemon")
+    daemon_parser.add_argument("action", choices=("start", "stop", "status", "restart"))
+    daemon_parser.add_argument("--model", help="Embedding model name")
 
     raw_args = sys.argv[1:]
 
@@ -835,6 +963,8 @@ def cli():
         "models": cmd_models,
         "benchmarks": cmd_benchmarks,
         "regenerate": cmd_regenerate,
+        "serve": cmd_serve,
+        "daemon": cmd_daemon,
     }
     try:
         handlers[args.command](args)
