@@ -1,5 +1,5 @@
 """
-TryAii-DRE -- Try It Out
+TryAii -- Try It Out
 
 Shows the full flow: routing decisions, priority presets,
 filtering, and live OpenRouter calls.

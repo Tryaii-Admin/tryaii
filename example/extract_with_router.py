@@ -2,7 +2,7 @@
 End-to-end: JSON extraction routed through tryaii.
 
 Same task as extract_direct.py, but instead of hard-coding a model we let
-TryAii-DRE pick the best one for the prompt, then dispatch via OpenRouter.
+TryAii pick the best one for the prompt, then dispatch via OpenRouter.
 
 Setup:
     pip install tryaii[openrouter]

@@ -1,5 +1,5 @@
 """
-TryAii-DRE CLI.
+TryAii CLI.
 
 Commands (kept in parity with the Node SDK's `tryaii`):
     tryaii route "your prompt here"     -- Route a prompt and show recommendations
@@ -921,7 +921,7 @@ def cmd_setup(args):
     if args.model:
         config.embedding_model = args.model
 
-    print(f"Setting up TryAii-DRE with embedding model: {config.embedding_model}")
+    print(f"Setting up TryAii with embedding model: {config.embedding_model}")
     print("This will download the model and load benchmark centroids (one-time operation)...\n")
 
     provider = LocalEmbeddingProvider(model_name=config.embedding_model)
@@ -1012,7 +1012,7 @@ def cli():
     # CLI; they are intentionally not registered here.
     parser = argparse.ArgumentParser(
         prog="tryaii",
-        description="TryAii-DRE -- Embedding-based AI model router",
+        description="TryAii -- Embedding-based AI model router",
     )
 
     subparsers = parser.add_subparsers(dest="command")

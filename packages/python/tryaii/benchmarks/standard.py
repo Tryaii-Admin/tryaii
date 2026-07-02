@@ -1,5 +1,5 @@
 """
-Standard benchmark definitions -- the 12 benchmarks shipped with TryAii-DRE.
+Standard benchmark definitions -- the 12 benchmarks shipped with TryAii.
 """
 
 from tryaii.benchmarks.registry import BenchmarkDefinition

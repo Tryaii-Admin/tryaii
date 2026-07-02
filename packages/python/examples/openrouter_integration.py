@@ -1,7 +1,7 @@
 """
 OpenRouter Integration -- Active routing that actually calls the model.
 
-Combines TryAii-DRE's semantic routing with OpenRouter's multi-provider API.
+Combines TryAii's semantic routing with OpenRouter's multi-provider API.
 The router picks the best model, then OpenRouter handles the API call.
 
 pip install tryaii[openrouter]
@@ -16,7 +16,7 @@ router = Router()
 openrouter = OpenRouterIntegration(router)
 
 # --- Auto-routed chat ---
-# TryAii-DRE picks the best model, OpenRouter calls it
+# TryAii picks the best model, OpenRouter calls it
 response = openrouter.chat(
     "Write a Python function to find the longest palindromic substring",
     priorities={"quality": 5, "cost": 2, "speed": 3},

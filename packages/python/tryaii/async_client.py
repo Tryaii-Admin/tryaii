@@ -1,5 +1,5 @@
 """
-AsyncDREClient -- async version of DREClient for TryAii-DRE.
+AsyncDREClient -- async version of DREClient for TryAii.
 
 Provides the same interface as DREClient but with async/await support.
 Uses asyncio.to_thread() for CPU-bound Router calls and httpx.AsyncClient
@@ -102,7 +102,7 @@ class AsyncDREClient:
 
     @staticmethod
     def _resolve_model(model_id: str) -> str:
-        """Convert TryAii-DRE model ID to OpenRouter slug."""
+        """Convert TryAii model ID to OpenRouter slug."""
         return MODEL_ID_TO_OPENROUTER.get(model_id, model_id)
 
     # -- Validation / payload helpers ----------------------------------

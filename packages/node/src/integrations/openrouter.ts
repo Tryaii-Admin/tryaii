@@ -1,7 +1,7 @@
 /**
  * OpenRouter integration -- active routing through OpenRouter's API.
  *
- * Wraps OpenRouter API calls so that TryAii-DRE automatically selects
+ * Wraps OpenRouter API calls so that TryAii automatically selects
  * the best model based on the prompt, then forwards the request.
  *
  * Uses the native fetch() API (available in Node 18+).
@@ -81,7 +81,7 @@ export const MODEL_ID_TO_OPENROUTER: Record<string, string> = {
 export interface OpenRouterResponse {
   /** The response text content. */
   content: string;
-  /** TryAii-DRE model ID that was selected. */
+  /** TryAii model ID that was selected. */
   modelUsed: string;
   /** OpenRouter model slug (e.g., "openai/gpt-4o"). */
   openrouterModel: string;
@@ -110,7 +110,7 @@ export interface OpenRouterChatOptions {
 /**
  * Active routing integration with OpenRouter.
  *
- * Combines TryAii-DRE's semantic routing with OpenRouter's multi-provider
+ * Combines TryAii's semantic routing with OpenRouter's multi-provider
  * API to automatically select and call the best model.
  */
 export class OpenRouterIntegration {
@@ -141,7 +141,7 @@ export class OpenRouterIntegration {
     }
   }
 
-  /** Convert TryAii-DRE model ID to OpenRouter slug. */
+  /** Convert TryAii model ID to OpenRouter slug. */
   private _resolveModel(modelId: string): string {
     return MODEL_ID_TO_OPENROUTER[modelId] ?? modelId;
   }

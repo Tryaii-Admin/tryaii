@@ -12,12 +12,12 @@
 ████████╗██████╗ ██╗   ██╗ █████╗ ██╗██╗
 ╚══██╔══╝██╔══██╗╚██╗ ██╔╝██╔══██╗██║██║   ▸ Diff Routing Engine
    ██║   ██████╔╝ ╚████╔╝ ███████║██║██║   ▸ semantic, prompt-aware LLM routing
-   ██║   ██╔══██╗  ╚██╔╝  ██╔══██║██║██║   ▸ ranks 33 models by benchmark × cost × speed
+   ██║   ██╔══██╗  ╚██╔╝  ██╔══██║██║██║   ▸ ranks 39 models by benchmark × cost × speed
    ██║   ██║  ██║   ██║   ██║  ██║██║██║   ▸ local embeddings — zero API keys to route
    ╚═╝   ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═╝╚═╝
 ```
 
-> **TryAii-DRE** reads your prompt, figures out *what kind of task it is* using local
+> **TryAii** reads your prompt, figures out *what kind of task it is* using local
 > embeddings, and routes it to the best LLM for the job — balancing benchmark quality,
 > price, and latency the way **you** tell it to. The same engine ships as a Python
 > package and a Node/TypeScript package, with one matching `tryaii` CLI.
@@ -216,7 +216,7 @@ of which models were recommended, broken down by category.
 
 ---
 
-## Use TryAii-DRE from an AI agent
+## Use TryAii from an AI agent
 
 Copy–paste the block below into an agent (Claude Code, Cursor, a custom tool, etc.) to
 teach it how to use this project. The package name is **`tryaii`** on both PyPI and npm.
@@ -226,7 +226,7 @@ Expand it and use the copy button in its top-right corner.
 <summary><b>📋 Full agent instructions</b></summary>
 
 ````text
-You can use TryAii-DRE to pick the best LLM for a prompt before you call it. It classifies
+You can use TryAii to pick the best LLM for a prompt before you call it. It classifies
 the prompt with local embeddings (no API key needed) and ranks models by benchmark quality,
 price, and latency according to priorities you choose.
 
@@ -288,7 +288,7 @@ Expand a block and use the copy button in its top-right corner.
 
 ```text
 Install the `tryaii` PyPI package (`pip install tryaii`) — a local, no-API-key LLM
-router that ranks 33 models by quality, price, and latency. Demo evaluating LLMs per price:
+router that ranks 39 models by quality, price, and latency. Demo evaluating LLMs per price:
 create prompts.json (an array of 5 example prompt strings), then run a budget eval where
 --max-price is the total $ cap for the whole dataset and the optimizer maximizes quality
 under it:
@@ -307,7 +307,7 @@ quality-per-dollar. Also show the per-prompt tradeoff in Python:
 
 ```text
 Install the `tryaii` npm package (`npm install tryaii`) — a local, no-API-key LLM
-router that ranks 33 models by quality, price, and latency. Demo evaluating LLMs per price:
+router that ranks 39 models by quality, price, and latency. Demo evaluating LLMs per price:
 create prompts.json (an array of 5 example prompt strings), then run a budget eval where
 --max-price is the total $ cap for the whole dataset and the optimizer maximizes quality
 under it:
@@ -346,9 +346,9 @@ Top-K ranked models, each with human-readable reasoning
 ```
 tryaii/
   shared/                  Single source of truth for model data
-    models/                33 models with benchmarks and pricing
-    benchmarks/            12 standard benchmark definitions
+    models/                39 models with benchmarks and pricing
     centroids/             Pre-computed embedding centroids
+    training/              Training queries used to build the centroids
   packages/
     python/                pip install tryaii
     node/                  npm install tryaii
@@ -357,15 +357,15 @@ tryaii/
 
 ## Models & benchmarks
 
-**33 models across 6 providers**, pre-loaded with benchmark scores and pricing — and fully
+**39 models across 6 providers**, pre-loaded with benchmark scores and pricing — and fully
 extensible via `router.addModel(...)`:
 
-- **OpenAI** (12): GPT-5.2, GPT-5.1, GPT-5, GPT-5-nano, O3, O4-mini, GPT-4o, GPT-4.1, and more
-- **Google** (6): Gemini 3 Pro, Gemini 3 Flash, Gemini 2.5 Pro/Flash, and more
-- **xAI** (6): Grok 4, Grok 4 Fast, Grok Code Fast, Grok 3, and more
-- **Anthropic** (5): Claude Opus 4.5, Claude Sonnet 4.5, Claude Sonnet 4, Claude Haiku 4.5
-- **DeepSeek** (2): Reasoner, Chat
-- **Mistral** (2): Large, Small
+- **OpenAI** (14): GPT-5.5, GPT-5.4, GPT-5.2, GPT-5.1, GPT-5, O3, O4-mini, GPT-4o, and more
+- **Anthropic** (7): Claude Fable 5, Claude Opus 4.8, Claude Opus 4.5, Claude Sonnet 4.6, Claude Haiku 4.5, and more
+- **Google** (7): Gemini 3.5 Flash, Gemini 3.1 Pro, Gemini 3 Flash, Gemini 2.5 Pro/Flash, and more
+- **DeepSeek** (4): V4 Pro, V4 Flash, Reasoner, Chat
+- **xAI** (4): Grok 4.3, Grok 4, Grok 4.1 Fast Reasoning, Grok Code Fast
+- **Mistral** (3): Large, Medium, Small
 
 **12 benchmarks** drive classification: ARC, Chatbot Arena (LMSys), DROP, GSM8K, HellaSwag,
 HumanEval, LiveBench, MMLU, MT-Bench, SWE-bench, SuperGLUE, TruthfulQA.

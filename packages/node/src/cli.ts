@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * TryAii-DRE CLI.
+ * TryAii CLI.
  *
  * Commands (kept in parity with the Python SDK's `tryaii`):
  *   tryaii route "your prompt here"   -- Route a prompt and show recommendations
@@ -274,7 +274,7 @@ async function cmdSetup(subArgs: string[]): Promise<void> {
   });
 
   const embeddingModel = values.model ?? DEFAULT_EMBEDDING_MODEL;
-  out.write(`Setting up TryAii-DRE with embedding model: ${embeddingModel}\n`);
+  out.write(`Setting up TryAii with embedding model: ${embeddingModel}\n`);
   out.write('This will download the model and load benchmark centroids (one-time operation)...\n\n');
 
   const router = values.model

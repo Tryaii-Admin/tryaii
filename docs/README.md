@@ -1,6 +1,6 @@
-# TryAii-DRE Documentation
+# TryAii Documentation
 
-TryAii-DRE ships as two packages with identical behavior — `tryaii` on PyPI (Python ≥ 3.9) and `tryaii` on npm (Node ≥ 18) — each installing the same `tryaii` CLI.
+TryAii ships as two packages with identical behavior — `tryaii` on PyPI (Python ≥ 3.9) and `tryaii` on npm (Node ≥ 18) — each installing the same `tryaii` CLI.
 
 | Section | What's inside |
 |---|---|

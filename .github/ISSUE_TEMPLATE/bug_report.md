@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug in TryAii-DRE
+about: Report a bug in TryAii
 labels: bug
 ---
 

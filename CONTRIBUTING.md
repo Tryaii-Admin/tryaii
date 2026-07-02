@@ -1,4 +1,4 @@
-# Contributing to TryAii-DRE
+# Contributing to TryAii
 
 ## Development Setup
 

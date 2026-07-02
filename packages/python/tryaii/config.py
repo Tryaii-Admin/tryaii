@@ -1,5 +1,5 @@
 """
-Global configuration for TryAii-DRE.
+Global configuration for TryAii.
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 # `tryaii models` — list the model catalog
 
-Print every model in the default registry (33 models across OpenAI, Anthropic, Google, DeepSeek, xAI, Mistral — see [SDK presets](../sdk/models/presets.md)).
+Print every model in the default registry (39 models across OpenAI, Anthropic, Google, DeepSeek, xAI, Mistral — see [SDK presets](../sdk/models/presets.md)).
 
 ```bash
 tryaii models
@@ -20,10 +20,10 @@ tryaii models --json
 Grouped by provider (alphabetical):
 
 ```
-Available Models (33):
+Available Models (39):
 ----------------------------------------------------------------------
 
-  Anthropic (5 models):
+  Anthropic (7 models):
     - claude-opus-4-5-20251101 [medium] | $0.0050/0.0250
     - ...
 ```
