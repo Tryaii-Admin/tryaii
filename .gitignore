@@ -66,6 +66,9 @@ packages/python/CENTROIDS_AND_UPDATES.md
 # Internal scratch / proposals
 MIGRATION.md
 docs/benchmarks-compare.html
+docs/README.md
+docs/model-catalog-sync-2026-06.md
+docs/api-reference/
 Jira/
 
 # PM/Jira tooling (kept out of the product repo)
