@@ -39,7 +39,7 @@ for await (const chunk of integration.stream('Explain TCP vs UDP')) process.stdo
 
 ## Model ID mapping
 
-`MODEL_ID_TO_OPENROUTER` (exported in both SDKs) maps each of the 33 default-preset model IDs to its OpenRouter slug (e.g. `gpt-4o → openai/gpt-4o`, `claude-sonnet-4-5-20250929 → anthropic/claude-sonnet-4.5`). Unknown IDs pass through unchanged — so custom models work if their ID is already a valid OpenRouter slug.
+`MODEL_ID_TO_OPENROUTER` (exported in both SDKs) maps each of the 39 default-preset model IDs to its OpenRouter slug (e.g. `gpt-4o → openai/gpt-4o`, `claude-sonnet-4-5-20250929 → anthropic/claude-sonnet-4.5`). Unknown IDs pass through unchanged — so custom models work if their ID is already a valid OpenRouter slug.
 
 ## API-key behavior differs by SDK
 

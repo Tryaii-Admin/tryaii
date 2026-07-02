@@ -1,5 +1,5 @@
 """
-TryAii-DRE Quickstart -- Minimum viable example.
+TryAii Quickstart -- Minimum viable example.
 
 pip install tryaii
 python examples/quickstart.py

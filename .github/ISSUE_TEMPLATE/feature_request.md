@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest a feature for TryAii-DRE
+about: Suggest a feature for TryAii
 labels: enhancement
 ---
 

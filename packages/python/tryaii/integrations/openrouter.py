@@ -1,7 +1,7 @@
 """
 OpenRouter integration -- active routing through OpenRouter's API.
 
-Wraps OpenRouter API calls so that TryAii-DRE automatically selects
+Wraps OpenRouter API calls so that TryAii automatically selects
 the best model based on the prompt, then forwards the request.
 
 Usage:
@@ -102,7 +102,7 @@ class OpenRouterResponse:
     """Response from an OpenRouter API call."""
 
     content: str
-    model_used: str  # TryAii-DRE model ID
+    model_used: str  # TryAii model ID
     openrouter_model: str  # OpenRouter model slug
     route_reasoning: str  # Why this model was chosen
     usage: dict = field(default_factory=dict)
@@ -113,7 +113,7 @@ class OpenRouterIntegration:
     """
     Active routing integration with OpenRouter.
 
-    Combines TryAii-DRE's semantic routing with OpenRouter's multi-provider
+    Combines TryAii's semantic routing with OpenRouter's multi-provider
     API to automatically select and call the best model.
     """
 
@@ -160,7 +160,7 @@ class OpenRouterIntegration:
         )
 
     def _resolve_model(self, model_id: str) -> str:
-        """Convert TryAii-DRE model ID to OpenRouter slug."""
+        """Convert TryAii model ID to OpenRouter slug."""
         return MODEL_ID_TO_OPENROUTER.get(model_id, model_id)
 
     # -- Retry helper --------------------------------------------------

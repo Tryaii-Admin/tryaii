@@ -20,7 +20,7 @@
 
 ```python
 from tryaii import ModelRegistry
-registry = ModelRegistry.default()        # bundled 33-model preset
+registry = ModelRegistry.default()        # bundled 39-model preset
 registry = ModelRegistry()                # or start empty and add your own
 registry.add("gpt-4o-mini", provider="OpenAI",
              benchmarks={"HumanEval": 87.2, "MMLU": 70.0},

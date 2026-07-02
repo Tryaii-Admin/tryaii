@@ -1,5 +1,5 @@
 /**
- * TryAii-DRE -- Embedding-based AI Model Router
+ * TryAii -- Embedding-based AI Model Router
  *
  * Understands your prompt semantically and routes to the best model
  * based on benchmarks, cost, speed, and quality priorities.
