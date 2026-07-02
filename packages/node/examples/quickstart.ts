@@ -1,5 +1,5 @@
 /**
- * TryAii-DRE Quick Start Example
+ * TryAii Quick Start Example
  *
  * Demonstrates basic usage of the Router to classify prompts
  * and route them to the best AI model.
@@ -14,7 +14,7 @@ async function main(): Promise<void> {
   // Uses the embedding classifier backed by @xenova/transformers.
   const router = new Router();
 
-  console.log('=== TryAii-DRE Quick Start ===\n');
+  console.log('=== TryAii Quick Start ===\n');
   console.log(`Models loaded: ${router.models.length}`);
   console.log(`Benchmarks: ${router.benchmarks.names.join(', ')}\n`);
 

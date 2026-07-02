@@ -20,7 +20,7 @@ tryaii setup --model all-mpnet-base-v2
 - For a non-default model, centroids are generated from the bundled training queries and cached at `~/.tryaii/centroids/centroids_<model>.json` (override the directory with `TRYAII_DRE_DATA_DIR` on Python).
 
 ```
-Setting up TryAii-DRE with embedding model: all-MiniLM-L6-v2
+Setting up TryAii with embedding model: all-MiniLM-L6-v2
 This will download the model and generate centroids (one-time operation)...
 
 Setup complete! Generated 12 benchmark centroids.

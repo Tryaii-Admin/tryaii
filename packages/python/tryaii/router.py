@@ -1,5 +1,5 @@
 """
-Main Router -- the primary public API for TryAii-DRE.
+Main Router -- the primary public API for TryAii.
 
 Usage:
     from tryaii import Router

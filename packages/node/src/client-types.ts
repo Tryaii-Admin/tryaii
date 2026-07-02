@@ -1,5 +1,5 @@
 /**
- * High-level client TypeScript types for TryAii-DRE.
+ * High-level client TypeScript types for TryAii.
  */
 
 /**
@@ -55,7 +55,7 @@ export interface ChatResponse {
   /** The AI-generated response text. */
   content: string;
 
-  /** TryAii-DRE model ID that was used. */
+  /** TryAii model ID that was used. */
   modelUsed: string;
 
   /** OpenRouter model slug that was called. */

@@ -1,5 +1,5 @@
 /**
- * Shared type definitions for TryAii-DRE.
+ * Shared type definitions for TryAii.
  */
 
 /** Latency tier for a model. */

@@ -1,5 +1,5 @@
 """
-DREClient -- unified high-level client for TryAii-DRE.
+DREClient -- unified high-level client for TryAii.
 
 Wraps Router + OpenRouterIntegration into a single class so users
 do not need to manage two separate objects.

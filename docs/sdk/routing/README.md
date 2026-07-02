@@ -4,7 +4,7 @@
 
 ## Constructing
 
-All dependencies are injectable; defaults give you the bundled 33-model catalog, 12 standard benchmarks, and local embeddings (initialized lazily on first route).
+All dependencies are injectable; defaults give you the bundled 39-model catalog, 12 standard benchmarks, and local embeddings (initialized lazily on first route).
 
 ```python
 from tryaii import Router, TryaiiDreConfig

@@ -2,7 +2,7 @@
 Custom Benchmarks -- Add your own benchmarks to the routing system.
 
 This is designed for connectivity with external benchmark-creation tools.
-You can define custom benchmarks with representative queries, and TryAii-DRE
+You can define custom benchmarks with representative queries, and TryAii
 will generate centroids and include them in routing decisions.
 """
 

@@ -1,5 +1,5 @@
 /**
- * Animated startup banner for the TryAii-DRE CLI.
+ * Animated startup banner for the TryAii CLI.
  *
  * Renders a blue -> red `TRYAII` wordmark to stderr so stdout stays clean for
  * piped / JSON output. Color and animation are suppressed automatically when:

@@ -1,4 +1,4 @@
-# TryAii-DRE SDK
+# TryAii SDK
 
 The same routing engine ships as two SDKs — `tryaii` on PyPI and `tryaii` on npm — with matching behavior and naming (Python `snake_case` ↔ Node `camelCase`; e.g. `result.best_model` ↔ `result.bestModel`, `top_k=` ↔ `{ topK }`).
 
