@@ -573,7 +573,7 @@
         "input_per_1k": 0.005,
         "output_per_1k": 0.025
       },
-      "latency": "slow",
+      "latency": "medium",
       "description": "Claude Opus 4.8: Anthropic's most capable model"
     },
     {
@@ -605,7 +605,7 @@
         "input_per_1k": 0.01,
         "output_per_1k": 0.05
       },
-      "latency": "slow",
+      "latency": "medium",
       "description": "Claude Fable 5: New flagship family"
     },
     {

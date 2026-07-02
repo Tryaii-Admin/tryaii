@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-06-29)
+
+### Catalog: bump flagship latency tier (claude-fable-5, claude-opus-4-8)
+
+Moved `claude-fable-5` and `claude-opus-4-8` from the `slow` latency tier to
+`medium`, raising their speed score from `0.3` to `0.6`. They were being unduly
+penalized on speed-weighted/balanced routing relative to their quality. Data-only
+change; preset stays byte-identical across SDKs.
 
 ### Routing daemon — fast repeated `route`/`eval`
 
