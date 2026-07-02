@@ -24,6 +24,10 @@
 >
 > _(The wordmark above animates in a blue→red gradient when you run the CLI in a real terminal.)_
 
+## Demo
+
+https://github.com/user-attachments/assets/b9f4d361-5c63-4138-ab13-f589e959798d
+
 ---
 
 ## Install
