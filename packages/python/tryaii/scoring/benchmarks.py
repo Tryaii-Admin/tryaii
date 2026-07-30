@@ -48,16 +48,51 @@ NORMALIZATION_RANGES: dict[str, NormalizationRange] = {
 }
 
 
+# Per-benchmark importance weights ("trust" multipliers), orthogonal to
+# prompt-similarity: the weight multiplies into the similarity weight in the
+# scoring engine, so a higher weight pulls model ranking harder toward that
+# benchmark. Weight 1.0 is neutral, and an all-1.0 (or empty) table reproduces
+# the old similarity-only behaviour exactly.
+#
+# Left empty here: the weight *values* are a property of the shipped catalog
+# (which benchmarks are saturated/gamed vs contamination-resistant) and belong
+# with the catalog data, so the default catalog stays neutral. Keys, when set,
+# must be benchmark names present in NORMALIZATION_RANGES.
+BENCHMARK_WEIGHTS: dict[str, float] = {}
+
+# Weight used for any benchmark with no explicit entry (neutral).
+DEFAULT_BENCHMARK_WEIGHT = 1.0
+
+# Plausibility floors for multiple-choice benchmarks: a real model cannot score
+# meaningfully below random chance, so a value under these floors is corrupt
+# data (e.g. a normalized sub-score of GPQA=1.3 where the real accuracy is ~90).
+# Such values are dropped on load (see ``is_implausible_benchmark_score``) so
+# they neither crater the model directly nor poison the imputation medians.
+#
+# Left empty here: floors are only needed for catalogs whose upstream sources
+# emit such corruption, so they ship with the catalog data. The mechanism is
+# always active and is a no-op while this table is empty.
+RANDOM_CHANCE_FLOORS: dict[str, float] = {}
+
+
+def is_implausible_benchmark_score(benchmark: str, raw_score: float) -> bool:
+    """True if a raw benchmark score is implausibly low for its scale (corrupt)."""
+    floor = RANDOM_CHANCE_FLOORS.get(benchmark)
+    return floor is not None and raw_score < floor
+
+
 class BenchmarkNormalizer:
     """
-    Normalizes benchmark scores across different scales.
+    Normalizes benchmark scores across different scales and tracks each
+    benchmark's importance weight.
 
-    Supports standard benchmarks out of the box and allows
-    registering custom normalization ranges.
+    Supports standard benchmarks out of the box and allows registering custom
+    normalization ranges and weights.
     """
 
     def __init__(self):
         self._ranges: dict[str, NormalizationRange] = dict(NORMALIZATION_RANGES)
+        self._weights: dict[str, float] = dict(BENCHMARK_WEIGHTS)
 
     def normalize(self, benchmark: str, raw_score: float) -> float:
         """Normalize a raw benchmark score to 0-1."""
@@ -79,6 +114,18 @@ class BenchmarkNormalizer:
     def get_range(self, benchmark: str) -> Optional[NormalizationRange]:
         """Get the normalization range for a benchmark."""
         return self._ranges.get(benchmark)
+
+    def register_weight(self, benchmark: str, weight: float) -> None:
+        """Set a custom importance weight for a benchmark."""
+        self._weights[benchmark] = weight
+
+    def get_weight(self, benchmark: str) -> float:
+        """
+        Importance weight for a benchmark (defaults to DEFAULT_BENCHMARK_WEIGHT
+        for benchmarks with no explicit entry, so unknown/custom benchmarks stay
+        neutral).
+        """
+        return self._weights.get(benchmark, DEFAULT_BENCHMARK_WEIGHT)
 
     @property
     def known_benchmarks(self) -> list[str]:
