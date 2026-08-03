@@ -68,7 +68,10 @@ class ModelInfo:
         # to 0 would hand the model a perfect cost score.
         pricing = None
         raw_pricing = d.get("pricing") or {}
-        if raw_pricing.get("input_per_1k") is not None and raw_pricing.get("output_per_1k") is not None:
+        if (
+            raw_pricing.get("input_per_1k") is not None
+            and raw_pricing.get("output_per_1k") is not None
+        ):
             pricing = ModelPricing(
                 input_per_1k=raw_pricing["input_per_1k"],
                 output_per_1k=raw_pricing["output_per_1k"],

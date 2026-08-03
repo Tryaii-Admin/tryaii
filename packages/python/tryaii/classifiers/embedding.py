@@ -15,12 +15,12 @@ from typing import Optional
 
 import numpy as np
 
+from tryaii.benchmarks.standard import STANDARD_BENCHMARKS
 from tryaii.cache.lru import LRUCache
 from tryaii.centroids.generator import benchmark_fingerprint
 from tryaii.centroids.loader import CentroidLoader
 from tryaii.classifiers.base import BaseClassifier, ClassificationResult
 from tryaii.config import TryaiiDreConfig
-from tryaii.benchmarks.standard import STANDARD_BENCHMARKS
 from tryaii.embeddings.base import BaseEmbeddingProvider
 
 # Benchmark -> broad category mapping for display purposes
