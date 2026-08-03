@@ -46,7 +46,15 @@ export { ScoringEngine, SPEED_SCORES } from './scoring/engine.js';
 export type { ModelScore } from './scoring/engine.js';
 export { Priorities, DEFAULT_PRIORITIES } from './scoring/priorities.js';
 export type { PrioritiesData } from './scoring/priorities.js';
-export { BenchmarkNormalizer, NormalizationRange, NORMALIZATION_RANGES } from './scoring/benchmarks.js';
+export {
+  BenchmarkNormalizer,
+  NormalizationRange,
+  NORMALIZATION_RANGES,
+  BENCHMARK_WEIGHTS,
+  DEFAULT_BENCHMARK_WEIGHT,
+  RANDOM_CHANCE_FLOORS,
+  isImplausibleBenchmarkScore,
+} from './scoring/benchmarks.js';
 
 // Classifiers
 export { BaseClassifier, emptyClassificationResult, topBenchmarks } from './classifiers/base.js';

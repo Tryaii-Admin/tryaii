@@ -49,6 +49,15 @@ TOP_BENCHMARKS_FOR_SCORING = 5
 # cost/speed instead of being dropped. See score_models' neutral_fallback retry.
 NEUTRAL_QUALITY_SCORE = 0.5
 
+# Shrinkage constant for imputing a missing benchmark. The imputed value blends
+# the model's own demonstrated level with the registry median, weighting the
+# model's level by ``n / (n + K)`` where n is how many benchmarks the model
+# actually has. K=3 means a model needs ~3 real benchmarks before its own level
+# outweighs the median. This stops a sparse *strong* model being flattened to
+# "average" while still preventing a one-benchmark model from inflating itself.
+# With a dense catalog imputation rarely fires, so this is a mild change there.
+IMPUTATION_SHRINKAGE_K = 3
+
 
 def _compute_benchmark_medians(
     models: list[ModelInfo],
@@ -175,6 +184,27 @@ class ScoringEngine:
 
         return scores[:top_k]
 
+    def _model_level(self, model: ModelInfo) -> tuple[float, int]:
+        """
+        The model's own demonstrated quality level: the *median* of its
+        normalized scores across every benchmark it has data for, plus that
+        count. Used as the shrinkage target when imputing missing benchmarks so
+        a strong model isn't imputed as "average". The median (rather than mean)
+        keeps a single corrupt or anomalously-low score from dragging the level
+        down. Returns level 0.5 (neutral) for a model with no data.
+        """
+        items = [
+            (name, raw)
+            for name, raw in model.benchmark_scores.items()
+            if raw is not None and math.isfinite(raw)
+        ]
+        if not items:
+            return 0.5, 0
+        norms = sorted(self._normalizer.normalize(name, raw) for name, raw in items)
+        mid = len(norms) // 2
+        level = norms[mid] if len(norms) % 2 == 1 else (norms[mid - 1] + norms[mid]) / 2
+        return level, len(norms)
+
     def _score_single_model(
         self,
         model: ModelInfo,
@@ -196,21 +226,40 @@ class ScoringEngine:
         imputed_count = 0
         model_top_benchmarks: list[tuple[str, float]] = []
 
+        # The model's own demonstrated level and how much we trust it, used to
+        # impute missing benchmarks via shrinkage toward the registry median.
+        model_level, known_count = self._model_level(model)
+        alpha = known_count / (known_count + IMPUTATION_SHRINKAGE_K)
+
         for benchmark_name, user_similarity in top_benchmarks.items():
             model_bench_score = model.benchmark_scores.get(benchmark_name)
             imputed = False
             # Treat a non-finite raw score (NaN/inf) as missing so it does not
-            # poison the weighted quality sum; fall back to the median instead.
+            # poison the weighted quality sum; fall back to imputation instead.
             if model_bench_score is None or not math.isfinite(model_bench_score):
-                model_bench_score = benchmark_medians.get(benchmark_name)
-                if model_bench_score is None:
+                median = benchmark_medians.get(benchmark_name)
+                if median is None:
                     continue
+                # Shrinkage imputation: blend the model's own level with the
+                # registry median (in normalized space). A high-coverage strong
+                # model keeps a high imputed value instead of being dragged to
+                # the median; a sparse model stays near the median so it can't
+                # inflate itself.
+                median_norm = self._normalizer.normalize(benchmark_name, median)
+                normalized = alpha * model_level + (1 - alpha) * median_norm
                 imputed = True
                 imputed_count += 1
+            else:
+                normalized = self._normalizer.normalize(benchmark_name, model_bench_score)
 
-            normalized = self._normalizer.normalize(benchmark_name, model_bench_score)
-            weighted_quality_sum += user_similarity * normalized
-            total_similarity_weight += user_similarity
+            # Combine prompt-relevance (similarity) with the benchmark's
+            # intrinsic importance weight. similarity says "how much this prompt
+            # looks like the benchmark"; weight says "how much we trust the
+            # benchmark as a signal". With the default (empty) weight table
+            # get_weight is 1.0, so this reduces to similarity-only aggregation.
+            weight = user_similarity * self._normalizer.get_weight(benchmark_name)
+            weighted_quality_sum += weight * normalized
+            total_similarity_weight += weight
             if not imputed:
                 model_top_benchmarks.append((benchmark_name, normalized))
 

@@ -48,6 +48,17 @@ const TOP_BENCHMARKS_FOR_SCORING = 5;
 const NEUTRAL_QUALITY_SCORE = 0.5;
 
 /**
+ * Shrinkage constant for imputing a missing benchmark. The imputed value blends
+ * the model's own demonstrated level with the registry median, weighting the
+ * model's level by `n / (n + K)` where n is how many benchmarks the model
+ * actually has. K=3 means a model needs ~3 real benchmarks before its own level
+ * outweighs the median. This stops a sparse *strong* model being flattened to
+ * "average" while still preventing a one-benchmark model from inflating itself.
+ * With a dense catalog imputation rarely fires, so this is a mild change there.
+ */
+const IMPUTATION_SHRINKAGE_K = 3;
+
+/**
  * Compute the median raw benchmark score across the registry, per benchmark.
  *
  * Used to impute missing data: if a model has no score on a benchmark that
@@ -201,6 +212,27 @@ export class ScoringEngine {
     return scores.slice(0, topK);
   }
 
+  /**
+   * The model's own demonstrated quality level: the *median* of its normalized
+   * scores across every benchmark it has data for, plus that count. Used as the
+   * shrinkage target when imputing missing benchmarks so a strong model isn't
+   * imputed as "average". The median (rather than mean) keeps a single corrupt
+   * or anomalously-low score from dragging the level down. Returns level 0.5
+   * (neutral) for a model with no data.
+   */
+  private _modelLevel(model: ModelInfo): { level: number; count: number } {
+    const entries = Object.entries(model.benchmarkScores).filter(([, raw]) =>
+      Number.isFinite(raw),
+    );
+    if (entries.length === 0) return { level: 0.5, count: 0 };
+    const norms = entries
+      .map(([name, raw]) => this._normalizer.normalize(name, raw))
+      .sort((a, b) => a - b);
+    const mid = Math.floor(norms.length / 2);
+    const level = norms.length % 2 === 1 ? norms[mid] : (norms[mid - 1] + norms[mid]) / 2;
+    return { level, count: norms.length };
+  }
+
   private _scoreSingleModel(
     model: ModelInfo,
     topBenchmarks: Record<string, number>,
@@ -220,11 +252,17 @@ export class ScoringEngine {
     // not registry-median guesses.
     const modelTopBenchmarks: Array<[string, number]> = [];
 
+    // The model's own demonstrated level and how much we trust it, used to
+    // impute missing benchmarks via shrinkage toward the registry median.
+    const { level: modelLevel, count: knownCount } = this._modelLevel(model);
+    const alpha = knownCount / (knownCount + IMPUTATION_SHRINKAGE_K);
+
     for (const [benchmarkName, userSimilarity] of Object.entries(topBenchmarks)) {
-      let rawScore = model.benchmarkScores[benchmarkName];
+      const rawScore = model.benchmarkScores[benchmarkName];
+      let normalized: number;
       let imputed = false;
       // !Number.isFinite treats NaN/Infinity like a missing score so a junk
-      // value is imputed from the median rather than poisoning the result.
+      // value is imputed rather than poisoning the result.
       if (!Number.isFinite(rawScore)) {
         const median = benchmarkMedians[benchmarkName];
         // No model in the registry has data on this benchmark -> nothing to
@@ -232,14 +270,26 @@ export class ScoringEngine {
         // "skip the model entirely if it intersects nothing" semantic, which
         // is exactly what the test at line ~140 of engine.test.ts pins.
         if (median == null) continue;
-        rawScore = median;
+        // Shrinkage imputation: blend the model's own level with the registry
+        // median (in normalized space). A high-coverage strong model keeps a
+        // high imputed value instead of being dragged to the median; a sparse
+        // model stays near the median so it can't inflate itself.
+        const medianNorm = this._normalizer.normalize(benchmarkName, median);
+        normalized = alpha * modelLevel + (1 - alpha) * medianNorm;
         imputed = true;
         imputedCount += 1;
+      } else {
+        normalized = this._normalizer.normalize(benchmarkName, rawScore);
       }
 
-      const normalized = this._normalizer.normalize(benchmarkName, rawScore);
-      weightedQualitySum += userSimilarity * normalized;
-      totalSimilarityWeight += userSimilarity;
+      // Combine prompt-relevance (similarity) with the benchmark's intrinsic
+      // importance weight. similarity says "how much this prompt looks like the
+      // benchmark"; weight says "how much we trust the benchmark as a signal".
+      // With the default (empty) weight table getWeight is 1.0, so this reduces
+      // to the old similarity-only aggregation exactly.
+      const weight = userSimilarity * this._normalizer.getWeight(benchmarkName);
+      weightedQualitySum += weight * normalized;
+      totalSimilarityWeight += weight;
       if (!imputed) modelTopBenchmarks.push([benchmarkName, normalized]);
     }
 

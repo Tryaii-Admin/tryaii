@@ -15,6 +15,7 @@ from typing import Optional
 
 import numpy as np
 
+from tryaii.benchmarks.standard import STANDARD_BENCHMARKS
 from tryaii.cache.lru import LRUCache
 from tryaii.centroids.generator import benchmark_fingerprint
 from tryaii.centroids.loader import CentroidLoader
@@ -23,19 +24,14 @@ from tryaii.config import TryaiiDreConfig
 from tryaii.embeddings.base import BaseEmbeddingProvider
 
 # Benchmark -> broad category mapping for display purposes
+# Benchmark -> (broad_category, subcategory) mapping for display purposes.
+#
+# Derived from the standard benchmark definitions so the classifier's category
+# labels can never drift from the benchmark taxonomy (or its names). The
+# subcategory is the benchmark's primary (first) subcategory.
 BENCHMARK_CATEGORIES: dict[str, tuple[str, str]] = {
-    "MMLU": ("EDUCATIONAL", "ACADEMIC_INSTRUCTION"),
-    "HellaSwag": ("CONVERSATIONAL", "PERSONAL_ADVICE"),
-    "HumanEval": ("TECHNICAL", "CODE_TECHNICAL"),
-    "SWE-bench": ("TECHNICAL", "CODE_TECHNICAL"),
-    "TruthfulQA": ("CONVERSATIONAL", "PERSONAL_ADVICE"),
-    "ARC": ("EDUCATIONAL", "ACADEMIC_INSTRUCTION"),
-    "GSM8K": ("TECHNICAL", "MATHEMATICAL_SCIENTIFIC"),
-    "DROP": ("TECHNICAL", "MATHEMATICAL_SCIENTIFIC"),
-    "SuperGLUE": ("BUSINESS", "PROFESSIONAL_COMMUNICATION"),
-    "Chatbot Arena (LMSys)": ("CONVERSATIONAL", "PERSONAL_ADVICE"),
-    "MT-Bench": ("CREATIVE", "WRITING_LITERARY"),
-    "LiveBench": ("TECHNICAL", "CODE_TECHNICAL"),
+    b.name: (b.broad_category, b.subcategories[0] if b.subcategories else "GENERAL")
+    for b in STANDARD_BENCHMARKS
 }
 
 # Logistic steepness for intrinsic difficulty. Only affects the spread of the

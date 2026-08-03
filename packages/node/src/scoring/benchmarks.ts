@@ -48,16 +48,55 @@ export const NORMALIZATION_RANGES: Record<string, NormalizationRange> = {
 };
 
 /**
- * Normalizes benchmark scores across different scales.
+ * Per-benchmark importance weights ("trust" multipliers), orthogonal to
+ * prompt-similarity: the weight multiplies into the similarity weight in the
+ * scoring engine, so a higher weight pulls model ranking harder toward that
+ * benchmark. Weight 1.0 is neutral, and an all-1.0 (or empty) table reproduces
+ * the old similarity-only behaviour exactly.
  *
- * Supports standard benchmarks out of the box and allows
- * registering custom normalization ranges.
+ * Left empty here: the weight *values* are a property of the shipped catalog
+ * (which benchmarks are saturated/gamed vs contamination-resistant) and belong
+ * with the catalog data, so the default catalog stays neutral. Keys, when set,
+ * must be benchmark names present in NORMALIZATION_RANGES.
+ */
+export const BENCHMARK_WEIGHTS: Record<string, number> = {};
+
+/** Weight used for any benchmark with no explicit entry (neutral). */
+export const DEFAULT_BENCHMARK_WEIGHT = 1.0;
+
+/**
+ * Plausibility floors for multiple-choice benchmarks: a real model cannot score
+ * meaningfully below random chance, so a value under these floors is corrupt
+ * data (e.g. a normalized sub-score of GPQA=1.3 where the real accuracy is ~90).
+ * Such values are dropped on load (see `isImplausibleBenchmarkScore`) so they
+ * neither crater the model directly nor poison the imputation medians.
+ *
+ * Left empty here: floors are only needed for catalogs whose upstream sources
+ * emit such corruption, so they ship with the catalog data. The mechanism is
+ * always active and is a no-op while this table is empty.
+ */
+export const RANDOM_CHANCE_FLOORS: Record<string, number> = {};
+
+/** True if a raw benchmark score is implausibly low for its scale (corrupt). */
+export function isImplausibleBenchmarkScore(benchmark: string, rawScore: number): boolean {
+  const floor = RANDOM_CHANCE_FLOORS[benchmark];
+  return floor !== undefined && rawScore < floor;
+}
+
+/**
+ * Normalizes benchmark scores across different scales and tracks each
+ * benchmark's importance weight.
+ *
+ * Supports standard benchmarks out of the box and allows registering custom
+ * normalization ranges and weights.
  */
 export class BenchmarkNormalizer {
   private _ranges: Map<string, NormalizationRange>;
+  private _weights: Map<string, number>;
 
   constructor() {
     this._ranges = new Map(Object.entries(NORMALIZATION_RANGES));
+    this._weights = new Map(Object.entries(BENCHMARK_WEIGHTS));
   }
 
   /** Normalize a raw benchmark score to 0-1. */
@@ -83,6 +122,20 @@ export class BenchmarkNormalizer {
   /** Get the normalization range for a benchmark. */
   getRange(benchmark: string): NormalizationRange | undefined {
     return this._ranges.get(benchmark);
+  }
+
+  /** Set a custom importance weight for a benchmark. */
+  registerWeight(benchmark: string, weight: number): void {
+    this._weights.set(benchmark, weight);
+  }
+
+  /**
+   * Importance weight for a benchmark (defaults to DEFAULT_BENCHMARK_WEIGHT
+   * for benchmarks with no explicit entry, so unknown/custom benchmarks stay
+   * neutral).
+   */
+  getWeight(benchmark: string): number {
+    return this._weights.get(benchmark) ?? DEFAULT_BENCHMARK_WEIGHT;
   }
 
   /** List all benchmarks with registered normalization ranges. */

@@ -2,16 +2,20 @@
  * Shared type definitions for TryAii.
  */
 
-/** Latency tier for a model. */
-export type LatencyTier = 'very fast' | 'fast' | 'medium' | 'slow' | 'very slow';
+/**
+ * Latency tier for a model. "unknown" is used for models whose provider
+ * publishes no speed data; the scoring engine treats it as its conservative
+ * default (0.3).
+ */
+export type LatencyTier = 'very fast' | 'fast' | 'medium' | 'slow' | 'very slow' | 'unknown';
 
 /** Scoring strategy preset name. */
 export type ScoringStrategy = 'balanced' | 'performance' | 'cost' | 'speed';
 
-/** Pricing per 1k tokens in USD. */
+/** Pricing per 1k tokens in USD. Null components mean the price is unknown. */
 export interface ModelPricingData {
-  input_per_1k: number;
-  output_per_1k: number;
+  input_per_1k: number | null;
+  output_per_1k: number | null;
 }
 
 /** Raw model data as stored in JSON. */

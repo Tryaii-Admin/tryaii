@@ -27,7 +27,7 @@ class ModelPricing:
         return (self.input_per_1k + self.output_per_1k) / 2
 
 
-LatencyTier = Literal["very fast", "fast", "medium", "slow", "very slow"]
+LatencyTier = Literal["very fast", "fast", "medium", "slow", "very slow", "unknown"]
 
 
 @dataclass
@@ -64,16 +64,28 @@ class ModelInfo:
 
     @classmethod
     def from_dict(cls, d: dict) -> ModelInfo:
+        # Pricing with a missing component is unknown, not free: coercing null
+        # to 0 would hand the model a perfect cost score.
         pricing = None
-        if d.get("pricing"):
+        raw_pricing = d.get("pricing") or {}
+        if (
+            raw_pricing.get("input_per_1k") is not None
+            and raw_pricing.get("output_per_1k") is not None
+        ):
             pricing = ModelPricing(
-                input_per_1k=d["pricing"].get("input_per_1k", 0),
-                output_per_1k=d["pricing"].get("output_per_1k", 0),
+                input_per_1k=raw_pricing["input_per_1k"],
+                output_per_1k=raw_pricing["output_per_1k"],
             )
 
-        # Filter out null benchmark scores
+        # Drop null and implausible (corrupt) benchmark values such as
+        # below-random-chance multiple-choice scores -- keeping them would both
+        # crater the model and poison the registry-wide imputation medians.
+        from tryaii.scoring.benchmarks import is_implausible_benchmark_score
+
         benchmark_scores = {
-            k: v for k, v in (d.get("benchmark_scores") or {}).items() if v is not None
+            k: v
+            for k, v in (d.get("benchmark_scores") or {}).items()
+            if v is not None and not is_implausible_benchmark_score(k, v)
         }
         return cls(
             model_id=d["model_id"],
