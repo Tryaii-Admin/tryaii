@@ -8,7 +8,43 @@
       "input": {
         "input_file": "corpus/seq-identical.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "model": "claude-fable-5"
+          },
+          "count": 2,
+          "indices": [
+            0,
+            1
+          ],
+          "pairs": [
+            {
+              "relation": "identical",
+              "lcp_chars": 3600,
+              "lcp_tokens": 1029,
+              "expected": "HIT",
+              "expected_cached_tokens": 1029,
+              "diverged_at": null,
+              "likely_causes": [],
+              "ttl_check": null,
+              "notes": [
+                "Explicit-enablement provider: the hit requires a cache breakpoint placed at/inside the common prefix on BOTH requests."
+              ],
+              "from": 0,
+              "to": 1
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 1029,
+            "meets_threshold": true,
+            "min_tokens": 512
+          },
+          "summary": "2 requests; 1/1 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~1029 tok, which clears the activation threshold (512)."
+        }
+      ]
     },
     {
       "name": "seq-append-only-hit",
@@ -16,7 +52,43 @@
       "input": {
         "input_file": "corpus/seq-append-only.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "model": "claude-fable-5"
+          },
+          "count": 2,
+          "indices": [
+            0,
+            1
+          ],
+          "pairs": [
+            {
+              "relation": "append-only",
+              "lcp_chars": 3600,
+              "lcp_tokens": 1029,
+              "expected": "HIT",
+              "expected_cached_tokens": 1029,
+              "diverged_at": null,
+              "likely_causes": [],
+              "ttl_check": null,
+              "notes": [
+                "Explicit-enablement provider: the hit requires a cache breakpoint placed at/inside the common prefix on BOTH requests."
+              ],
+              "from": 0,
+              "to": 1
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 1029,
+            "meets_threshold": true,
+            "min_tokens": 512
+          },
+          "summary": "2 requests; 1/1 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~1029 tok, which clears the activation threshold (512)."
+        }
+      ]
     },
     {
       "name": "seq-append-below-threshold-miss",
@@ -24,7 +96,43 @@
       "input": {
         "input_file": "corpus/seq-append-short.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "model": "claude-fable-5"
+          },
+          "count": 2,
+          "indices": [
+            0,
+            1
+          ],
+          "pairs": [
+            {
+              "relation": "append-only",
+              "lcp_chars": 282,
+              "lcp_tokens": 81,
+              "expected": "MISS",
+              "expected_cached_tokens": 0,
+              "diverged_at": null,
+              "likely_causes": [],
+              "ttl_check": null,
+              "notes": [
+                "Common prefix ~81 tok is below the 512 minimum — no cache credit despite the clean prefix."
+              ],
+              "from": 0,
+              "to": 1
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 81,
+            "meets_threshold": false,
+            "min_tokens": 512
+          },
+          "summary": "2 requests; 0/1 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~81 tok, which does NOT clear the activation threshold (512)."
+        }
+      ]
     },
     {
       "name": "seq-truncated",
@@ -32,7 +140,44 @@
       "input": {
         "input_file": "corpus/seq-truncated.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "model": "claude-fable-5"
+          },
+          "count": 2,
+          "indices": [
+            0,
+            1
+          ],
+          "pairs": [
+            {
+              "relation": "truncated",
+              "lcp_chars": 3600,
+              "lcp_tokens": 1029,
+              "expected": "HIT",
+              "expected_cached_tokens": 1029,
+              "diverged_at": null,
+              "likely_causes": [],
+              "ttl_check": null,
+              "notes": [
+                "The newer request is a PREFIX of the older one — history trimming? Its full length can still hit the cache, but trimming mid-conversation usually signals a context-window strategy that fights caching.",
+                "Explicit-enablement provider: the hit requires a cache breakpoint placed at/inside the common prefix on BOTH requests."
+              ],
+              "from": 0,
+              "to": 1
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 1029,
+            "meets_threshold": true,
+            "min_tokens": 512
+          },
+          "summary": "2 requests; 1/1 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~1029 tok, which clears the activation threshold (512)."
+        }
+      ]
     },
     {
       "name": "seq-diverged-partial-cause",
@@ -40,7 +185,53 @@
       "input": {
         "input_file": "corpus/seq-diverged-partial.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "model": "claude-fable-5"
+          },
+          "count": 2,
+          "indices": [
+            0,
+            1
+          ],
+          "pairs": [
+            {
+              "relation": "diverged",
+              "lcp_chars": 3577,
+              "lcp_tokens": 1022,
+              "expected": "PARTIAL",
+              "expected_cached_tokens": 1022,
+              "diverged_at": {
+                "offset": 3577,
+                "section": "system",
+                "section_offset": 3577,
+                "context_prev": " when speed wins. Stamp: 2026-07-30T09:14:22Z.\\n\\nuser: First question about routing to Oslo.",
+                "context_curr": " when speed wins. Stamp: 2026-07-30T09:15:37Z.\\n\\nuser: First question about routing to Oslo."
+              },
+              "likely_causes": [
+                "timestamp-datetime value changed"
+              ],
+              "ttl_check": null,
+              "notes": [
+                "Divergence inside the SYSTEM section — invalidates system + messages (tools may survive on Anthropic).",
+                "Only the ~1022-tok common prefix gets cache credit; everything after the divergence re-processes at full price.",
+                "Explicit-enablement provider: the hit requires a cache breakpoint placed at/inside the common prefix on BOTH requests."
+              ],
+              "from": 0,
+              "to": 1
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 1022,
+            "meets_threshold": true,
+            "min_tokens": 512
+          },
+          "summary": "2 requests; 1/1 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~1022 tok, which clears the activation threshold (512)."
+        }
+      ]
     },
     {
       "name": "seq-diverged-miss",
@@ -48,7 +239,52 @@
       "input": {
         "input_file": "corpus/seq-diverged-miss.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "model": "claude-fable-5"
+          },
+          "count": 2,
+          "indices": [
+            0,
+            1
+          ],
+          "pairs": [
+            {
+              "relation": "diverged",
+              "lcp_chars": 20,
+              "lcp_tokens": 6,
+              "expected": "MISS",
+              "expected_cached_tokens": 0,
+              "diverged_at": {
+                "offset": 20,
+                "section": "system",
+                "section_offset": 20,
+                "context_prev": "Now: 2026-07-30T09:14:22Z. You are the routing assistant for a logistics platform. Answer with the warehouse code, the c",
+                "context_curr": "Now: 2026-07-30T09:15:37Z. You are the routing assistant for a logistics platform. Answer with the warehouse code, the c"
+              },
+              "likely_causes": [
+                "timestamp-datetime value changed"
+              ],
+              "ttl_check": null,
+              "notes": [
+                "Divergence inside the SYSTEM section — invalidates system + messages (tools may survive on Anthropic).",
+                "Common prefix ~6 tok < 512 minimum — the divergence effectively kills caching for this pair."
+              ],
+              "from": 0,
+              "to": 1
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 6,
+            "meets_threshold": false,
+            "min_tokens": 512
+          },
+          "summary": "2 requests; 0/1 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~6 tok, which does NOT clear the activation threshold (512)."
+        }
+      ]
     },
     {
       "name": "seq-diverged-unknown",
@@ -56,7 +292,47 @@
       "input": {
         "input_file": "corpus/seq-diverged-xai.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "xAI (Grok)",
+            "provider_key": "xai",
+            "model": "grok-4"
+          },
+          "count": 2,
+          "indices": [
+            0,
+            1
+          ],
+          "pairs": [
+            {
+              "relation": "diverged",
+              "lcp_chars": 2378,
+              "lcp_tokens": 444,
+              "expected": "UNKNOWN",
+              "expected_cached_tokens": null,
+              "diverged_at": {
+                "offset": 2378,
+                "section": "messages[0]:user",
+                "section_offset": 6,
+                "context_prev": "nd air freight when speed wins. \\n\\nuser: First question about routing to Oslo.",
+                "context_curr": "nd air freight when speed wins. \\n\\nuser: Different question about Bergen weather."
+              },
+              "likely_causes": [],
+              "ttl_check": null,
+              "notes": [],
+              "from": 0,
+              "to": 1
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 444,
+            "meets_threshold": true,
+            "min_tokens": null
+          },
+          "summary": "2 requests; 0/1 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~444 tok, which clears the activation threshold (unpublished threshold)."
+        }
+      ]
     },
     {
       "name": "seq-at-risk-no-ttl",
@@ -64,7 +340,45 @@
       "input": {
         "input_file": "corpus/seq-xai-atrisk.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "xAI (Grok)",
+            "provider_key": "xai",
+            "model": "grok-4"
+          },
+          "count": 2,
+          "indices": [
+            0,
+            1
+          ],
+          "pairs": [
+            {
+              "relation": "identical",
+              "lcp_chars": 2415,
+              "lcp_tokens": 450,
+              "expected": "AT_RISK",
+              "expected_cached_tokens": 450,
+              "diverged_at": null,
+              "likely_causes": [],
+              "ttl_check": {
+                "gap_seconds": 10,
+                "ttl_seconds": null,
+                "note": "No TTL guarantee / unpublished lifetime for this provider — any gap is at-risk."
+              },
+              "notes": [],
+              "from": 0,
+              "to": 1
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 450,
+            "meets_threshold": true,
+            "min_tokens": null
+          },
+          "summary": "2 requests; 0/1 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~450 tok, which clears the activation threshold (unpublished threshold)."
+        }
+      ]
     },
     {
       "name": "seq-at-risk-openai-24h",
@@ -72,7 +386,45 @@
       "input": {
         "input_file": "corpus/seq-openai-24h.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "OpenAI",
+            "provider_key": "openai",
+            "model": "gpt-5.2"
+          },
+          "count": 2,
+          "indices": [
+            0,
+            1
+          ],
+          "pairs": [
+            {
+              "relation": "append-only",
+              "lcp_chars": 7155,
+              "lcp_tokens": 1330,
+              "expected": "AT_RISK",
+              "expected_cached_tokens": 1330,
+              "diverged_at": null,
+              "likely_causes": [],
+              "ttl_check": {
+                "gap_seconds": 3600,
+                "ttl_seconds": 300,
+                "note": "Gap 3600s exceeds the 5-10 min sliding window; may still hit via 24h extended retention (not guaranteed)."
+              },
+              "notes": [],
+              "from": 0,
+              "to": 1
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 1330,
+            "meets_threshold": true,
+            "min_tokens": 1024
+          },
+          "summary": "2 requests; 0/1 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~1330 tok, which clears the activation threshold (1024)."
+        }
+      ]
     },
     {
       "name": "seq-ttl-expired-miss",
@@ -80,7 +432,45 @@
       "input": {
         "input_file": "corpus/seq-ttl-cases.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "model": "claude-fable-5"
+          },
+          "count": 2,
+          "indices": [
+            0,
+            1
+          ],
+          "pairs": [
+            {
+              "relation": "append-only",
+              "lcp_chars": 3600,
+              "lcp_tokens": 1029,
+              "expected": "MISS",
+              "expected_cached_tokens": 1029,
+              "diverged_at": null,
+              "likely_causes": [],
+              "ttl_check": {
+                "gap_seconds": 1800,
+                "ttl_seconds": 300,
+                "note": "Gap 1800s exceeds the default TTL (300s) — entry likely evicted. Consider the 1h TTL / keep-alive pings where available."
+              },
+              "notes": [],
+              "from": 0,
+              "to": 1
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 1029,
+            "meets_threshold": true,
+            "min_tokens": 512
+          },
+          "summary": "2 requests; 0/1 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~1029 tok, which clears the activation threshold (512)."
+        }
+      ]
     },
     {
       "name": "seq-ttl-negative-gap",
@@ -88,7 +478,46 @@
       "input": {
         "input_file": "corpus/seq-negative-gap.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "model": "claude-fable-5"
+          },
+          "count": 2,
+          "indices": [
+            0,
+            1
+          ],
+          "pairs": [
+            {
+              "relation": "identical",
+              "lcp_chars": 3600,
+              "lcp_tokens": 1029,
+              "expected": "HIT",
+              "expected_cached_tokens": 1029,
+              "diverged_at": null,
+              "likely_causes": [],
+              "ttl_check": {
+                "gap_seconds": -1800,
+                "ttl_seconds": 300
+              },
+              "notes": [
+                "Explicit-enablement provider: the hit requires a cache breakpoint placed at/inside the common prefix on BOTH requests."
+              ],
+              "from": 0,
+              "to": 1
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 1029,
+            "meets_threshold": true,
+            "min_tokens": 512
+          },
+          "summary": "2 requests; 1/1 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~1029 tok, which clears the activation threshold (512)."
+        }
+      ]
     },
     {
       "name": "seq-ttl-malformed-sent-at",
@@ -96,7 +525,43 @@
       "input": {
         "input_file": "corpus/seq-malformed-ts.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "model": "claude-fable-5"
+          },
+          "count": 2,
+          "indices": [
+            0,
+            1
+          ],
+          "pairs": [
+            {
+              "relation": "identical",
+              "lcp_chars": 3600,
+              "lcp_tokens": 1029,
+              "expected": "HIT",
+              "expected_cached_tokens": 1029,
+              "diverged_at": null,
+              "likely_causes": [],
+              "ttl_check": null,
+              "notes": [
+                "Explicit-enablement provider: the hit requires a cache breakpoint placed at/inside the common prefix on BOTH requests."
+              ],
+              "from": 0,
+              "to": 1
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 1029,
+            "meets_threshold": true,
+            "min_tokens": 512
+          },
+          "summary": "2 requests; 1/1 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~1029 tok, which clears the activation threshold (512)."
+        }
+      ]
     },
     {
       "name": "seq-ttl-naive-vs-aware",
@@ -104,7 +569,45 @@
       "input": {
         "input_file": "corpus/seq-naive-aware.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "model": "claude-fable-5"
+          },
+          "count": 2,
+          "indices": [
+            0,
+            1
+          ],
+          "pairs": [
+            {
+              "relation": "identical",
+              "lcp_chars": 3600,
+              "lcp_tokens": 1029,
+              "expected": "MISS",
+              "expected_cached_tokens": 1029,
+              "diverged_at": null,
+              "likely_causes": [],
+              "ttl_check": {
+                "gap_seconds": 600,
+                "ttl_seconds": 300,
+                "note": "Gap 600s exceeds the default TTL (300s) — entry likely evicted. Consider the 1h TTL / keep-alive pings where available."
+              },
+              "notes": [],
+              "from": 0,
+              "to": 1
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 1029,
+            "meets_threshold": true,
+            "min_tokens": 512
+          },
+          "summary": "2 requests; 0/1 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~1029 tok, which clears the activation threshold (512)."
+        }
+      ]
     },
     {
       "name": "seq-ttl-offset-forms",
@@ -112,7 +615,65 @@
       "input": {
         "input_file": "corpus/seq-offset-forms.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "model": "claude-fable-5"
+          },
+          "count": 3,
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "pairs": [
+            {
+              "relation": "identical",
+              "lcp_chars": 3600,
+              "lcp_tokens": 1029,
+              "expected": "HIT",
+              "expected_cached_tokens": 1029,
+              "diverged_at": null,
+              "likely_causes": [],
+              "ttl_check": {
+                "gap_seconds": 240,
+                "ttl_seconds": 300
+              },
+              "notes": [
+                "Explicit-enablement provider: the hit requires a cache breakpoint placed at/inside the common prefix on BOTH requests."
+              ],
+              "from": 0,
+              "to": 1
+            },
+            {
+              "relation": "identical",
+              "lcp_chars": 3600,
+              "lcp_tokens": 1029,
+              "expected": "HIT",
+              "expected_cached_tokens": 1029,
+              "diverged_at": null,
+              "likely_causes": [],
+              "ttl_check": {
+                "gap_seconds": 240.2,
+                "ttl_seconds": 300
+              },
+              "notes": [
+                "Explicit-enablement provider: the hit requires a cache breakpoint placed at/inside the common prefix on BOTH requests."
+              ],
+              "from": 1,
+              "to": 2
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 1029,
+            "meets_threshold": true,
+            "min_tokens": 512
+          },
+          "summary": "3 requests; 2/2 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~1029 tok, which clears the activation threshold (512)."
+        }
+      ]
     },
     {
       "name": "seq-gap-fractional-half-even",
@@ -120,7 +681,46 @@
       "input": {
         "input_file": "corpus/seq-frac-gap.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "model": "claude-fable-5"
+          },
+          "count": 2,
+          "indices": [
+            0,
+            1
+          ],
+          "pairs": [
+            {
+              "relation": "identical",
+              "lcp_chars": 3600,
+              "lcp_tokens": 1029,
+              "expected": "HIT",
+              "expected_cached_tokens": 1029,
+              "diverged_at": null,
+              "likely_causes": [],
+              "ttl_check": {
+                "gap_seconds": 12.2,
+                "ttl_seconds": 300
+              },
+              "notes": [
+                "Explicit-enablement provider: the hit requires a cache breakpoint placed at/inside the common prefix on BOTH requests."
+              ],
+              "from": 0,
+              "to": 1
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 1029,
+            "meets_threshold": true,
+            "min_tokens": 512
+          },
+          "summary": "2 requests; 1/1 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~1029 tok, which clears the activation threshold (512)."
+        }
+      ]
     },
     {
       "name": "seq-explicit-breakpoint-note",
@@ -128,7 +728,46 @@
       "input": {
         "input_file": "corpus/seq-breakpoint-note.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "model": "claude-fable-5"
+          },
+          "count": 2,
+          "indices": [
+            0,
+            1
+          ],
+          "pairs": [
+            {
+              "relation": "identical",
+              "lcp_chars": 3600,
+              "lcp_tokens": 1029,
+              "expected": "HIT",
+              "expected_cached_tokens": 1029,
+              "diverged_at": null,
+              "likely_causes": [],
+              "ttl_check": {
+                "gap_seconds": 60,
+                "ttl_seconds": 300
+              },
+              "notes": [
+                "Explicit-enablement provider: the hit requires a cache breakpoint placed at/inside the common prefix on BOTH requests."
+              ],
+              "from": 0,
+              "to": 1
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 1029,
+            "meets_threshold": true,
+            "min_tokens": 512
+          },
+          "summary": "2 requests; 1/1 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~1029 tok, which clears the activation threshold (512)."
+        }
+      ]
     },
     {
       "name": "seq-group-normalized-model",
@@ -136,7 +775,41 @@
       "input": {
         "input_file": "corpus/seq-norm-model.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "OpenAI",
+            "provider_key": "openai",
+            "model": "gpt-5.2"
+          },
+          "count": 2,
+          "indices": [
+            0,
+            1
+          ],
+          "pairs": [
+            {
+              "relation": "identical",
+              "lcp_chars": 7155,
+              "lcp_tokens": 1330,
+              "expected": "HIT",
+              "expected_cached_tokens": 1330,
+              "diverged_at": null,
+              "likely_causes": [],
+              "ttl_check": null,
+              "notes": [],
+              "from": 0,
+              "to": 1
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 1330,
+            "meets_threshold": true,
+            "min_tokens": 1024
+          },
+          "summary": "2 requests; 1/1 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~1330 tok, which clears the activation threshold (1024)."
+        }
+      ]
     },
     {
       "name": "seq-cross-group-note",
@@ -144,7 +817,48 @@
       "input": {
         "input_file": "corpus/seq-mixed-models.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "model": "claude-fable-5"
+          },
+          "count": 1,
+          "indices": [
+            0
+          ],
+          "pairs": [],
+          "shared_prefix_all": null,
+          "summary": "Single request — caching needs >= 2 same-prefix requests inside the TTL window to pay off (a lone write costs the premium for nothing where one exists)."
+        },
+        {
+          "group": {
+            "provider": "OpenAI",
+            "provider_key": "openai",
+            "model": "gpt-5.2"
+          },
+          "count": 1,
+          "indices": [
+            1
+          ],
+          "pairs": [],
+          "shared_prefix_all": null,
+          "summary": "Single request — caching needs >= 2 same-prefix requests inside the TTL window to pay off (a lone write costs the premium for nothing where one exists)."
+        },
+        {
+          "group": {
+            "provider": "-",
+            "provider_key": "-",
+            "model": "-"
+          },
+          "count": 0,
+          "indices": [],
+          "pairs": [],
+          "shared_prefix_all": null,
+          "summary": "NOTE: the input list spans multiple (provider, model) pairs — caches are model- and provider-scoped, so requests in different groups never share cache. A model/provider switch mid-sequence = cold cache."
+        }
+      ]
     },
     {
       "name": "seq-shared-prefix-all",
@@ -152,7 +866,73 @@
       "input": {
         "input_file": "corpus/seq-three.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "model": "claude-fable-5"
+          },
+          "count": 3,
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "pairs": [
+            {
+              "relation": "diverged",
+              "lcp_chars": 3587,
+              "lcp_tokens": 1025,
+              "expected": "PARTIAL",
+              "expected_cached_tokens": 1025,
+              "diverged_at": {
+                "offset": 3587,
+                "section": "messages[0]:user",
+                "section_offset": 30,
+                "context_prev": "d wins. \\n\\nuser: Question about the Oslo route.",
+                "context_curr": "d wins. \\n\\nuser: Question about the Oslo weather."
+              },
+              "likely_causes": [],
+              "ttl_check": null,
+              "notes": [
+                "Only the ~1025-tok common prefix gets cache credit; everything after the divergence re-processes at full price.",
+                "Explicit-enablement provider: the hit requires a cache breakpoint placed at/inside the common prefix on BOTH requests."
+              ],
+              "from": 0,
+              "to": 1
+            },
+            {
+              "relation": "diverged",
+              "lcp_chars": 3578,
+              "lcp_tokens": 1022,
+              "expected": "PARTIAL",
+              "expected_cached_tokens": 1022,
+              "diverged_at": {
+                "offset": 3578,
+                "section": "messages[0]:user",
+                "section_offset": 21,
+                "context_prev": "when speed wins. \\n\\nuser: Question about the Oslo weather.",
+                "context_curr": "when speed wins. \\n\\nuser: Question about Bergen."
+              },
+              "likely_causes": [],
+              "ttl_check": null,
+              "notes": [
+                "Only the ~1022-tok common prefix gets cache credit; everything after the divergence re-processes at full price.",
+                "Explicit-enablement provider: the hit requires a cache breakpoint placed at/inside the common prefix on BOTH requests."
+              ],
+              "from": 1,
+              "to": 2
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 1022,
+            "meets_threshold": true,
+            "min_tokens": 512
+          },
+          "summary": "3 requests; 2/2 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~1022 tok, which clears the activation threshold (512)."
+        }
+      ]
     },
     {
       "name": "seq-diverge-at-separator",
@@ -160,7 +940,50 @@
       "input": {
         "input_file": "corpus/seq-sep-diverge.json"
       },
-      "expected": null
+      "expected": [
+        {
+          "group": {
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "model": "claude-fable-5"
+          },
+          "count": 2,
+          "indices": [
+            0,
+            1
+          ],
+          "pairs": [
+            {
+              "relation": "diverged",
+              "lcp_chars": 5,
+              "lcp_tokens": 1,
+              "expected": "MISS",
+              "expected_cached_tokens": 0,
+              "diverged_at": {
+                "offset": 5,
+                "section": "system",
+                "section_offset": 5,
+                "context_prev": "Hello\\n\\nuser: q",
+                "context_curr": "Hello!\\n\\nuser: q"
+              },
+              "likely_causes": [],
+              "ttl_check": null,
+              "notes": [
+                "Divergence inside the SYSTEM section — invalidates system + messages (tools may survive on Anthropic).",
+                "Common prefix ~1 tok < 512 minimum — the divergence effectively kills caching for this pair."
+              ],
+              "from": 0,
+              "to": 1
+            }
+          ],
+          "shared_prefix_all": {
+            "tokens": 1,
+            "meets_threshold": false,
+            "min_tokens": 512
+          },
+          "summary": "2 requests; 0/1 consecutive transitions expected to get cache credit. Shared prefix across all requests: ~1 tok, which does NOT clear the activation threshold (512)."
+        }
+      ]
     }
   ]
 }

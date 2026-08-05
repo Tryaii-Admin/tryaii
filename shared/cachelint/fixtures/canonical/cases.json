@@ -21,7 +21,27 @@
           ]
         }
       },
-      "expected": null
+      "expected": {
+        "text": "[{\"name\":\"lookup\"}]\n\nSYS\n\nuser: Which warehouse serves Oslo?",
+        "sections": [
+          {
+            "name": "tools",
+            "start": 0,
+            "end": 19
+          },
+          {
+            "name": "system",
+            "start": 21,
+            "end": 24
+          },
+          {
+            "name": "messages[0]:user",
+            "start": 26,
+            "end": 60
+          }
+        ],
+        "non_text": 0
+      }
     },
     {
       "name": "can-tools-sorted-keys-integral-floats",
@@ -51,7 +71,22 @@
           ]
         }
       },
-      "expected": null
+      "expected": {
+        "text": "[{\"alpha\":{\"a\":[1,\"x\",3],\"b\":2.5},\"label\":\"café\",\"num\":10,\"zeta\":1}]\n\nuser: q",
+        "sections": [
+          {
+            "name": "tools",
+            "start": 0,
+            "end": 68
+          },
+          {
+            "name": "messages[0]:user",
+            "start": 70,
+            "end": 77
+          }
+        ],
+        "non_text": 0
+      }
     },
     {
       "name": "can-bare-string-prompt",
@@ -59,7 +94,17 @@
       "input": {
         "prompt": "Just a question"
       },
-      "expected": null
+      "expected": {
+        "text": "user: Just a question",
+        "sections": [
+          {
+            "name": "messages[0]:user",
+            "start": 0,
+            "end": 21
+          }
+        ],
+        "non_text": 0
+      }
     },
     {
       "name": "can-empty-prompt-object",
@@ -67,7 +112,11 @@
       "input": {
         "prompt": {}
       },
-      "expected": null
+      "expected": {
+        "text": "",
+        "sections": [],
+        "non_text": 0
+      }
     },
     {
       "name": "can-non-text-blocks",
@@ -97,7 +146,17 @@
           ]
         }
       },
-      "expected": null
+      "expected": {
+        "text": "user: [image]\nlook\nnoType\n[block]",
+        "sections": [
+          {
+            "name": "messages[0]:user",
+            "start": 0,
+            "end": 33
+          }
+        ],
+        "non_text": 2
+      }
     },
     {
       "name": "can-system-as-block-list",
@@ -119,7 +178,22 @@
           ]
         }
       },
-      "expected": null
+      "expected": {
+        "text": "A\nB\n\nuser: q",
+        "sections": [
+          {
+            "name": "system",
+            "start": 0,
+            "end": 3
+          },
+          {
+            "name": "messages[0]:user",
+            "start": 5,
+            "end": 12
+          }
+        ],
+        "non_text": 0
+      }
     },
     {
       "name": "can-message-shapes",
@@ -134,7 +208,22 @@
           ]
         }
       },
-      "expected": null
+      "expected": {
+        "text": "user: plain string msg\n\nuser: no role here",
+        "sections": [
+          {
+            "name": "messages[0]:user",
+            "start": 0,
+            "end": 22
+          },
+          {
+            "name": "messages[1]:user",
+            "start": 24,
+            "end": 42
+          }
+        ],
+        "non_text": 0
+      }
     },
     {
       "name": "can-falsy-skipped",
@@ -151,7 +240,17 @@
           ]
         }
       },
-      "expected": null
+      "expected": {
+        "text": "user: q",
+        "sections": [
+          {
+            "name": "messages[0]:user",
+            "start": 0,
+            "end": 7
+          }
+        ],
+        "non_text": 0
+      }
     },
     {
       "name": "can-spans-unicode",
@@ -167,7 +266,22 @@
           ]
         }
       },
-      "expected": null
+      "expected": {
+        "text": "🚀 sys\n\nuser: héllo",
+        "sections": [
+          {
+            "name": "system",
+            "start": 0,
+            "end": 5
+          },
+          {
+            "name": "messages[0]:user",
+            "start": 7,
+            "end": 18
+          }
+        ],
+        "non_text": 0
+      }
     }
   ]
 }

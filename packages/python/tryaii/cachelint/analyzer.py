@@ -217,6 +217,14 @@ def _recommendations(resolved: dict, verdict_code: str, findings: list,
 # Main entry
 # ---------------------------------------------------------------------------
 
+def _next_blocking_start(blockers: list, first) -> Optional[int]:
+    """Start offset of the earliest blocker OTHER than `first` — excluded by
+    identity, not by offset, so a co-located second blocker still counts
+    (SPEC.md delta g)."""
+    rest = [b for b in blockers if b is not first]
+    return min(rest, key=lambda f: f.start).start if rest else None
+
+
 def analyze_item(item: dict, index: int = 0) -> AnalyzedItem:
     """Analyze one {prompt, llm:{provider,name}} input."""
     llm = item.get("llm") or {}
@@ -252,12 +260,10 @@ def analyze_item(item: dict, index: int = 0) -> AnalyzedItem:
         stable_tc = tokenizers.count_tokens(canonical[:first.start], resolved["provider_key"], upstream)
         stable_tokens = stable_tc.tokens
         # hypothetical: prefix if the first blocker were fixed
-        # (SPEC.md delta g: exclude only the first finding ITSELF, by identity)
-        rest = [b for b in blockers if b is not first]
-        if rest:
-            nxt = min(rest, key=lambda f: f.start)
+        nxt_start = _next_blocking_start(blockers, first)
+        if nxt_start is not None:
             next_stable = tokenizers.count_tokens(
-                canonical[:nxt.start], resolved["provider_key"], upstream).tokens
+                canonical[:nxt_start], resolved["provider_key"], upstream).tokens
         else:
             next_stable = total_tc.tokens
     else:

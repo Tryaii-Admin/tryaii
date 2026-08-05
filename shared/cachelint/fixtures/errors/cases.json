@@ -8,7 +8,9 @@
       "input": {
         "data": 42
       },
-      "expected": null
+      "expected": {
+        "error": "Input must be an object, a list of objects, or {\"inputs\": [...]}"
+      }
     },
     {
       "name": "err-bare-string-item",
@@ -18,7 +20,9 @@
           "bare string"
         ]
       },
-      "expected": null
+      "expected": {
+        "error": "input #0 is a bare string — wrap it: {\"prompt\": \"...\", \"llm\": {\"provider\": \"...\", \"name\": \"...\"}}"
+      }
     },
     {
       "name": "err-missing-prompt",
@@ -33,7 +37,9 @@
           }
         ]
       },
-      "expected": null
+      "expected": {
+        "error": "input #0: expected an object with a 'prompt' field"
+      }
     },
     {
       "name": "err-missing-provider",
@@ -45,7 +51,9 @@
           }
         ]
       },
-      "expected": null
+      "expected": {
+        "error": "input #0: missing llm.provider"
+      }
     },
     {
       "name": "err-unknown-provider",
@@ -59,7 +67,9 @@
           }
         }
       },
-      "expected": null
+      "expected": {
+        "error": "Unknown provider 'azure'. Known: anthropic, bedrock, gemini, openai, openrouter, vertex, xai"
+      }
     },
     {
       "name": "err-bad-prompt-type",
@@ -73,7 +83,9 @@
           }
         }
       },
-      "expected": null
+      "expected": {
+        "error": "prompt must be a string or an object with system/messages/tools"
+      }
     },
     {
       "name": "err-index-interpolation",
@@ -92,7 +104,9 @@
           }
         ]
       },
-      "expected": null
+      "expected": {
+        "error": "input #1: missing llm.provider"
+      }
     }
   ]
 }
