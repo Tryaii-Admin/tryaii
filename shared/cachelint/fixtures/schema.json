@@ -35,6 +35,10 @@
           },
           "expected": {
             "description": "Machine-generated golden output. null until frozen. detectors: {findings, first_blocking_index}. resolve: {provider_key, min_tokens, tier_note, warnings, upstream} or {error}. tokenize: {tokens, method, exact, note}. canonical: {text, sections, non_text}. analyze: the full analyze() result. sequence: the sequences array. errors: {error}. report: {golden: '<file>.golden.txt'}. cli: {stdout_golden, stderr, exit_code}."
+          },
+          "stderr_parser_specific": {
+            "type": "boolean",
+            "description": "cli suite only: the stderr text comes from the argument parser (argparse / node:util parseArgs), which differs across languages AND Python versions — conformance asserts only exit_code and stdout for this case; expected.stderr stays null."
           }
         }
       }

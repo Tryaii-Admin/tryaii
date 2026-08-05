@@ -11,7 +11,11 @@
           "corpus/late-dynamic.json"
         ]
       },
-      "expected": null
+      "expected": {
+        "stdout_golden": "cli-report-single.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
     },
     {
       "name": "cli-json-flag",
@@ -23,7 +27,11 @@
           "--json"
         ]
       },
-      "expected": null
+      "expected": {
+        "stdout_golden": "cli-json-flag.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
     },
     {
       "name": "cli-stdin-dash",
@@ -35,7 +43,11 @@
         ],
         "stdin_file": "corpus/anthropic-small.json"
       },
-      "expected": null
+      "expected": {
+        "stdout_golden": "cli-stdin-dash.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
     },
     {
       "name": "cli-sequence-report",
@@ -46,7 +58,11 @@
           "corpus/seq-ttl-cases.json"
         ]
       },
-      "expected": null
+      "expected": {
+        "stdout_golden": "cli-sequence-report.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
     },
     {
       "name": "cli-missing-arg",
@@ -56,7 +72,12 @@
           "cachelint"
         ]
       },
-      "expected": null
+      "expected": {
+        "stdout_golden": "cli-missing-arg.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 2
+      },
+      "stderr_parser_specific": true
     },
     {
       "name": "cli-bad-json",
@@ -67,7 +88,11 @@
           "corpus/bad-json.json.broken"
         ]
       },
-      "expected": null
+      "expected": {
+        "stdout_golden": "cli-bad-json.stdout.golden.txt",
+        "stderr": "error: invalid JSON in 'corpus/bad-json.json.broken'\n",
+        "exit_code": 2
+      }
     },
     {
       "name": "cli-file-not-found",
@@ -78,7 +103,11 @@
           "corpus/nope.json"
         ]
       },
-      "expected": null
+      "expected": {
+        "stdout_golden": "cli-file-not-found.stdout.golden.txt",
+        "stderr": "error: file not found: corpus/nope.json\n",
+        "exit_code": 1
+      }
     },
     {
       "name": "cli-unknown-provider",
@@ -89,7 +118,11 @@
           "corpus/unknown-provider.json"
         ]
       },
-      "expected": null
+      "expected": {
+        "stdout_golden": "cli-unknown-provider.stdout.golden.txt",
+        "stderr": "error: Unknown provider 'azure'. Known: anthropic, bedrock, gemini, openai, openrouter, vertex, xai\n",
+        "exit_code": 2
+      }
     },
     {
       "name": "cli-raw-stdin-provider-model",
@@ -105,7 +138,11 @@
         ],
         "stdin_file": "corpus/raw-prompt.txt"
       },
-      "expected": null
+      "expected": {
+        "stdout_golden": "cli-raw-stdin-provider-model.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
     },
     {
       "name": "cli-raw-provider-only",
@@ -118,7 +155,11 @@
           "openai"
         ]
       },
-      "expected": null
+      "expected": {
+        "stdout_golden": "cli-raw-provider-only.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
     },
     {
       "name": "cli-model-without-provider",
@@ -131,7 +172,11 @@
           "claude-fable-5"
         ]
       },
-      "expected": null
+      "expected": {
+        "stdout_golden": "cli-model-without-provider.stdout.golden.txt",
+        "stderr": "error: --model requires --provider (raw-text mode)\n",
+        "exit_code": 2
+      }
     }
   ]
 }

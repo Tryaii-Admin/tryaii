@@ -155,4 +155,9 @@ def test_cli(case):
     golden = (FIXTURES / "cli" / expected["stdout_golden"]).read_text(encoding="utf-8")
     assert proc.returncode == expected["exit_code"]
     assert stdout == golden
-    assert stderr == (expected["stderr"] or "")
+    if case.get("stderr_parser_specific"):
+        # argparse/parseArgs usage text differs per language and Python
+        # version -- only require that SOME error text was shown.
+        assert stderr
+    else:
+        assert stderr == (expected["stderr"] or "")

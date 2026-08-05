@@ -732,6 +732,7 @@ Usage:
 Commands:
   route <prompt>        Route a prompt to the best model and show recommendations
   eval <input.json>     Route a JSON dataset; writes results.jsonl, summary.json, index.html
+  cachelint <input.json>  Analyze prompt-cache readiness before sending (--json, --provider)
   models                List available models (--provider <name>, --json)
   benchmarks            List available benchmarks (--json)
   setup                 Download the embedding model and warm centroids (--model <name>)
@@ -770,6 +771,7 @@ Examples:
   tryaii eval examples/prompts.json --output results/run --quality=5 --cost=1 --speed=1
   tryaii eval examples/prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
   tryaii eval examples/prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
+  tryaii cachelint request.json --json
 `;
 
 // Per-command help. Each constant must stay byte-identical to the matching
@@ -939,6 +941,47 @@ Exit codes:
 Docs: docs/cli/regenerate.md
 `;
 
+const HELP_CACHELINT = `tryaii cachelint -- Pre-flight prompt-cache analysis
+
+Usage:
+  tryaii cachelint <input.json | -> [options]
+
+Analyze prompts BEFORE they are sent: 18 dynamic-content detectors, per-model
+token floors for 7 providers, stable-prefix computation, and predicted
+HIT/PARTIAL/MISS across request sequences. Runs locally -- nothing is called.
+
+Arguments:
+  <input.json>          Request JSON: an object with "prompt" and "llm"
+                        ({"provider": ..., "name": ...}), a list of those, or
+                        {"inputs": [...]}. Use '-' to read from stdin.
+
+Options:
+  --provider <name>     Raw-text mode: treat the ENTIRE input as one prompt
+                        string for this provider (openai, anthropic, gemini,
+                        xai, openrouter, bedrock, vertex -- aliases accepted)
+  --model <name>        Model name for raw-text mode (requires --provider;
+                        omit to use the provider's conservative default floor)
+  --json                Emit the full machine-readable result instead of the
+                        text report
+
+Notes:
+  cachelint warns, it never blocks: findings do not change the exit code.
+  Exact OpenAI/xAI token counts use the o200k tokenizer -- install the extra
+  on Python ('pip install tryaii[cachelint]'); the Node SDK bundles it.
+  Thresholds/prices are time-sensitive; verify against live provider docs.
+
+Examples:
+  tryaii cachelint request.json
+  tryaii cachelint requests.json --json
+  cat prompt.txt | tryaii cachelint - --provider anthropic --model claude-fable-5
+
+Exit codes:
+  0 analysis completed (findings included), 1 runtime failure, 2 usage error
+  or invalid input.
+
+Docs: docs/cli/cachelint.md
+`;
+
 const HELP_HELP = `tryaii help -- Show help for tryaii or a specific command
 
 Usage:
@@ -950,7 +993,7 @@ detailed help for that command. The flags -h/--help after any command do
 the same thing.
 
 Topics:
-  route, eval, models, benchmarks, setup, regenerate, help
+  route, eval, cachelint, models, benchmarks, setup, regenerate, help
 
 Examples:
   tryaii help
@@ -967,6 +1010,7 @@ Docs: docs/cli/README.md
 const COMMAND_HELP: Record<string, string> = {
   route: HELP_ROUTE,
   eval: HELP_EVAL,
+  cachelint: HELP_CACHELINT,
   models: HELP_MODELS,
   benchmarks: HELP_BENCHMARKS,
   setup: HELP_SETUP,

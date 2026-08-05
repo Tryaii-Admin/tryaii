@@ -124,7 +124,7 @@ def gen_report(inp, case_name: str):
     return {"golden": golden}, {golden: text + "\n"}
 
 
-def gen_cli(inp, case_name: str):
+def gen_cli(inp, case_name: str, parser_stderr: bool = False):
     argv = inp["argv"]
     env = dict(os.environ,
                TRYAII_NO_BANNER="1",
@@ -143,8 +143,10 @@ def gen_cli(inp, case_name: str):
     stdout = proc.stdout.decode("utf-8").replace("\r\n", "\n")
     stderr = proc.stderr.decode("utf-8").replace("\r\n", "\n")
     golden = case_name + ".stdout.golden.txt"
+    # Parser-generated usage text differs across languages and Python
+    # versions — never freeze it (see schema.json stderr_parser_specific).
     return {"stdout_golden": golden,
-            "stderr": stderr or None,
+            "stderr": None if parser_stderr else (stderr or None),
             "exit_code": proc.returncode}, {golden: stdout}
 
 
@@ -161,7 +163,8 @@ def run_suite(name: str) -> dict:
         if name == "report":
             expected, goldens = gen_report(inp, case["name"])
         elif name == "cli":
-            expected, goldens = gen_cli(inp, case["name"])
+            expected, goldens = gen_cli(inp, case["name"],
+                                        case.get("stderr_parser_specific", False))
         else:
             expected, goldens = globals()["gen_" + name](inp)
         case["expected"] = expected

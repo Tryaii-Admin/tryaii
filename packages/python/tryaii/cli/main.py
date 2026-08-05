@@ -4,6 +4,7 @@ TryAii CLI.
 Commands (kept in parity with the Node SDK's `tryaii`):
     tryaii route "your prompt here"     -- Route a prompt and show recommendations
     tryaii eval prompts.json             -- Route a JSON prompt dataset
+    tryaii cachelint input.json          -- Pre-flight prompt-cache analysis
     tryaii setup                         -- Pre-generate centroids for faster first use
     tryaii models                        -- List available models
     tryaii benchmarks                    -- List available benchmarks
@@ -40,6 +41,7 @@ Usage:
 Commands:
   route <prompt>        Route a prompt to the best model and show recommendations
   eval <input.json>     Route a JSON dataset; writes results.jsonl, summary.json, index.html
+  cachelint <input.json>  Analyze prompt-cache readiness before sending (--json, --provider)
   models                List available models (--provider <name>, --json)
   benchmarks            List available benchmarks (--json)
   setup                 Download the embedding model and warm centroids (--model <name>)
@@ -78,6 +80,7 @@ Examples:
   tryaii eval examples/prompts.json --output results/run --quality=5 --cost=1 --speed=1
   tryaii eval examples/prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
   tryaii eval examples/prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
+  tryaii cachelint request.json --json
 """
 
 # Per-command help. Each string must stay byte-identical to the matching
@@ -245,6 +248,47 @@ Exit codes:
 Docs: docs/cli/regenerate.md
 """
 
+HELP_CACHELINT = """tryaii cachelint -- Pre-flight prompt-cache analysis
+
+Usage:
+  tryaii cachelint <input.json | -> [options]
+
+Analyze prompts BEFORE they are sent: 18 dynamic-content detectors, per-model
+token floors for 7 providers, stable-prefix computation, and predicted
+HIT/PARTIAL/MISS across request sequences. Runs locally -- nothing is called.
+
+Arguments:
+  <input.json>          Request JSON: an object with "prompt" and "llm"
+                        ({"provider": ..., "name": ...}), a list of those, or
+                        {"inputs": [...]}. Use '-' to read from stdin.
+
+Options:
+  --provider <name>     Raw-text mode: treat the ENTIRE input as one prompt
+                        string for this provider (openai, anthropic, gemini,
+                        xai, openrouter, bedrock, vertex -- aliases accepted)
+  --model <name>        Model name for raw-text mode (requires --provider;
+                        omit to use the provider's conservative default floor)
+  --json                Emit the full machine-readable result instead of the
+                        text report
+
+Notes:
+  cachelint warns, it never blocks: findings do not change the exit code.
+  Exact OpenAI/xAI token counts use the o200k tokenizer -- install the extra
+  on Python ('pip install tryaii[cachelint]'); the Node SDK bundles it.
+  Thresholds/prices are time-sensitive; verify against live provider docs.
+
+Examples:
+  tryaii cachelint request.json
+  tryaii cachelint requests.json --json
+  cat prompt.txt | tryaii cachelint - --provider anthropic --model claude-fable-5
+
+Exit codes:
+  0 analysis completed (findings included), 1 runtime failure, 2 usage error
+  or invalid input.
+
+Docs: docs/cli/cachelint.md
+"""
+
 HELP_HELP = """tryaii help -- Show help for tryaii or a specific command
 
 Usage:
@@ -256,7 +300,7 @@ detailed help for that command. The flags -h/--help after any command do
 the same thing.
 
 Topics:
-  route, eval, models, benchmarks, setup, regenerate, help
+  route, eval, cachelint, models, benchmarks, setup, regenerate, help
 
 Examples:
   tryaii help
@@ -273,6 +317,7 @@ Docs: docs/cli/README.md
 COMMAND_HELP = {
     "route": HELP_ROUTE,
     "eval": HELP_EVAL,
+    "cachelint": HELP_CACHELINT,
     "models": HELP_MODELS,
     "benchmarks": HELP_BENCHMARKS,
     "setup": HELP_SETUP,
@@ -1005,6 +1050,54 @@ def cmd_regenerate(args):
     print(f"Done! Generated {len(centroids)} centroids at {config.centroid_file}")
 
 
+def cmd_cachelint(args):
+    """Pre-flight prompt-cache analysis (see shared/cachelint/SPEC.md §4)."""
+    if args.model and not args.provider:
+        print("error: --model requires --provider (raw-text mode)", file=sys.stderr)
+        sys.exit(2)
+
+    if args.input == "-":
+        raw = sys.stdin.read()
+    else:
+        path = Path(args.input)
+        if not path.is_file():
+            raise FileNotFoundError(f"file not found: {args.input}")
+        # utf-8-sig strips a BOM; text mode normalizes \r\n (Node CLI mirrors both).
+        raw = path.read_text(encoding="utf-8-sig")
+
+    from tryaii.cachelint import analyze, render_report
+
+    if args.provider:
+        # Raw-text mode: the ENTIRE input is one prompt string, never parsed as JSON.
+        data = {"prompt": raw,
+                "llm": {"provider": args.provider, "name": args.model or ""}}
+    else:
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            # Parser-neutral message (SPEC.md delta n): json and JSON.parse differ.
+            where = "on stdin" if args.input == "-" else f"in '{args.input}'"
+            print(f"error: invalid JSON {where}", file=sys.stderr)
+            sys.exit(2)
+
+    try:
+        result = analyze(data)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(2)
+
+    # The report contains em-dashes; Windows consoles may not default to UTF-8.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001 -- best effort; never break the report
+        pass
+
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        _write_paced(render_report(result) + "\n")
+
+
 def cli():
     """Main CLI entry point."""
     # -v/--verbose, --no-banner, -V/--version and -h/--help are handled before
@@ -1065,6 +1158,17 @@ def cli():
     eval_parser.add_argument(
         "--no-daemon", action="store_true", help="Route in-process; do not use or start a daemon"
     )
+
+    # cachelint
+    cachelint_parser = subparsers.add_parser(
+        "cachelint", help="Pre-flight prompt-cache analysis")
+    cachelint_parser.add_argument("input", help="Request JSON file, or '-' for stdin")
+    cachelint_parser.add_argument(
+        "--provider", help="Raw-text mode: provider for the raw prompt input")
+    cachelint_parser.add_argument(
+        "--model", help="Raw-text mode: model name (requires --provider)")
+    cachelint_parser.add_argument(
+        "--json", action="store_true", help="Emit the machine-readable result")
 
     # setup
     setup_parser = subparsers.add_parser("setup", help="Initialize centroids")
@@ -1159,6 +1263,7 @@ def cli():
     handlers = {
         "route": cmd_route,
         "eval": cmd_eval,
+        "cachelint": cmd_cachelint,
         "setup": cmd_setup,
         "models": cmd_models,
         "benchmarks": cmd_benchmarks,
