@@ -5,6 +5,7 @@
  * Commands (kept in parity with the Python SDK's `tryaii`):
  *   tryaii route "your prompt here"   -- Route a prompt and show recommendations
  *   tryaii eval prompts.json          -- Route a JSON prompt dataset
+ *   tryaii cachelint input.json       -- Pre-flight prompt-cache analysis
  *   tryaii setup                      -- Download the embedding model + warm centroids
  *   tryaii models                     -- List available models
  *   tryaii benchmarks                 -- List available benchmarks
@@ -185,6 +186,74 @@ async function cmdRoute(subArgs: string[]): Promise<void> {
 // ---------------------------------------------------------------------------
 // models
 // ---------------------------------------------------------------------------
+
+async function cmdCachelint(subArgs: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args: subArgs,
+    allowPositionals: true,
+    options: {
+      provider: { type: 'string' },
+      model: { type: 'string' },
+      json: { type: 'boolean', default: false },
+    },
+  });
+
+  if (values.model && !values.provider) {
+    throw new CliUsageError('--model requires --provider (raw-text mode)');
+  }
+  const input = positionals[0];
+  if (input === undefined) {
+    throw new CliUsageError('cachelint: missing required argument: input');
+  }
+
+  let raw: string;
+  if (input === '-') {
+    // Mirror Python sys.stdin.read(): universal newlines, no BOM strip.
+    raw = readFileSync(0, 'utf-8').replace(/\r\n/g, '\n');
+  } else {
+    let bytes: string;
+    try {
+      bytes = readFileSync(input, 'utf-8');
+    } catch {
+      throw new CliError(`file not found: ${input}`);
+    }
+    // Mirror Python's utf-8-sig + text-mode read: strip a BOM, normalize \r\n.
+    if (bytes.charCodeAt(0) === 0xfeff) bytes = bytes.slice(1);
+    raw = bytes.replace(/\r\n/g, '\n');
+  }
+
+  // Lazy import: the tokenizer rank data is multi-MB and must not load for
+  // any other command (the cachelint module is also not in the root barrel).
+  const cachelint = await import('./cachelint/index.js');
+
+  let data: unknown;
+  if (values.provider) {
+    // Raw-text mode: the ENTIRE input is one prompt string, never parsed as JSON.
+    data = { prompt: raw, llm: { provider: values.provider, name: values.model ?? '' } };
+  } else {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      // Parser-neutral message (SPEC.md delta n): json and JSON.parse differ.
+      const where = input === '-' ? 'on stdin' : `in '${input}'`;
+      throw new CliUsageError(`invalid JSON ${where}`);
+    }
+  }
+
+  let result: Record<string, unknown>;
+  try {
+    result = cachelint.analyze(data);
+  } catch (error) {
+    // Engine validation errors are usage errors (exit 2), like Python's ValueError path.
+    throw new CliUsageError((error as Error).message);
+  }
+
+  if (values.json) {
+    out.write(JSON.stringify(result, null, 2) + '\n');
+  } else {
+    await writePaced(cachelint.renderReport(result) + '\n');
+  }
+}
 
 async function cmdModels(subArgs: string[]): Promise<void> {
   const { values } = parseArgs({
@@ -1097,6 +1166,9 @@ async function main(): Promise<void> {
       break;
     case 'eval':
       await cmdEval(subArgs);
+      break;
+    case 'cachelint':
+      await cmdCachelint(subArgs);
       break;
     case 'models':
       await cmdModels(subArgs);
