@@ -68,6 +68,15 @@ tryaii route "Debug this memory leak in my Node.js app" --quality=5 --cost=1 --s
 tryaii models --provider anthropic     # inspect the model catalog
 ```
 
+Or lint a request for prompt-cache readiness before sending it — 18 dynamic-content
+detectors, per-model token floors for 7 providers, and predicted HIT/MISS across
+request sequences ([docs](docs/cli/cachelint.md)):
+
+```bash
+tryaii cachelint request.json                  # verdict-first report; warns, never blocks
+cat prompt.txt | tryaii cachelint - --provider anthropic --model claude-fable-5
+```
+
 Full flag reference is in the [command-line interface](#command-line-interface) section below.
 
 ## Fast repeated routing (daemon)

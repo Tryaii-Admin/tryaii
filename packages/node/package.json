@@ -16,6 +16,10 @@
     "./integrations": {
       "types": "./dist/integrations/index.d.ts",
       "import": "./dist/integrations/index.js"
+    },
+    "./cachelint": {
+      "types": "./dist/cachelint/index.d.ts",
+      "import": "./dist/cachelint/index.js"
     }
   },
   "files": [
