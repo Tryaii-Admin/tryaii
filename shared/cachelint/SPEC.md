@@ -75,7 +75,9 @@ The `tools` value is rendered into the canonical string as **minified JSON
 with sorted keys**:
 
 - separators `,` and `:` with no whitespace;
-- object keys sorted by code-unit order of the key string (ASCII sort);
+- object keys sorted by **code-point** order of the key string (Python's
+  native `sort_keys`; the TS comparator compares code points explicitly —
+  JS's default sort is code-unit order, which disagrees above U+FFFF);
   applied recursively;
 - non-ASCII characters unescaped (UTF-8 verbatim);
 - floats that are integral are emitted as integers (`1.0` → `1`), per §1.3.
