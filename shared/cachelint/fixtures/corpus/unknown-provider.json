@@ -1,0 +1,7 @@
+{
+  "prompt": "Hello there.",
+  "llm": {
+    "provider": "azure",
+    "name": "gpt-4"
+  }
+}

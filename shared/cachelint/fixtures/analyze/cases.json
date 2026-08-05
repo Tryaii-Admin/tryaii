@@ -1,0 +1,134 @@
+{
+  "suite": "analyze",
+  "target": "api.analyze",
+  "cases": [
+    {
+      "name": "an-below-threshold",
+      "description": "small anthropic prompt -> BELOW_THRESHOLD",
+      "input": {
+        "input_file": "corpus/anthropic-small.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "an-clean-anthropic-needs-action",
+      "description": "clean big anthropic -> CACHEABLE_WITH_ACTION, [enablement] first; also pins fix j (no [routing] rec, gotcha present)",
+      "input": {
+        "input_file": "corpus/anthropic-clean-big.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "an-openai-cacheable",
+      "description": "clean big openai -> CACHEABLE with exact tiktoken counts, [routing]/[ttl]/[batch] recs",
+      "input": {
+        "input_file": "corpus/openai-clean-big.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "an-early-timestamp-uncacheable",
+      "description": "timestamp at the head of system -> EFFECTIVELY_UNCACHEABLE",
+      "input": {
+        "input_file": "corpus/early-timestamp.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "an-late-dynamic-cacheable-prefix",
+      "description": "UUID in the final user message -> CACHEABLE_PREFIX + [impact] rec",
+      "input": {
+        "input_file": "corpus/late-dynamic.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "an-xai-unknown-threshold",
+      "description": "xai -> UNKNOWN_THRESHOLD (structural analysis only)",
+      "input": {
+        "input_file": "corpus/xai-plain.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "an-vertex-claude-clean-action",
+      "description": "fix i: Claude-on-Vertex clean -> CACHEABLE_WITH_ACTION with (Anthropic upstream) phrasing",
+      "input": {
+        "input_file": "corpus/vertex-claude-clean.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "an-openrouter-claude-action",
+      "description": "pass-through + anthropic upstream -> CACHEABLE_WITH_ACTION + pin-provider warning",
+      "input": {
+        "input_file": "corpus/openrouter-claude.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "an-sections-and-system-report",
+      "description": "tools+system+message: per-section counts, system_report, cached_unit_tokens = tools+system",
+      "input": {
+        "input_file": "corpus/tools-system-msg.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "an-many-blockers-truncated-recs",
+      "description": "8+ blockers -> six [fix:*] recs + '[fix] ...and N more findings' trailer",
+      "input": {
+        "input_file": "corpus/kitchen-sink-findings.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "an-warnings-nontext-and-estimate",
+      "description": "non-text block warning + heuristic-estimate warning both surface",
+      "input": {
+        "input_file": "corpus/nontext-blocks.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "an-inputs-wrapper-single",
+      "description": "{'inputs': [one]} unwraps; single item -> sequences []",
+      "input": {
+        "data": {
+          "inputs": [
+            {
+              "prompt": "Short prompt.",
+              "llm": {
+                "provider": "anthropic",
+                "name": "claude-fable-5"
+              }
+            }
+          ]
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "an-hebrew-30pct",
+      "description": "Hebrew-heavy prompt: 2.6 rate label (fix k) flows into the verdict math",
+      "input": {
+        "input_file": "corpus/hebrew-heavy.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "an-provider-model-fallback-chain",
+      "description": "top-level provider + llm.model (not name) resolve via the fallback chain",
+      "input": {
+        "data": {
+          "prompt": "Short prompt.",
+          "provider": "openai",
+          "llm": {
+            "model": "gpt-5.2"
+          }
+        }
+      },
+      "expected": null
+    }
+  ]
+}

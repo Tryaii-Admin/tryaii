@@ -1,0 +1,66 @@
+{
+  "suite": "report",
+  "target": "report.render(api.analyze(input))",
+  "cases": [
+    {
+      "name": "rep-single-cacheable",
+      "description": "full single-item page incl. em-dash 'none' findings line and provider intel block",
+      "input": {
+        "input_file": "corpus/openai-clean-big.json"
+      },
+      "expected": {
+        "golden": "rep-single-cacheable.golden.txt"
+      }
+    },
+    {
+      "name": "rep-findings-truncated",
+      "description": "12+ findings -> 10 shown + '... and N more'",
+      "input": {
+        "input_file": "corpus/kitchen-sink-findings.json"
+      },
+      "expected": {
+        "golden": "rep-findings-truncated.golden.txt"
+      }
+    },
+    {
+      "name": "rep-thousands-separator",
+      "description": "token counts >= 1000 render with comma separators",
+      "input": {
+        "input_file": "corpus/anthropic-clean-big.json"
+      },
+      "expected": {
+        "golden": "rep-thousands-separator.golden.txt"
+      }
+    },
+    {
+      "name": "rep-sequence-page",
+      "description": "sequence block: pair lines, diverged contexts, ttl line",
+      "input": {
+        "input_file": "corpus/seq-diverged-partial.json"
+      },
+      "expected": {
+        "golden": "rep-sequence-page.golden.txt"
+      }
+    },
+    {
+      "name": "rep-wrap-78",
+      "description": "78-column wrapping incl. a long unbreakable token",
+      "input": {
+        "input_file": "corpus/long-token.json"
+      },
+      "expected": {
+        "golden": "rep-wrap-78.golden.txt"
+      }
+    },
+    {
+      "name": "rep-hebrew-content",
+      "description": "Hebrew excerpts render as UTF-8",
+      "input": {
+        "input_file": "corpus/hebrew-heavy.json"
+      },
+      "expected": {
+        "golden": "rep-hebrew-content.golden.txt"
+      }
+    }
+  ]
+}

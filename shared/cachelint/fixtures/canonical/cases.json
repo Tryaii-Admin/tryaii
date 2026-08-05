@@ -1,0 +1,173 @@
+{
+  "suite": "canonical",
+  "target": "analyzer.build_canonical",
+  "cases": [
+    {
+      "name": "can-order-tools-system-messages",
+      "description": "input written messages-first still renders tools -> system -> messages with exact spans",
+      "input": {
+        "prompt": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "Which warehouse serves Oslo?"
+            }
+          ],
+          "system": "SYS",
+          "tools": [
+            {
+              "name": "lookup"
+            }
+          ]
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "can-tools-sorted-keys-integral-floats",
+      "description": "fix b: keys sorted recursively, 1.0 -> 1, 2.5 stays, non-ASCII unescaped",
+      "input": {
+        "prompt": {
+          "tools": [
+            {
+              "zeta": 1.0,
+              "alpha": {
+                "b": 2.5,
+                "a": [
+                  1.0,
+                  "x",
+                  3
+                ]
+              },
+              "num": 10,
+              "label": "café"
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": "q"
+            }
+          ]
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "can-bare-string-prompt",
+      "description": "bare string wraps into a single user message",
+      "input": {
+        "prompt": "Just a question"
+      },
+      "expected": null
+    },
+    {
+      "name": "can-empty-prompt-object",
+      "description": "empty object -> empty canonical, no sections",
+      "input": {
+        "prompt": {}
+      },
+      "expected": null
+    },
+    {
+      "name": "can-non-text-blocks",
+      "description": "image and typeless blocks become placeholders and count as non_text; dict with a text key but no type counts as text",
+      "input": {
+        "prompt": {
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "image",
+                  "source": "inline-data"
+                },
+                {
+                  "type": "text",
+                  "text": "look"
+                },
+                {
+                  "text": "noType"
+                },
+                {
+                  "custom": true
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "can-system-as-block-list",
+      "description": "system given as a block list joins with single newlines",
+      "input": {
+        "prompt": {
+          "system": [
+            {
+              "type": "text",
+              "text": "A"
+            },
+            "B"
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": "q"
+            }
+          ]
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "can-message-shapes",
+      "description": "non-dict message -> user: str(msg); dict without role -> user",
+      "input": {
+        "prompt": {
+          "messages": [
+            "plain string msg",
+            {
+              "content": "no role here"
+            }
+          ]
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "can-falsy-skipped",
+      "description": "empty system string and empty tools list produce no sections",
+      "input": {
+        "prompt": {
+          "system": "",
+          "tools": [],
+          "messages": [
+            {
+              "role": "user",
+              "content": "q"
+            }
+          ]
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "can-spans-unicode",
+      "description": "emoji in system: section spans are code-point based",
+      "input": {
+        "prompt": {
+          "system": "🚀 sys",
+          "messages": [
+            {
+              "role": "user",
+              "content": "héllo"
+            }
+          ]
+        }
+      },
+      "expected": null
+    }
+  ]
+}

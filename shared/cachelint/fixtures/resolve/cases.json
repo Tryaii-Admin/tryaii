@@ -1,0 +1,375 @@
+{
+  "suite": "resolve",
+  "target": "providers.resolve",
+  "cases": [
+    {
+      "name": "res-anthropic-opus-4-8",
+      "description": "Opus 4.8 tier -> 1024",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-opus-4-8"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-anthropic-opus-4-7",
+      "description": "Opus 4.7 tier -> 2048",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-opus-4-7"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-anthropic-opus-4-5-dot",
+      "description": "dot normalization -> Opus 4.5/4.6 tier 4096",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-opus-4.5"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-anthropic-opus-4-1",
+      "description": "Opus 4.1 tier -> 1024",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-opus-4-1"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-anthropic-opus-5",
+      "description": "Opus 5 tier -> 512 (halved)",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-opus-5"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-anthropic-haiku-4-5",
+      "description": "Haiku 4.5 tier -> 4096",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-anthropic-haiku-3-5",
+      "description": "Haiku 3.5 tier -> 2048",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-haiku-3-5"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-anthropic-mythos-preview",
+      "description": "Mythos Preview tier -> 2048 (ordered before fable|mythos)",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-mythos-preview"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-anthropic-fable-5",
+      "description": "Fable 5 / Mythos 5 tier -> 512",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-fable-5"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-anthropic-sonnet",
+      "description": "Sonnet tier (all versions) -> 1024",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-6"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-anthropic-unknown",
+      "description": "unknown Claude model -> conservative 4096 + fix-n warning",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-future-9"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-openai-any",
+      "description": "uniform 1024, increment 128",
+      "input": {
+        "provider": "openai",
+        "model": "gpt-5.2"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-openai-empty-model",
+      "description": "empty model: rule regex fails on empty string -> default 1024 + warning (frozen prototype edge)",
+      "input": {
+        "provider": "openai",
+        "model": ""
+      },
+      "expected": null
+    },
+    {
+      "name": "res-bedrock-fable-drift",
+      "description": "Fable on Bedrock -> 1024 (cross-platform drift vs 512 direct)",
+      "input": {
+        "provider": "bedrock",
+        "model": "anthropic.claude-fable-5"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-bedrock-claude-4-5",
+      "description": "Claude 4.5/4.6-era tier on Bedrock -> 4096",
+      "input": {
+        "provider": "bedrock",
+        "model": "anthropic.claude-opus-4-5"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-bedrock-claude-generic",
+      "description": "Claude on Bedrock general tier -> 1024",
+      "input": {
+        "provider": "bedrock",
+        "model": "anthropic.claude-3-5-sonnet"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-bedrock-gpt-5-6",
+      "description": "GPT-5.6 on Bedrock -> 1024",
+      "input": {
+        "provider": "bedrock",
+        "model": "openai.gpt-5.6"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-bedrock-nova",
+      "description": "Amazon Nova: automatic, threshold unpublished -> null",
+      "input": {
+        "provider": "bedrock",
+        "model": "amazon.nova-pro"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-bedrock-unknown",
+      "description": "unknown Bedrock model -> 4096 + warning",
+      "input": {
+        "provider": "bedrock",
+        "model": "mistral.mistral-large"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-gemini-2-5",
+      "description": "Gemini 2.5 family -> 2048",
+      "input": {
+        "provider": "gemini",
+        "model": "gemini-2.5-flash"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-gemini-3",
+      "description": "Gemini 3.x family -> 4096",
+      "input": {
+        "provider": "gemini",
+        "model": "gemini-3-pro"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-gemini-2-0",
+      "description": "Gemini 2.0: discount tier, implicit threshold unpublished -> null",
+      "input": {
+        "provider": "gemini",
+        "model": "gemini-2.0-flash"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-gemini-unknown",
+      "description": "unknown Gemini model -> 4096 + warning",
+      "input": {
+        "provider": "gemini",
+        "model": "gemini-1.5-pro"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-vertex-claude-fable",
+      "description": "Claude-on-Vertex uses Anthropic tiers -> 512, upstream anthropic",
+      "input": {
+        "provider": "vertex",
+        "model": "claude-fable-5"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-vertex-claude-unknown",
+      "description": "unknown Claude-on-Vertex -> conservative 4096, upstream anthropic",
+      "input": {
+        "provider": "vertex",
+        "model": "claude-nextgen"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-vertex-gemini-2-5",
+      "description": "fix h: gemini-2.5 gets its own Vertex 2.5 tier note -> 2048",
+      "input": {
+        "provider": "vertex",
+        "model": "gemini-2.5-pro"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-vertex-gemini-2-0",
+      "description": "Vertex Gemini 2.x family -> 2048",
+      "input": {
+        "provider": "vertex",
+        "model": "gemini-2.0-flash"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-vertex-gemini-3",
+      "description": "Vertex Gemini 3.x family -> 4096",
+      "input": {
+        "provider": "vertex",
+        "model": "gemini-3-pro"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-vertex-preview",
+      "description": "Vertex preview models -> 6144",
+      "input": {
+        "provider": "vertex",
+        "model": "some-preview-model"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-xai-grok-4",
+      "description": "xAI publishes no threshold -> null, NO warning (empty rule set)",
+      "input": {
+        "provider": "xai",
+        "model": "grok-4"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-or-claude",
+      "description": "OpenRouter -> anthropic upstream, Fable tier 512 + pin-provider warning",
+      "input": {
+        "provider": "openrouter",
+        "model": "anthropic/claude-fable-5"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-or-claude-unknown",
+      "description": "OpenRouter anthropic upstream, unknown model -> conservative 4096",
+      "input": {
+        "provider": "openrouter",
+        "model": "anthropic/claude-nova-x"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-or-gpt",
+      "description": "OpenRouter -> openai upstream, uniform 1024",
+      "input": {
+        "provider": "openrouter",
+        "model": "openai/gpt-5.2"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-or-o3",
+      "description": "bare o3 matches the o[134] upstream rule -> openai 1024",
+      "input": {
+        "provider": "openrouter",
+        "model": "o3"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-or-gemini-2-5",
+      "description": "OpenRouter -> gemini upstream 2048",
+      "input": {
+        "provider": "openrouter",
+        "model": "google/gemini-2.5-pro"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-or-grok",
+      "description": "OpenRouter -> xai upstream, null threshold",
+      "input": {
+        "provider": "openrouter",
+        "model": "x-ai/grok-4"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-or-unknown-upstream",
+      "description": "undetectable upstream -> null + warning",
+      "input": {
+        "provider": "openrouter",
+        "model": "deepseek/deepseek-v3"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-alias-claude",
+      "description": "provider alias Claude -> anthropic key",
+      "input": {
+        "provider": "Claude",
+        "model": "claude-sonnet-4-6"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-alias-aws",
+      "description": "provider alias aws -> bedrock key",
+      "input": {
+        "provider": "aws",
+        "model": "anthropic.claude-fable-5"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-norm-spaces-dots",
+      "description": "provider+model normalization: spaces and dots -> hyphens; vertex claude branch",
+      "input": {
+        "provider": "Google Vertex",
+        "model": "Claude Opus 4.8"
+      },
+      "expected": null
+    },
+    {
+      "name": "res-unknown-provider",
+      "description": "unknown provider -> fix-n error message",
+      "input": {
+        "provider": "azure",
+        "model": "gpt-4"
+      },
+      "expected": null
+    }
+  ]
+}

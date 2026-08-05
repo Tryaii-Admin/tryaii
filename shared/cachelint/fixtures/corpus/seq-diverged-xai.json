@@ -1,0 +1,32 @@
+[
+  {
+    "prompt": {
+      "system": "You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. ",
+      "messages": [
+        {
+          "role": "user",
+          "content": "First question about routing to Oslo."
+        }
+      ]
+    },
+    "llm": {
+      "provider": "xai",
+      "name": "grok-4"
+    }
+  },
+  {
+    "prompt": {
+      "system": "You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. ",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Different question about Bergen weather."
+        }
+      ]
+    },
+    "llm": {
+      "provider": "xai",
+      "name": "grok-4"
+    }
+  }
+]

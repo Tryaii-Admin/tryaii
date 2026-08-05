@@ -1,0 +1,98 @@
+{
+  "suite": "errors",
+  "target": "api.analyze (error message)",
+  "cases": [
+    {
+      "name": "err-top-level-not-object",
+      "description": "non-object top level",
+      "input": {
+        "data": 42
+      },
+      "expected": null
+    },
+    {
+      "name": "err-bare-string-item",
+      "description": "bare string element with wrap-it hint",
+      "input": {
+        "data": [
+          "bare string"
+        ]
+      },
+      "expected": null
+    },
+    {
+      "name": "err-missing-prompt",
+      "description": "object without a prompt field",
+      "input": {
+        "data": [
+          {
+            "llm": {
+              "provider": "anthropic",
+              "name": "claude-fable-5"
+            }
+          }
+        ]
+      },
+      "expected": null
+    },
+    {
+      "name": "err-missing-provider",
+      "description": "prompt without llm.provider",
+      "input": {
+        "data": [
+          {
+            "prompt": "x"
+          }
+        ]
+      },
+      "expected": null
+    },
+    {
+      "name": "err-unknown-provider",
+      "description": "fix n: plain-quoted unknown provider message with sorted known list",
+      "input": {
+        "data": {
+          "prompt": "x",
+          "llm": {
+            "provider": "azure",
+            "name": "gpt-4"
+          }
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "err-bad-prompt-type",
+      "description": "prompt neither string nor object",
+      "input": {
+        "data": {
+          "prompt": 42,
+          "llm": {
+            "provider": "anthropic",
+            "name": "claude-fable-5"
+          }
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "err-index-interpolation",
+      "description": "second item bad -> message says input #1",
+      "input": {
+        "data": [
+          {
+            "prompt": "x",
+            "llm": {
+              "provider": "anthropic",
+              "name": "claude-fable-5"
+            }
+          },
+          {
+            "prompt": "y"
+          }
+        ]
+      },
+      "expected": null
+    }
+  ]
+}

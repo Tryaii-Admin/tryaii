@@ -1,0 +1,182 @@
+{
+  "suite": "detectors",
+  "target": "detectors.scan",
+  "cases": [
+    {
+      "name": "det-uuid-basic",
+      "description": "single UUID -> one high finding with exact code-point span",
+      "input": {
+        "text": "id 7f9c02aa-51b3-4c2e-9f10-8a4d55e01b27 rest"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-datetime-variants",
+      "description": "ISO datetime variants; contained date-iso/clock-time removed by strictly-longer containment dedupe (fix f: no trailing-space span)",
+      "input": {
+        "text": "2026-07-30T09:14:22Z 2026-07-30 09:14 2026-07-30T09:14:22.123+02:00"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-epoch-seconds-and-ms",
+      "description": "10-digit and 13-digit epoch values both flagged",
+      "input": {
+        "text": "ts=1785312000 and ms=1785312000123 end"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-epoch-negative",
+      "description": "10 digits with 15-prefix and an 11-digit number do not match",
+      "input": {
+        "text": "v1=1585312000 v2=17853120001"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-session-id-forms",
+      "description": "session_id / Request-Id / conversation id forms, case-insensitive, span includes the value",
+      "input": {
+        "text": "session_id: abc123def then Request-Id='xyz9' then conversation id = c1234"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-secret-like",
+      "description": "api_key and secret assignments flagged (security + cache)",
+      "input": {
+        "text": "api_key = sk-live-0a1b2c3d4e5f6g7h and secret: supersecretvalue99"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-template-slots",
+      "description": "all six template families fire: braces, jinja, dollar, percent-named, angle, bracket",
+      "input": {
+        "text": "Hello {user_name}, {{ customer.id }} and ${ORDER_ID} and %(name)s and <USER_NAME> and [INSERT COMPANY]"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-json-not-flagged",
+      "description": "JSON literals and non-identifier braces are not template slots",
+      "input": {
+        "text": "Config: {\"retries\": 3, \"mode\": \"fast\"} and {mode: fast} and {  spaced }"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-template-angle-negative",
+      "description": "lowercase tags and too-short uppercase tags do not match",
+      "input": {
+        "text": "see <p> and <BR> and <ab> tags"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-percent-bare-lookbehind",
+      "description": "%s after whitespace fires; digit/word/percent prefixes are blocked",
+      "input": {
+        "text": "use %s here but 100%s and x%d and 50%% stay"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-clock-time-no-trailing-space",
+      "description": "fix f: bare time span has no trailing space; am/pm and seconds variants keep exact spans",
+      "input": {
+        "text": "Meet at 12:30 tomorrow; dinner at 7:45 PM; job ran 19:05:33 fine"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-date-family",
+      "description": "date-iso, date-us, date-verbose (dotted + plain), date-phrase",
+      "input": {
+        "text": "Due 2026-07-30, or 12/31/2026, or January 5, 2026, or Sept. 3 2026 because today's date matters"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-hex-id-mixed",
+      "description": "hex-id needs digits AND letters (validate); pure digits / pure letters stay silent",
+      "input": {
+        "text": "hash 0123456789abcdef0123 ok; digits 1234567890123456 no; word deadbeefdeadbeef no"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-overlap-both-kept",
+      "description": "partially overlapping equal-length matches from two detectors are BOTH kept, sorted by (start, -length)",
+      "input": {
+        "text": "${{x}} rest"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-containment-strictly-longer",
+      "description": "datetime strictly contains date-iso and clock-time -> only the container survives",
+      "input": {
+        "text": "at 2026-07-30T09:14:22Z start"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-unicode-hebrew-boundary",
+      "description": "fix d/e: Hebrew letter adjacent to a date suppresses the word boundary; spaced date still matches at code-point offsets",
+      "input": {
+        "text": "של2026-01-15 אבל 2026-01-15 כן"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-unicode-emoji-offsets",
+      "description": "astral emoji before a UUID: start/end/excerpt are code-point based",
+      "input": {
+        "text": "🚀🚀 id 7f9c02aa-51b3-4c2e-9f10-8a4d55e01b27 done"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-excerpt-edges",
+      "description": "no leading ... at text start, no trailing ... at text end, newline in excerpt becomes the two-char literal backslash-n",
+      "input": {
+        "text": "7f9c02aa-51b3-4c2e-9f10-8a4d55e01b27 padpadpadpadpadpadpadpadpadpadpad tail\nts 1785312000"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-pct-rounding-half-even",
+      "description": "400-cp text, uuid at cp 49 -> pct_into_prompt 12.25 rounds half-even to 12.2",
+      "input": {
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx 7f9c02aa-51b3-4c2e-9f10-8a4d55e01b27 yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+      },
+      "expected": null
+    },
+    {
+      "name": "det-empty",
+      "description": "empty text -> no findings",
+      "input": {
+        "text": ""
+      },
+      "expected": null
+    },
+    {
+      "name": "det-clean-prose",
+      "description": "benign prose -> no findings",
+      "input": {
+        "text": "Please summarize the quarterly logistics report in three bullet points."
+      },
+      "expected": null
+    },
+    {
+      "name": "det-severity-gating",
+      "description": "low-only findings (clock time, bare %d) -> first_blocking_index is null",
+      "input": {
+        "text": "The meeting is at 15:30 in room 4, use %d formatting."
+      },
+      "expected": null
+    }
+  ]
+}

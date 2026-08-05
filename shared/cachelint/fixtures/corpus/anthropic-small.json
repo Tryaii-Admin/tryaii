@@ -1,0 +1,7 @@
+{
+  "prompt": "Short prompt.",
+  "llm": {
+    "provider": "anthropic",
+    "name": "claude-fable-5"
+  }
+}

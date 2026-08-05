@@ -210,7 +210,12 @@ Before any tokenize/analyze fixture is frozen,
 corpus plus special-token, Hebrew, emoji, and long mixed-text probes.
 Results are recorded below.
 
-> SPIKE RESULTS: _pending (P1)_.
+> SPIKE RESULTS (2026-08-06, tiktoken 0.9.0 / js-tiktoken 1.x, Node 20.14,
+> Python 3.12): **IDENTICAL** counts on all 14 probes —
+> `[10, 101, 9, 13, 5, 4, 542, 1321, 193, 16, 8, 20, 0, 1]` — including
+> `<|endoftext|>` / `<|im_start|>` as ordinary text, Hebrew, astral emoji,
+> `\r\n`, and a 7k-char mixed corpus text. Gate PASSED; tokenize/analyze
+> fixtures may freeze tiktoken-based counts.
 
 ---
 

@@ -1,0 +1,166 @@
+{
+  "suite": "sequence",
+  "target": "api.analyze (sequences only)",
+  "cases": [
+    {
+      "name": "seq-identical-hit",
+      "description": "identical pair -> relation identical, HIT",
+      "input": {
+        "input_file": "corpus/seq-identical.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-append-only-hit",
+      "description": "growing chat -> append-only, HIT with expected_cached_tokens",
+      "input": {
+        "input_file": "corpus/seq-append-only.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-append-below-threshold-miss",
+      "description": "clean but tiny common prefix -> MISS + below-minimum note",
+      "input": {
+        "input_file": "corpus/seq-append-short.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-truncated",
+      "description": "second request is a prefix of the first -> truncated",
+      "input": {
+        "input_file": "corpus/seq-truncated.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-diverged-partial-cause",
+      "description": "late timestamp change -> diverged, PARTIAL, cause 'timestamp-datetime value changed'",
+      "input": {
+        "input_file": "corpus/seq-diverged-partial.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-diverged-miss",
+      "description": "early divergence -> LCP under floor -> MISS",
+      "input": {
+        "input_file": "corpus/seq-diverged-miss.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-diverged-unknown",
+      "description": "xai diverged with null threshold -> UNKNOWN, expected_cached_tokens null",
+      "input": {
+        "input_file": "corpus/seq-diverged-xai.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-at-risk-no-ttl",
+      "description": "no-TTL provider (xai) with timestamps -> HIT downgraded to AT_RISK",
+      "input": {
+        "input_file": "corpus/seq-xai-atrisk.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-at-risk-openai-24h",
+      "description": "openai gap past the sliding window but under 24h -> AT_RISK + extended-retention note",
+      "input": {
+        "input_file": "corpus/seq-openai-24h.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-ttl-expired-miss",
+      "description": "anthropic 30-min gap > 300s TTL -> MISS + eviction note",
+      "input": {
+        "input_file": "corpus/seq-ttl-cases.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-ttl-negative-gap",
+      "description": "out-of-order sent_at -> negative gap_seconds, outcome unchanged (frozen behavior)",
+      "input": {
+        "input_file": "corpus/seq-negative-gap.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-ttl-malformed-sent-at",
+      "description": "fix a: unparseable sent_at -> no ttl_check for the pair",
+      "input": {
+        "input_file": "corpus/seq-malformed-ts.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-ttl-naive-vs-aware",
+      "description": "fix a: naive prev treated as UTC vs aware curr -> gap 600s (prototype crash case)",
+      "input": {
+        "input_file": "corpus/seq-naive-aware.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-ttl-offset-forms",
+      "description": "+02:00 and +0230 offsets and fractional seconds all parse per the shared grammar",
+      "input": {
+        "input_file": "corpus/seq-offset-forms.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-gap-fractional-half-even",
+      "description": "12.25s gap rounds half-even to 12.2",
+      "input": {
+        "input_file": "corpus/seq-frac-gap.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-explicit-breakpoint-note",
+      "description": "explicit-enablement provider HIT adds the cache-breakpoint note",
+      "input": {
+        "input_file": "corpus/seq-breakpoint-note.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-group-normalized-model",
+      "description": "fix m: 'gpt-5.2' and 'GPT 5.2' land in ONE group; no cross-group trailer",
+      "input": {
+        "input_file": "corpus/seq-norm-model.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-cross-group-note",
+      "description": "different models -> single-member groups + cross-group trailer entry (count 0)",
+      "input": {
+        "input_file": "corpus/seq-mixed-models.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-shared-prefix-all",
+      "description": "three members: fleet-wide shared prefix + meets_threshold + M/K summary",
+      "input": {
+        "input_file": "corpus/seq-three.json"
+      },
+      "expected": null
+    },
+    {
+      "name": "seq-diverge-at-separator",
+      "description": "fix l: divergence offset at the old system end attributes to system (preceding section)",
+      "input": {
+        "input_file": "corpus/seq-sep-diverge.json"
+      },
+      "expected": null
+    }
+  ]
+}
