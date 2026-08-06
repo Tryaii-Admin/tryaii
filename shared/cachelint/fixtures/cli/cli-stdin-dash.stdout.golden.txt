@@ -1,0 +1,57 @@
+==============================================================================
+ CACHELINT - prompt-cache pre-flight report
+   knowledge base: cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)
+==============================================================================
+
+ INPUT #0 -- Anthropic (Claude) / claude-fable-5
+------------------------------------------------------------------------------
+ Verdict   : BELOW THRESHOLD (won't cache)
+             Total prompt ~5 tok < 512 minimum — nothing will cache. Expanding
+             the static content to reach the floor is often worthwhile.
+ Tokens    : total ~5  (estimate(~3.5 chars/tok))
+             messages[0]:user=~5
+ Threshold : 512 min (Fable 5 / Mythos 5 tier (lowest floor)) -> prompt BELOW the floor
+ Findings  : none — no dynamic-content indicators detected
+ StablePfx : ~5 tok (entire prompt is stable)
+ Enablement: EXPLICIT
+             OPT-IN: nothing caches unless you mark a breakpoint with
+             "cache_control": {"type": "ephemeral"} (<= 4 breakpoints;
+             20-block lookback). Render order is tools -> system -> messages;
+             a byte change invalidates everything after it.
+ Recommendations:
+    1. [enablement] Add "cache_control": {"type": "ephemeral"} on the LAST
+    static block (end of system prompt or last stable message). For >5-min
+    gaps use {"type": "ephemeral", "ttl": "1h"} (2x write premium).
+    2. [verify] After deploying, assert usage.cache_read_input_tokens (writes:
+    usage.cache_creation_input_tokens) > 0 in responses. 0 across
+    identical-prefix requests = a silent invalidator is still present.
+    3. [batch] STACKS with the Batch API 50%: cache read in a batch = 0.1x *
+    0.5x = ~95% off
+ Intel     :
+      TTL: 5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'
+      Read discount: 90% (0.1x base input)
+      Write cost: write premium: 1.25x (5-min TTL) / 2x (1-hour TTL); no
+      storage fee
+      Verify via: usage.cache_read_input_tokens (writes:
+      usage.cache_creation_input_tokens)
+      ! Below the model's minimum the marked prefix SILENTLY won't cache
+      (cache_creation_input_tokens: 0, no error).
+      ! Model switch = cold cache (model-scoped). Toggling extended thinking
+      invalidates system+messages (tools survive).
+      ! Serialize tool JSON deterministically (sorted keys, frozen order) —
+      non-deterministic serialization is a classic silent invalidator.
+      ! Concurrency: entry readable only after the first response begins
+      streaming — warm one, then fan out.
+      ! Pre-warm with a max_tokens: 0 request to skip cold-write latency on
+      the first real request.
+      ! On Opus 5 / Opus 4.8 / Fable 5 / Mythos 5: append {"role": "system",
+      ...} to messages for mid-conversation instructions instead of editing
+      the top-level system prompt — preserves the cached prefix.
+      ! No prompt_cache_key equivalent — routing affinity cannot be steered;
+      identical prefixes are the only lever.
+  (warning) Token counts are estimates (estimate(~3.5 chars/tok)). for exact
+  counts use POST /v1/messages/count_tokens (never tiktoken for Claude)
+
+==============================================================================
+ Caveat: Thresholds/prices are time-sensitive; verify against live provider
+ docs.

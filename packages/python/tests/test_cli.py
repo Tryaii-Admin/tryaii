@@ -46,8 +46,10 @@ def test_global_help_prints_shared_text_from_any_position(monkeypatch, capsys, a
     [
         (("help", "route"), "route"),
         (("help", "eval"), "eval"),
+        (("help", "cachelint"), "cachelint"),
         (("eval", "--help"), "eval"),
         (("route", "-h"), "route"),
+        (("cachelint", "--help"), "cachelint"),
         (("models", "--help"), "models"),
     ],
 )

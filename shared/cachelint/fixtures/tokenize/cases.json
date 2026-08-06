@@ -1,0 +1,276 @@
+{
+  "suite": "tokenize",
+  "target": "tokenizers.count_tokens",
+  "cases": [
+    {
+      "name": "tok-empty",
+      "description": "empty text -> 0, method 'empty', exact",
+      "input": {
+        "text": "",
+        "provider_key": "openai",
+        "upstream": null
+      },
+      "expected": {
+        "tokens": 0,
+        "method": "empty",
+        "exact": true,
+        "note": ""
+      }
+    },
+    {
+      "name": "tok-openai-exact-ascii",
+      "description": "o200k_base exact count (tiktoken required)",
+      "input": {
+        "text": "The quick brown fox jumps over the lazy dog.",
+        "provider_key": "openai",
+        "upstream": null
+      },
+      "expected": {
+        "tokens": 10,
+        "method": "tiktoken(o200k_base)",
+        "exact": true,
+        "note": ""
+      }
+    },
+    {
+      "name": "tok-openai-special-token",
+      "description": "special tokens encode as plain text (disallowed_special=() / encode(text, [], []))",
+      "input": {
+        "text": "before <|endoftext|> after",
+        "provider_key": "openai",
+        "upstream": null
+      },
+      "expected": {
+        "tokens": 9,
+        "method": "tiktoken(o200k_base)",
+        "exact": true,
+        "note": ""
+      }
+    },
+    {
+      "name": "tok-openai-unicode",
+      "description": "Hebrew + emoji exact o200k count (P1 spike case, frozen)",
+      "input": {
+        "text": "שלום עולם 🚀 hello",
+        "provider_key": "openai",
+        "upstream": null
+      },
+      "expected": {
+        "tokens": 5,
+        "method": "tiktoken(o200k_base)",
+        "exact": true,
+        "note": ""
+      }
+    },
+    {
+      "name": "tok-xai-approx",
+      "description": "same encoder, exact=false, xai approximation note",
+      "input": {
+        "text": "The quick brown fox jumps over the lazy dog.",
+        "provider_key": "xai",
+        "upstream": null
+      },
+      "expected": {
+        "tokens": 10,
+        "method": "tiktoken(o200k_base)",
+        "exact": false,
+        "note": "xAI tokenizer approximated with o200k_base"
+      }
+    },
+    {
+      "name": "tok-openrouter-upstream-openai",
+      "description": "openrouter with openai upstream -> tiktoken path, exact",
+      "input": {
+        "text": "The quick brown fox jumps over the lazy dog.",
+        "provider_key": "openrouter",
+        "upstream": "openai"
+      },
+      "expected": {
+        "tokens": 10,
+        "method": "tiktoken(o200k_base)",
+        "exact": true,
+        "note": ""
+      }
+    },
+    {
+      "name": "tok-openrouter-upstream-anthropic",
+      "description": "openrouter with anthropic upstream -> heuristic 3.5",
+      "input": {
+        "text": "The quick brown fox jumps over the lazy dog.",
+        "provider_key": "openrouter",
+        "upstream": "anthropic"
+      },
+      "expected": {
+        "tokens": 13,
+        "method": "estimate(~3.5 chars/tok)",
+        "exact": false,
+        "note": "for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+      }
+    },
+    {
+      "name": "tok-openrouter-no-upstream",
+      "description": "openrouter unknown upstream -> heuristic 4.0 + upstream-dependent note",
+      "input": {
+        "text": "The quick brown fox jumps over the lazy dog.",
+        "provider_key": "openrouter",
+        "upstream": null
+      },
+      "expected": {
+        "tokens": 11,
+        "method": "estimate(~4 chars/tok)",
+        "exact": false,
+        "note": "count depends on the upstream model's tokenizer"
+      }
+    },
+    {
+      "name": "tok-bedrock-openai-upstream",
+      "description": "bedrock with openai upstream -> tiktoken path (public count_tokens surface)",
+      "input": {
+        "text": "The quick brown fox jumps over the lazy dog.",
+        "provider_key": "bedrock",
+        "upstream": "openai"
+      },
+      "expected": {
+        "tokens": 10,
+        "method": "tiktoken(o200k_base)",
+        "exact": true,
+        "note": ""
+      }
+    },
+    {
+      "name": "tok-anthropic-heuristic",
+      "description": "anthropic heuristic 3.5 + exact-count API note",
+      "input": {
+        "text": "The quick brown fox jumps over the lazy dog.",
+        "provider_key": "anthropic",
+        "upstream": null
+      },
+      "expected": {
+        "tokens": 13,
+        "method": "estimate(~3.5 chars/tok)",
+        "exact": false,
+        "note": "for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+      }
+    },
+    {
+      "name": "tok-anthropic-nonascii-switch",
+      "description": "fix k: >30% non-ASCII drops the rate to 2.6 and the label reports 2.6",
+      "input": {
+        "text": "אתה עוזר לוגיסטיקה. ענה עם קוד המחסן, שם המוביל, וזמן המשלוח בימי עסקים. העדף משלוח יבשתי כאשר העלות חשובה. אתה עוזר לוגיסטיקה. ענ",
+        "provider_key": "anthropic",
+        "upstream": null
+      },
+      "expected": {
+        "tokens": 50,
+        "method": "estimate(~2.6 chars/tok)",
+        "exact": false,
+        "note": "for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+      }
+    },
+    {
+      "name": "tok-nonascii-at-threshold",
+      "description": "exactly 30% non-ASCII does NOT switch (strict >)",
+      "input": {
+        "text": "אבגabcdefg",
+        "provider_key": "anthropic",
+        "upstream": null
+      },
+      "expected": {
+        "tokens": 3,
+        "method": "estimate(~3.5 chars/tok)",
+        "exact": false,
+        "note": "for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+      }
+    },
+    {
+      "name": "tok-nonascii-above-threshold",
+      "description": "just above 30% switches to 2.6",
+      "input": {
+        "text": "אבגדabcdef",
+        "provider_key": "anthropic",
+        "upstream": null
+      },
+      "expected": {
+        "tokens": 4,
+        "method": "estimate(~2.6 chars/tok)",
+        "exact": false,
+        "note": "for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+      }
+    },
+    {
+      "name": "tok-round-half-even-down",
+      "description": "10 cp / 4.0 = 2.5 -> 2 (half-even)",
+      "input": {
+        "text": "abcdefghij",
+        "provider_key": "gemini",
+        "upstream": null
+      },
+      "expected": {
+        "tokens": 2,
+        "method": "estimate(~4 chars/tok)",
+        "exact": false,
+        "note": "for exact counts use the Gemini countTokens API"
+      }
+    },
+    {
+      "name": "tok-round-half-even-up",
+      "description": "14 cp / 4.0 = 3.5 -> 4 (half-even)",
+      "input": {
+        "text": "abcdefghijklmn",
+        "provider_key": "gemini",
+        "upstream": null
+      },
+      "expected": {
+        "tokens": 4,
+        "method": "estimate(~4 chars/tok)",
+        "exact": false,
+        "note": "for exact counts use the Gemini countTokens API"
+      }
+    },
+    {
+      "name": "tok-min-one",
+      "description": "single char -> max(1, ...) floor",
+      "input": {
+        "text": "a",
+        "provider_key": "anthropic",
+        "upstream": null
+      },
+      "expected": {
+        "tokens": 1,
+        "method": "estimate(~3.5 chars/tok)",
+        "exact": false,
+        "note": "for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+      }
+    },
+    {
+      "name": "tok-codepoint-length",
+      "description": "astral emoji count as 1 cp each; 100% non-ASCII also exercises the 2.6 switch on bedrock",
+      "input": {
+        "text": "😀😀",
+        "provider_key": "bedrock",
+        "upstream": null
+      },
+      "expected": {
+        "tokens": 1,
+        "method": "estimate(~2.6 chars/tok)",
+        "exact": false,
+        "note": "for exact counts use the underlying vendor's token-counting API"
+      }
+    },
+    {
+      "name": "tok-vertex-rate",
+      "description": "vertex heuristic 4.0 + countTokens note",
+      "input": {
+        "text": "The quick brown fox jumps over the lazy dog.",
+        "provider_key": "vertex",
+        "upstream": null
+      },
+      "expected": {
+        "tokens": 11,
+        "method": "estimate(~4 chars/tok)",
+        "exact": false,
+        "note": "for exact counts use the Vertex countTokens API / Anthropic count_tokens"
+      }
+    }
+  ]
+}

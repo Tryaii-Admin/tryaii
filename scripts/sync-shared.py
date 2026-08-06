@@ -30,6 +30,13 @@ TARGETS = [
             ROOT / "packages" / "node" / "src" / "centroids" / "data" / "trainingQueries.json",
         ],
     ),
+    (
+        SHARED / "cachelint" / "providers.json",
+        [
+            ROOT / "packages" / "python" / "tryaii" / "cachelint" / "data" / "providers.json",
+            ROOT / "packages" / "node" / "src" / "cachelint" / "data" / "providers.json",
+        ],
+    ),
 ]
 
 # Centroids: copy all files in shared/centroids/ to both packages

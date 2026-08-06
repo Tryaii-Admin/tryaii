@@ -10,6 +10,7 @@ tryaii <command> [options]
 |---|---|
 | [`route <prompt>`](route.md) | Route one prompt to the best model and show ranked recommendations |
 | [`eval <input.json>`](eval/README.md) | Route a JSON prompt dataset; writes `results.jsonl`, `summary.json`, `index.html` — see [dataset](eval/dataset/README.md), [priority mode](eval/priority-mode/README.md), [budget mode](eval/budget-mode/README.md), [outputs](eval/outputs/README.md) |
+| [`cachelint <input.json>`](cachelint.md) | Pre-flight prompt-cache analysis: detectors, stable prefix, per-model floors, predicted HIT/MISS across sequences (`--json`, `--provider` raw-text mode) |
 | [`models`](models.md) | List the model catalog (`--provider`, `--json`) |
 | [`benchmarks`](benchmarks.md) | List registered benchmarks (`--json`) |
 | [`setup`](setup.md) | Download the embedding model and warm centroids (one-time) |

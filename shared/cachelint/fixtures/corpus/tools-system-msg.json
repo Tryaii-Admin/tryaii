@@ -1,0 +1,29 @@
+{
+  "prompt": {
+    "tools": [
+      {
+        "name": "warehouse_lookup",
+        "description": "Find the warehouse code for a city.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ],
+    "system": "You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. ",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Which warehouse serves Oslo?"
+      }
+    ]
+  },
+  "llm": {
+    "provider": "anthropic",
+    "name": "claude-fable-5"
+  }
+}

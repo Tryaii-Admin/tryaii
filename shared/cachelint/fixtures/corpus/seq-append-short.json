@@ -1,0 +1,40 @@
+[
+  {
+    "prompt": {
+      "system": "You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. ",
+      "messages": [
+        {
+          "role": "user",
+          "content": "First question about routing to Oslo."
+        }
+      ]
+    },
+    "llm": {
+      "provider": "anthropic",
+      "name": "claude-fable-5"
+    }
+  },
+  {
+    "prompt": {
+      "system": "You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. ",
+      "messages": [
+        {
+          "role": "user",
+          "content": "First question about routing to Oslo."
+        },
+        {
+          "role": "assistant",
+          "content": "Warehouse OSL-2."
+        },
+        {
+          "role": "user",
+          "content": "And to Bergen?"
+        }
+      ]
+    },
+    "llm": {
+      "provider": "anthropic",
+      "name": "claude-fable-5"
+    }
+  }
+]

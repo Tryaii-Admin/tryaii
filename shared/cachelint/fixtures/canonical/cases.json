@@ -1,0 +1,287 @@
+{
+  "suite": "canonical",
+  "target": "analyzer.build_canonical",
+  "cases": [
+    {
+      "name": "can-order-tools-system-messages",
+      "description": "input written messages-first still renders tools -> system -> messages with exact spans",
+      "input": {
+        "prompt": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "Which warehouse serves Oslo?"
+            }
+          ],
+          "system": "SYS",
+          "tools": [
+            {
+              "name": "lookup"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "text": "[{\"name\":\"lookup\"}]\n\nSYS\n\nuser: Which warehouse serves Oslo?",
+        "sections": [
+          {
+            "name": "tools",
+            "start": 0,
+            "end": 19
+          },
+          {
+            "name": "system",
+            "start": 21,
+            "end": 24
+          },
+          {
+            "name": "messages[0]:user",
+            "start": 26,
+            "end": 60
+          }
+        ],
+        "non_text": 0
+      }
+    },
+    {
+      "name": "can-tools-sorted-keys-integral-floats",
+      "description": "fix b: keys sorted recursively, 1.0 -> 1, 2.5 stays, non-ASCII unescaped",
+      "input": {
+        "prompt": {
+          "tools": [
+            {
+              "zeta": 1.0,
+              "alpha": {
+                "b": 2.5,
+                "a": [
+                  1.0,
+                  "x",
+                  3
+                ]
+              },
+              "num": 10,
+              "label": "café"
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": "q"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "text": "[{\"alpha\":{\"a\":[1,\"x\",3],\"b\":2.5},\"label\":\"café\",\"num\":10,\"zeta\":1}]\n\nuser: q",
+        "sections": [
+          {
+            "name": "tools",
+            "start": 0,
+            "end": 68
+          },
+          {
+            "name": "messages[0]:user",
+            "start": 70,
+            "end": 77
+          }
+        ],
+        "non_text": 0
+      }
+    },
+    {
+      "name": "can-bare-string-prompt",
+      "description": "bare string wraps into a single user message",
+      "input": {
+        "prompt": "Just a question"
+      },
+      "expected": {
+        "text": "user: Just a question",
+        "sections": [
+          {
+            "name": "messages[0]:user",
+            "start": 0,
+            "end": 21
+          }
+        ],
+        "non_text": 0
+      }
+    },
+    {
+      "name": "can-empty-prompt-object",
+      "description": "empty object -> empty canonical, no sections",
+      "input": {
+        "prompt": {}
+      },
+      "expected": {
+        "text": "",
+        "sections": [],
+        "non_text": 0
+      }
+    },
+    {
+      "name": "can-non-text-blocks",
+      "description": "image and typeless blocks become placeholders and count as non_text; dict with a text key but no type counts as text",
+      "input": {
+        "prompt": {
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "image",
+                  "source": "inline-data"
+                },
+                {
+                  "type": "text",
+                  "text": "look"
+                },
+                {
+                  "text": "noType"
+                },
+                {
+                  "custom": true
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "text": "user: [image]\nlook\nnoType\n[block]",
+        "sections": [
+          {
+            "name": "messages[0]:user",
+            "start": 0,
+            "end": 33
+          }
+        ],
+        "non_text": 2
+      }
+    },
+    {
+      "name": "can-system-as-block-list",
+      "description": "system given as a block list joins with single newlines",
+      "input": {
+        "prompt": {
+          "system": [
+            {
+              "type": "text",
+              "text": "A"
+            },
+            "B"
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": "q"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "text": "A\nB\n\nuser: q",
+        "sections": [
+          {
+            "name": "system",
+            "start": 0,
+            "end": 3
+          },
+          {
+            "name": "messages[0]:user",
+            "start": 5,
+            "end": 12
+          }
+        ],
+        "non_text": 0
+      }
+    },
+    {
+      "name": "can-message-shapes",
+      "description": "non-dict message -> user: str(msg); dict without role -> user",
+      "input": {
+        "prompt": {
+          "messages": [
+            "plain string msg",
+            {
+              "content": "no role here"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "text": "user: plain string msg\n\nuser: no role here",
+        "sections": [
+          {
+            "name": "messages[0]:user",
+            "start": 0,
+            "end": 22
+          },
+          {
+            "name": "messages[1]:user",
+            "start": 24,
+            "end": 42
+          }
+        ],
+        "non_text": 0
+      }
+    },
+    {
+      "name": "can-falsy-skipped",
+      "description": "empty system string and empty tools list produce no sections",
+      "input": {
+        "prompt": {
+          "system": "",
+          "tools": [],
+          "messages": [
+            {
+              "role": "user",
+              "content": "q"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "text": "user: q",
+        "sections": [
+          {
+            "name": "messages[0]:user",
+            "start": 0,
+            "end": 7
+          }
+        ],
+        "non_text": 0
+      }
+    },
+    {
+      "name": "can-spans-unicode",
+      "description": "emoji in system: section spans are code-point based",
+      "input": {
+        "prompt": {
+          "system": "🚀 sys",
+          "messages": [
+            {
+              "role": "user",
+              "content": "héllo"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "text": "🚀 sys\n\nuser: héllo",
+        "sections": [
+          {
+            "name": "system",
+            "start": 0,
+            "end": 5
+          },
+          {
+            "name": "messages[0]:user",
+            "start": 7,
+            "end": 18
+          }
+        ],
+        "non_text": 0
+      }
+    }
+  ]
+}

@@ -145,6 +145,7 @@ def test_cli_help_text_identical_across_sdks():
 COMMAND_HELP_CONSTANTS = {
     "route": "HELP_ROUTE",
     "eval": "HELP_EVAL",
+    "cachelint": "HELP_CACHELINT",
     "models": "HELP_MODELS",
     "benchmarks": "HELP_BENCHMARKS",
     "setup": "HELP_SETUP",
@@ -180,4 +181,51 @@ def test_command_help_text_identical_across_sdks():
         "Per-command help diverged between Node and Python for: "
         + ", ".join(diffs)
         + " -- keep the HELP_<CMD> blocks identical across both CLIs"
+    )
+
+
+# ---------------------------------------------------------------------------
+# cachelint provider knowledge base
+# ---------------------------------------------------------------------------
+
+SHARED_CACHELINT_KB = REPO_ROOT / "shared" / "cachelint" / "providers.json"
+PY_CACHELINT_KB = (
+    REPO_ROOT / "packages" / "python" / "tryaii" / "cachelint" / "data" / "providers.json"
+)
+NODE_CACHELINT_KB = (
+    REPO_ROOT / "packages" / "node" / "src" / "cachelint" / "data" / "providers.json"
+)
+
+
+def test_cachelint_providers_identical_across_sdks():
+    """Both SDKs must ship byte-identical cachelint knowledge bases.
+
+    Thresholds feed verdicts (BELOW_THRESHOLD vs CACHEABLE is a token
+    comparison against this data), so any drift routes the same prompt to a
+    different verdict depending on the SDK language.
+    """
+    if not NODE_CACHELINT_KB.exists():
+        pytest.skip("Node cachelint data not present (python-only checkout)")
+
+    assert PY_CACHELINT_KB.read_bytes() == NODE_CACHELINT_KB.read_bytes(), (
+        "cachelint providers.json diverged between the two SDKs -- edit "
+        "shared/cachelint/providers.json and run scripts/sync-shared.py"
+    )
+
+
+def test_cachelint_package_data_matches_shared_master():
+    """Each package's bundled KB must equal the shared/ master it is synced from."""
+    if not SHARED_CACHELINT_KB.exists():
+        pytest.skip("shared/cachelint not present (package-only checkout)")
+
+    master = SHARED_CACHELINT_KB.read_bytes()
+    stale = [
+        str(path.relative_to(REPO_ROOT))
+        for path in (PY_CACHELINT_KB, NODE_CACHELINT_KB)
+        if path.exists() and path.read_bytes() != master
+    ]
+    assert not stale, (
+        "Package copies out of sync with shared/cachelint/providers.json: "
+        + ", ".join(stale)
+        + " -- run scripts/sync-shared.py"
     )

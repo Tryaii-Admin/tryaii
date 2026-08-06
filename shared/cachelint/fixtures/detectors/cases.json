@@ -1,0 +1,672 @@
+{
+  "suite": "detectors",
+  "target": "detectors.scan",
+  "cases": [
+    {
+      "name": "det-uuid-basic",
+      "description": "single UUID -> one high finding with exact code-point span",
+      "input": {
+        "text": "id 7f9c02aa-51b3-4c2e-9f10-8a4d55e01b27 rest"
+      },
+      "expected": {
+        "findings": [
+          {
+            "kind": "uuid",
+            "severity": "high",
+            "start": 3,
+            "end": 39,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 6.8,
+            "excerpt": "id 7f9c02aa-51b3-4c2e-9f10-8a4d55e01b27 rest",
+            "why": "UUIDs are unique per session/request — a new value on the next call breaks the prefix."
+          }
+        ],
+        "first_blocking_index": 0
+      }
+    },
+    {
+      "name": "det-datetime-variants",
+      "description": "ISO datetime variants; contained date-iso/clock-time removed by strictly-longer containment dedupe (fix f: no trailing-space span)",
+      "input": {
+        "text": "2026-07-30T09:14:22Z 2026-07-30 09:14 2026-07-30T09:14:22.123+02:00"
+      },
+      "expected": {
+        "findings": [
+          {
+            "kind": "timestamp-datetime",
+            "severity": "high",
+            "start": 0,
+            "end": 20,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 0,
+            "excerpt": "2026-07-30T09:14:22Z 2026-07-30 09:14 2026-07-30...",
+            "why": "A full datetime changes every call — everything after it can never match byte-for-byte."
+          },
+          {
+            "kind": "timestamp-datetime",
+            "severity": "high",
+            "start": 21,
+            "end": 37,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 31.3,
+            "excerpt": "2026-07-30T09:14:22Z 2026-07-30 09:14 2026-07-30T09:14:22.123+02:...",
+            "why": "A full datetime changes every call — everything after it can never match byte-for-byte."
+          },
+          {
+            "kind": "timestamp-datetime",
+            "severity": "high",
+            "start": 38,
+            "end": 67,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 56.7,
+            "excerpt": "...T09:14:22Z 2026-07-30 09:14 2026-07-30T09:14:22.123+02:00",
+            "why": "A full datetime changes every call — everything after it can never match byte-for-byte."
+          }
+        ],
+        "first_blocking_index": 0
+      }
+    },
+    {
+      "name": "det-epoch-seconds-and-ms",
+      "description": "10-digit and 13-digit epoch values both flagged",
+      "input": {
+        "text": "ts=1785312000 and ms=1785312000123 end"
+      },
+      "expected": {
+        "findings": [
+          {
+            "kind": "timestamp-epoch",
+            "severity": "high",
+            "start": 3,
+            "end": 13,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 7.9,
+            "excerpt": "ts=1785312000 and ms=1785312000123 end",
+            "why": "Looks like a Unix epoch timestamp (seconds or ms) — changes every call."
+          },
+          {
+            "kind": "timestamp-epoch",
+            "severity": "high",
+            "start": 21,
+            "end": 34,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 55.3,
+            "excerpt": "ts=1785312000 and ms=1785312000123 end",
+            "why": "Looks like a Unix epoch timestamp (seconds or ms) — changes every call."
+          }
+        ],
+        "first_blocking_index": 0
+      }
+    },
+    {
+      "name": "det-epoch-negative",
+      "description": "10 digits with 15-prefix and an 11-digit number do not match",
+      "input": {
+        "text": "v1=1585312000 v2=17853120001"
+      },
+      "expected": {
+        "findings": [],
+        "first_blocking_index": null
+      }
+    },
+    {
+      "name": "det-session-id-forms",
+      "description": "session_id / Request-Id / conversation id forms, case-insensitive, span includes the value",
+      "input": {
+        "text": "session_id: abc123def then Request-Id='xyz9' then conversation id = c1234"
+      },
+      "expected": {
+        "findings": [
+          {
+            "kind": "session-id",
+            "severity": "high",
+            "start": 0,
+            "end": 21,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 0,
+            "excerpt": "session_id: abc123def then Request-Id='xyz9' then...",
+            "why": "Per-session/user identifiers vary between calls and users — no cross-request (or cross-user) prefix sharing."
+          },
+          {
+            "kind": "session-id",
+            "severity": "high",
+            "start": 27,
+            "end": 43,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 37,
+            "excerpt": "session_id: abc123def then Request-Id='xyz9' then conversation id = c12...",
+            "why": "Per-session/user identifiers vary between calls and users — no cross-request (or cross-user) prefix sharing."
+          },
+          {
+            "kind": "session-id",
+            "severity": "high",
+            "start": 50,
+            "end": 73,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 68.5,
+            "excerpt": "...then Request-Id='xyz9' then conversation id = c1234",
+            "why": "Per-session/user identifiers vary between calls and users — no cross-request (or cross-user) prefix sharing."
+          }
+        ],
+        "first_blocking_index": 0
+      }
+    },
+    {
+      "name": "det-secret-like",
+      "description": "api_key and secret assignments flagged (security + cache)",
+      "input": {
+        "text": "api_key = sk-live-0a1b2c3d4e5f6g7h and secret: supersecretvalue99"
+      },
+      "expected": {
+        "findings": [
+          {
+            "kind": "secret-like",
+            "severity": "high",
+            "start": 0,
+            "end": 34,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 0,
+            "excerpt": "api_key = sk-live-0a1b2c3d4e5f6g7h and secret: supersecretvalu...",
+            "why": "Secret material in the prompt: rotates (breaking the cache) AND is a security smell — keys don't belong in prompts."
+          },
+          {
+            "kind": "secret-like",
+            "severity": "high",
+            "start": 39,
+            "end": 65,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 60,
+            "excerpt": "...k-live-0a1b2c3d4e5f6g7h and secret: supersecretvalue99",
+            "why": "Secret material in the prompt: rotates (breaking the cache) AND is a security smell — keys don't belong in prompts."
+          }
+        ],
+        "first_blocking_index": 0
+      }
+    },
+    {
+      "name": "det-template-slots",
+      "description": "all six template families fire: braces, jinja, dollar, percent-named, angle, bracket",
+      "input": {
+        "text": "Hello {user_name}, {{ customer.id }} and ${ORDER_ID} and %(name)s and <USER_NAME> and [INSERT COMPANY]"
+      },
+      "expected": {
+        "findings": [
+          {
+            "kind": "template-braces",
+            "severity": "medium",
+            "start": 6,
+            "end": 17,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 5.9,
+            "excerpt": "Hello {user_name}, {{ customer.id }} and ${OR...",
+            "why": "Python .format()/f-string style placeholder — a per-call value will land here. (If this is literal JSON/code content, ignore.)"
+          },
+          {
+            "kind": "template-jinja",
+            "severity": "medium",
+            "start": 19,
+            "end": 36,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 18.6,
+            "excerpt": "Hello {user_name}, {{ customer.id }} and ${ORDER_ID} and %(name)...",
+            "why": "Jinja/Handlebars template slot — after rendering, the value will differ per call."
+          },
+          {
+            "kind": "template-dollar",
+            "severity": "medium",
+            "start": 41,
+            "end": 52,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 40.2,
+            "excerpt": "...ame}, {{ customer.id }} and ${ORDER_ID} and %(name)s and <USER_NAME...",
+            "why": "${...} template slot (JS template / shell) — value will differ per call."
+          },
+          {
+            "kind": "template-percent-named",
+            "severity": "medium",
+            "start": 57,
+            "end": 65,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 55.9,
+            "excerpt": "...r.id }} and ${ORDER_ID} and %(name)s and <USER_NAME> and [INSERT...",
+            "why": "%-style named placeholder — value will differ per call."
+          },
+          {
+            "kind": "template-angle",
+            "severity": "medium",
+            "start": 70,
+            "end": 81,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 68.6,
+            "excerpt": "...{ORDER_ID} and %(name)s and <USER_NAME> and [INSERT COMPANY]",
+            "why": "ALL-CAPS angle-bracket placeholder (e.g. <USER_NAME>) — value will differ per call."
+          },
+          {
+            "kind": "template-bracket",
+            "severity": "medium",
+            "start": 86,
+            "end": 102,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 84.3,
+            "excerpt": "...(name)s and <USER_NAME> and [INSERT COMPANY]",
+            "why": "[INSERT ...]-style placeholder — value will differ per call."
+          }
+        ],
+        "first_blocking_index": 0
+      }
+    },
+    {
+      "name": "det-json-not-flagged",
+      "description": "JSON literals and non-identifier braces are not template slots",
+      "input": {
+        "text": "Config: {\"retries\": 3, \"mode\": \"fast\"} and {mode: fast} and {  spaced }"
+      },
+      "expected": {
+        "findings": [],
+        "first_blocking_index": null
+      }
+    },
+    {
+      "name": "det-template-angle-negative",
+      "description": "lowercase tags and too-short uppercase tags do not match",
+      "input": {
+        "text": "see <p> and <BR> and <ab> tags"
+      },
+      "expected": {
+        "findings": [],
+        "first_blocking_index": null
+      }
+    },
+    {
+      "name": "det-percent-bare-lookbehind",
+      "description": "%s after whitespace fires; digit/word/percent prefixes are blocked",
+      "input": {
+        "text": "use %s here but 100%s and x%d and 50%% stay"
+      },
+      "expected": {
+        "findings": [
+          {
+            "kind": "template-percent-bare",
+            "severity": "low",
+            "start": 4,
+            "end": 6,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 9.3,
+            "excerpt": "use %s here but 100%s and x%d and ...",
+            "why": "Bare %-placeholder — advisory (often literal text)."
+          }
+        ],
+        "first_blocking_index": null
+      }
+    },
+    {
+      "name": "det-clock-time-no-trailing-space",
+      "description": "fix f: bare time span has no trailing space; am/pm and seconds variants keep exact spans",
+      "input": {
+        "text": "Meet at 12:30 tomorrow; dinner at 7:45 PM; job ran 19:05:33 fine"
+      },
+      "expected": {
+        "findings": [
+          {
+            "kind": "clock-time",
+            "severity": "low",
+            "start": 8,
+            "end": 13,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 12.5,
+            "excerpt": "Meet at 12:30 tomorrow; dinner at 7:45 PM...",
+            "why": "Clock time — advisory; only a problem if it's an injected 'now'."
+          },
+          {
+            "kind": "clock-time",
+            "severity": "low",
+            "start": 34,
+            "end": 41,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 53.1,
+            "excerpt": "...t 12:30 tomorrow; dinner at 7:45 PM; job ran 19:05:33 fine",
+            "why": "Clock time — advisory; only a problem if it's an injected 'now'."
+          },
+          {
+            "kind": "clock-time",
+            "severity": "low",
+            "start": 51,
+            "end": 59,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 79.7,
+            "excerpt": "... dinner at 7:45 PM; job ran 19:05:33 fine",
+            "why": "Clock time — advisory; only a problem if it's an injected 'now'."
+          }
+        ],
+        "first_blocking_index": null
+      }
+    },
+    {
+      "name": "det-date-family",
+      "description": "date-iso, date-us, date-verbose (dotted + plain), date-phrase",
+      "input": {
+        "text": "Due 2026-07-30, or 12/31/2026, or January 5, 2026, or Sept. 3 2026 because today's date matters"
+      },
+      "expected": {
+        "findings": [
+          {
+            "kind": "date-iso",
+            "severity": "medium",
+            "start": 4,
+            "end": 14,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 4.2,
+            "excerpt": "Due 2026-07-30, or 12/31/2026, or January ...",
+            "why": "ISO date — if injected as 'today', it breaks the cache at every day boundary. (A static historical date is fine — ignore if so.)"
+          },
+          {
+            "kind": "date-us",
+            "severity": "medium",
+            "start": 19,
+            "end": 29,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 20,
+            "excerpt": "Due 2026-07-30, or 12/31/2026, or January 5, 2026, or Sep...",
+            "why": "Date literal — breaks the cache daily if injected as 'today'."
+          },
+          {
+            "kind": "date-verbose",
+            "severity": "medium",
+            "start": 34,
+            "end": 49,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 35.8,
+            "excerpt": "...26-07-30, or 12/31/2026, or January 5, 2026, or Sept. 3 2026 because to...",
+            "why": "Spelled-out date — breaks the cache daily if injected as 'today'."
+          },
+          {
+            "kind": "date-verbose",
+            "severity": "medium",
+            "start": 54,
+            "end": 66,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 56.8,
+            "excerpt": "...026, or January 5, 2026, or Sept. 3 2026 because today's date matter...",
+            "why": "Spelled-out date — breaks the cache daily if injected as 'today'."
+          },
+          {
+            "kind": "date-phrase",
+            "severity": "medium",
+            "start": 75,
+            "end": 87,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 78.9,
+            "excerpt": "...26, or Sept. 3 2026 because today's date matters",
+            "why": "Phrase signaling an injected 'current date/time' — the value next to it changes every day or every call."
+          }
+        ],
+        "first_blocking_index": 0
+      }
+    },
+    {
+      "name": "det-hex-id-mixed",
+      "description": "hex-id needs digits AND letters (validate); pure digits / pure letters stay silent",
+      "input": {
+        "text": "hash 0123456789abcdef0123 ok; digits 1234567890123456 no; word deadbeefdeadbeef no"
+      },
+      "expected": {
+        "findings": [
+          {
+            "kind": "hex-id",
+            "severity": "low",
+            "start": 5,
+            "end": 25,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 6.1,
+            "excerpt": "hash 0123456789abcdef0123 ok; digits 1234567890123456...",
+            "why": "Long hex string (object id / hash) — advisory; a problem if it varies per request."
+          }
+        ],
+        "first_blocking_index": null
+      }
+    },
+    {
+      "name": "det-overlap-both-kept",
+      "description": "partially overlapping equal-length matches from two detectors are BOTH kept, sorted by (start, -length)",
+      "input": {
+        "text": "${{x}} rest"
+      },
+      "expected": {
+        "findings": [
+          {
+            "kind": "template-dollar",
+            "severity": "medium",
+            "start": 0,
+            "end": 5,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 0,
+            "excerpt": "${{x}} rest",
+            "why": "${...} template slot (JS template / shell) — value will differ per call."
+          },
+          {
+            "kind": "template-jinja",
+            "severity": "medium",
+            "start": 1,
+            "end": 6,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 9.1,
+            "excerpt": "${{x}} rest",
+            "why": "Jinja/Handlebars template slot — after rendering, the value will differ per call."
+          }
+        ],
+        "first_blocking_index": 0
+      }
+    },
+    {
+      "name": "det-containment-strictly-longer",
+      "description": "datetime strictly contains date-iso and clock-time -> only the container survives",
+      "input": {
+        "text": "at 2026-07-30T09:14:22Z start"
+      },
+      "expected": {
+        "findings": [
+          {
+            "kind": "timestamp-datetime",
+            "severity": "high",
+            "start": 3,
+            "end": 23,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 10.3,
+            "excerpt": "at 2026-07-30T09:14:22Z start",
+            "why": "A full datetime changes every call — everything after it can never match byte-for-byte."
+          }
+        ],
+        "first_blocking_index": 0
+      }
+    },
+    {
+      "name": "det-unicode-hebrew-boundary",
+      "description": "fix d/e: Hebrew letter adjacent to a date suppresses the word boundary; spaced date still matches at code-point offsets",
+      "input": {
+        "text": "של2026-01-15 אבל 2026-01-15 כן"
+      },
+      "expected": {
+        "findings": [
+          {
+            "kind": "date-iso",
+            "severity": "medium",
+            "start": 17,
+            "end": 27,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 56.7,
+            "excerpt": "של2026-01-15 אבל 2026-01-15 כן",
+            "why": "ISO date — if injected as 'today', it breaks the cache at every day boundary. (A static historical date is fine — ignore if so.)"
+          }
+        ],
+        "first_blocking_index": 0
+      }
+    },
+    {
+      "name": "det-unicode-emoji-offsets",
+      "description": "astral emoji before a UUID: start/end/excerpt are code-point based",
+      "input": {
+        "text": "🚀🚀 id 7f9c02aa-51b3-4c2e-9f10-8a4d55e01b27 done"
+      },
+      "expected": {
+        "findings": [
+          {
+            "kind": "uuid",
+            "severity": "high",
+            "start": 6,
+            "end": 42,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 12.8,
+            "excerpt": "🚀🚀 id 7f9c02aa-51b3-4c2e-9f10-8a4d55e01b27 done",
+            "why": "UUIDs are unique per session/request — a new value on the next call breaks the prefix."
+          }
+        ],
+        "first_blocking_index": 0
+      }
+    },
+    {
+      "name": "det-excerpt-edges",
+      "description": "no leading ... at text start, no trailing ... at text end, newline in excerpt becomes the two-char literal backslash-n",
+      "input": {
+        "text": "7f9c02aa-51b3-4c2e-9f10-8a4d55e01b27 padpadpadpadpadpadpadpadpadpadpad tail\nts 1785312000"
+      },
+      "expected": {
+        "findings": [
+          {
+            "kind": "uuid",
+            "severity": "high",
+            "start": 0,
+            "end": 36,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 0,
+            "excerpt": "7f9c02aa-51b3-4c2e-9f10-8a4d55e01b27 padpadpadpadpadpadpadpadpad...",
+            "why": "UUIDs are unique per session/request — a new value on the next call breaks the prefix."
+          },
+          {
+            "kind": "timestamp-epoch",
+            "severity": "high",
+            "start": 79,
+            "end": 89,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 88.8,
+            "excerpt": "...dpadpadpadpadpadpad tail\\nts 1785312000",
+            "why": "Looks like a Unix epoch timestamp (seconds or ms) — changes every call."
+          }
+        ],
+        "first_blocking_index": 0
+      }
+    },
+    {
+      "name": "det-pct-rounding-half-even",
+      "description": "400-cp text, uuid at cp 49 -> pct_into_prompt 12.25 rounds half-even to 12.2",
+      "input": {
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx 7f9c02aa-51b3-4c2e-9f10-8a4d55e01b27 yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+      },
+      "expected": {
+        "findings": [
+          {
+            "kind": "uuid",
+            "severity": "high",
+            "start": 49,
+            "end": 85,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 12.2,
+            "excerpt": "...xxxxxxxxxxxxxxxxxxxxxxxxxxx 7f9c02aa-51b3-4c2e-9f10-8a4d55e01b27 yyyyyyyyyyyyyyyyyyyyyyyyyyy...",
+            "why": "UUIDs are unique per session/request — a new value on the next call breaks the prefix."
+          }
+        ],
+        "first_blocking_index": 0
+      }
+    },
+    {
+      "name": "det-empty",
+      "description": "empty text -> no findings",
+      "input": {
+        "text": ""
+      },
+      "expected": {
+        "findings": [],
+        "first_blocking_index": null
+      }
+    },
+    {
+      "name": "det-clean-prose",
+      "description": "benign prose -> no findings",
+      "input": {
+        "text": "Please summarize the quarterly logistics report in three bullet points."
+      },
+      "expected": {
+        "findings": [],
+        "first_blocking_index": null
+      }
+    },
+    {
+      "name": "det-severity-gating",
+      "description": "low-only findings (clock time, bare %d) -> first_blocking_index is null",
+      "input": {
+        "text": "The meeting is at 15:30 in room 4, use %d formatting."
+      },
+      "expected": {
+        "findings": [
+          {
+            "kind": "clock-time",
+            "severity": "low",
+            "start": 18,
+            "end": 23,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 34,
+            "excerpt": "The meeting is at 15:30 in room 4, use %d formattin...",
+            "why": "Clock time — advisory; only a problem if it's an injected 'now'."
+          },
+          {
+            "kind": "template-percent-bare",
+            "severity": "low",
+            "start": 39,
+            "end": 41,
+            "section": "",
+            "section_offset": 0,
+            "pct_into_prompt": 73.6,
+            "excerpt": "... is at 15:30 in room 4, use %d formatting.",
+            "why": "Bare %-placeholder — advisory (often literal text)."
+          }
+        ],
+        "first_blocking_index": null
+      }
+    }
+  ]
+}

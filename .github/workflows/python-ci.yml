@@ -111,3 +111,14 @@ jobs:
           assert result.best_model, "No model returned"
           print(f"Smoke test passed: best_model={result.best_model}")
           PY
+
+      - name: Smoke test -- cachelint (heuristic path WITHOUT tiktoken, then exact path)
+        run: |
+          /tmp/smoke-env/bin/tryaii help cachelint >/dev/null
+          # Heuristic providers must work without the cachelint extra installed.
+          printf '{"prompt": "Smoke prompt.", "llm": {"provider": "anthropic", "name": "claude-fable-5"}}' > /tmp/cachelint-smoke.json
+          /tmp/smoke-env/bin/tryaii cachelint /tmp/cachelint-smoke.json --no-banner >/dev/null
+          # OpenAI paths require the extra; install it and run the exact tokenizer.
+          /tmp/smoke-env/bin/pip install tiktoken >/dev/null
+          printf 'A raw prompt for the exact tokenizer path.' | /tmp/smoke-env/bin/tryaii cachelint - --provider openai --model gpt-5.2 --no-banner >/dev/null
+          echo "cachelint smoke passed"

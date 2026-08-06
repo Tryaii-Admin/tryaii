@@ -1,0 +1,130 @@
+==============================================================================
+ CACHELINT - prompt-cache pre-flight report
+   knowledge base: cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)
+==============================================================================
+
+ INPUT #0 -- Anthropic (Claude) / claude-fable-5
+------------------------------------------------------------------------------
+ Verdict   : BELOW THRESHOLD (won't cache)
+             Total prompt ~123 tok < 512 minimum — nothing will cache.
+             Expanding the static content to reach the floor is often
+             worthwhile.
+ Tokens    : total ~123  (estimate(~3.5 chars/tok))
+             system=~116 messages[0]:user=~7
+ Threshold : 512 min (Fable 5 / Mythos 5 tier (lowest floor)) -> prompt BELOW the floor
+ SystemRpt : system ~116 tok | cached unit (tools+system) ~116 tok -> below the floor alone | 16 finding(s) inside system
+ Findings  : 16
+   [HIGH] timestamp-datetime  @ system+17  (4% into prompt)
+          "Report generated 2026-07-30T09:14:22Z for session
+          7f9c02aa-51b3-4..."
+          -> A full datetime changes every call — everything after it can
+          never match byte-for-byte.
+   [HIGH] uuid  @ system+50  (12% into prompt)
+          "...07-30T09:14:22Z for session
+          7f9c02aa-51b3-4c2e-9f10-8a4d55e01b27. session_id: abc123def and ..."
+          -> UUIDs are unique per session/request — a new value on the next
+          call breaks the prefix.
+   [HIGH] session-id  @ system+88  (20% into prompt)
+          "...1b3-4c2e-9f10-8a4d55e01b27. session_id: abc123def and api_key =
+          sk-live-0a1b2..."
+          -> Per-session/user identifiers vary between calls and users — no
+          cross-request (or cross-user) prefix sharing.
+   [HIGH] secret-like  @ system+114  (26% into prompt)
+          ".... session_id: abc123def and api_key = sk-live-0a1b2c3d4e5f6g7h.
+          Second run 2026-07-30T09:15..."
+          -> Secret material in the prompt: rotates (breaking the cache) AND
+          is a security smell — keys don't belong in prompts.
+   [HIGH] timestamp-datetime  @ system+161  (37% into prompt)
+          "...a1b2c3d4e5f6g7h. Second run 2026-07-30T09:15:37Z ref
+          3e1d02bb-42a1-4d3e-8c20..."
+          -> A full datetime changes every call — everything after it can
+          never match byte-for-byte.
+   [HIGH] uuid  @ system+186  (43% into prompt)
+          "...un 2026-07-30T09:15:37Z ref
+          3e1d02bb-42a1-4d3e-8c20-9b5d66f12c38. Fill {customer_name} and {..."
+          -> UUIDs are unique per session/request — a new value on the next
+          call breaks the prefix.
+   [MED ] template-braces  @ system+229  (53% into prompt)
+          "...d3e-8c20-9b5d66f12c38. Fill {customer_name} and {order_ref} and
+          ${REGIO..."
+          -> Python .format()/f-string style placeholder — a per-call value
+          will land here. (If this is literal JSON/code content, ignore.)
+   [MED ] template-braces  @ system+249  (58% into prompt)
+          "...8. Fill {customer_name} and {order_ref} and ${REGION} and {{
+          accoun..."
+          -> Python .format()/f-string style placeholder — a per-call value
+          will land here. (If this is literal JSON/code content, ignore.)
+   [MED ] template-dollar  @ system+265  (62% into prompt)
+          "...r_name} and {order_ref} and ${REGION} and {{ account.id }}. Due
+          1..."
+          -> ${...} template slot (JS template / shell) — value will differ
+          per call.
+   [MED ] template-jinja  @ system+279  (65% into prompt)
+          "...rder_ref} and ${REGION} and {{ account.id }}. Due 12/31/2026 or
+          January ..."
+          -> Jinja/Handlebars template slot — after rendering, the value will
+          differ per call.
+   ... and 6 more
+ StablePfx : ~5 tok (4.1% of prompt), capped by timestamp-datetime at system+17
+             fixing that first finding alone -> ~14 tok
+ Enablement: EXPLICIT
+             OPT-IN: nothing caches unless you mark a breakpoint with
+             "cache_control": {"type": "ephemeral"} (<= 4 breakpoints;
+             20-block lookback). Render order is tools -> system -> messages;
+             a byte change invalidates everything after it.
+ Recommendations:
+    1. [enablement] Add "cache_control": {"type": "ephemeral"} on the LAST
+    static block (end of system prompt or last stable message). For >5-min
+    gaps use {"type": "ephemeral", "ttl": "1h"} (2x write premium).
+    2. [fix:timestamp-datetime] at system+17 (4% in): Remove it, round it to a
+    coarse bucket (day/hour), or move it into the final user message (after
+    the cached prefix).
+    3. [fix:uuid] at system+50 (12% in): Move per-session IDs after the static
+    prefix — or drop them from the prompt entirely.
+    4. [fix:session-id] at system+88 (20% in): Move per-session/user IDs to
+    the tail (final user message); they prevent any cross-request prefix reuse
+    where they sit.
+    5. [fix:secret-like] at system+114 (26% in): Remove the secret from the
+    prompt (pass credentials out-of-band). This is a security issue
+    independent of caching.
+    6. [fix:timestamp-datetime] at system+161 (37% in): Remove it, round it to
+    a coarse bucket (day/hour), or move it into the final user message (after
+    the cached prefix).
+    7. [fix:uuid] at system+186 (43% in): Move per-session IDs after the
+    static prefix — or drop them from the prompt entirely.
+    8. [fix] ...and 7 more findings (see the findings list).
+    9. [impact] Fixing the FIRST finding alone extends the stable prefix from
+    ~5 to ~14 tok.
+    10. [verify] After deploying, assert usage.cache_read_input_tokens
+    (writes: usage.cache_creation_input_tokens) > 0 in responses. 0 across
+    identical-prefix requests = a silent invalidator is still present.
+    11. [batch] STACKS with the Batch API 50%: cache read in a batch = 0.1x *
+    0.5x = ~95% off
+ Intel     :
+      TTL: 5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'
+      Read discount: 90% (0.1x base input)
+      Write cost: write premium: 1.25x (5-min TTL) / 2x (1-hour TTL); no
+      storage fee
+      Verify via: usage.cache_read_input_tokens (writes:
+      usage.cache_creation_input_tokens)
+      ! Below the model's minimum the marked prefix SILENTLY won't cache
+      (cache_creation_input_tokens: 0, no error).
+      ! Model switch = cold cache (model-scoped). Toggling extended thinking
+      invalidates system+messages (tools survive).
+      ! Serialize tool JSON deterministically (sorted keys, frozen order) —
+      non-deterministic serialization is a classic silent invalidator.
+      ! Concurrency: entry readable only after the first response begins
+      streaming — warm one, then fan out.
+      ! Pre-warm with a max_tokens: 0 request to skip cold-write latency on
+      the first real request.
+      ! On Opus 5 / Opus 4.8 / Fable 5 / Mythos 5: append {"role": "system",
+      ...} to messages for mid-conversation instructions instead of editing
+      the top-level system prompt — preserves the cached prefix.
+      ! No prompt_cache_key equivalent — routing affinity cannot be steered;
+      identical prefixes are the only lever.
+  (warning) Token counts are estimates (estimate(~3.5 chars/tok)). for exact
+  counts use POST /v1/messages/count_tokens (never tiktoken for Claude)
+
+==============================================================================
+ Caveat: Thresholds/prices are time-sensitive; verify against live provider
+ docs.

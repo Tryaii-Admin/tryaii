@@ -1,0 +1,15 @@
+{
+  "prompt": {
+    "system": "You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. Trace bundle supercalifragilistic-supercalifragilistic-supercalifragilistic-supercalifragilistic-supercalifragilistic-expialidocious-identifier-block end. You are the routing assistant for a logistics platform. Answer with the warehouse code, the carrier name, and the expected transit time in business days. Prefer ground shipping when cost priority is high and air freight when speed wins. ",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Where did the bundle originate?"
+      }
+    ]
+  },
+  "llm": {
+    "provider": "anthropic",
+    "name": "claude-fable-5"
+  }
+}

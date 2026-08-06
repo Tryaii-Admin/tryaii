@@ -40,12 +40,15 @@ dependencies = [
 [project.optional-dependencies]
 openai = ["openai>=1.0.0"]
 openrouter = ["httpx>=0.25.0"]
+# Exact token counts for the cachelint analyzer's OpenAI/xAI paths.
+cachelint = ["tiktoken>=0.5.0"]
 # Planned: Redis-backed distributed cache. Not yet implemented; installing this
 # extra has no effect on caching today (the in-memory LRU cache is used).
 redis = ["redis>=5.0.0"]
 all = [
     "openai>=1.0.0",
     "httpx>=0.25.0",
+    "tiktoken>=0.5.0",
     "redis>=5.0.0",
 ]
 dev = [
@@ -56,6 +59,8 @@ dev = [
     "pytest-cov>=4.0.0",
     "ruff>=0.1.0",
     "mypy>=1.5.0",
+    # cachelint fixture tests freeze tiktoken-exact counts
+    "tiktoken>=0.5.0",
 ]
 
 [project.scripts]
@@ -91,6 +96,12 @@ ignore = [
 # string literals; these must stay verbatim (and match the Node SDK), so the
 # 100-col limit doesn't apply to them.
 "tryaii/classifiers/embedding.py" = ["E501"]
+# cachelint user-facing strings (fix hints, detector rationales, report lines)
+# are byte-compared against the Node SDK via the shared golden fixtures —
+# wrapping them would break cross-SDK parity, so the 100-col limit is waived.
+"tryaii/cachelint/analyzer.py" = ["E501"]
+"tryaii/cachelint/detectors.py" = ["E501"]
+"tryaii/cachelint/report.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

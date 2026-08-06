@@ -69,12 +69,14 @@ tryaii eval prompts.json --output results/my-run --quality=5 --cost=1 --speed=1
 tryaii models --provider anthropic        # add --json for machine-readable output
 tryaii benchmarks --json
 tryaii setup                               # download the embedding model + warm centroids
+tryaii cachelint request.json              # pre-flight prompt-cache analysis (warn-only)
 ```
 
 | Command | Key options |
 |---------|-------------|
 | `route "<prompt>"` | `--quality/--cost/--speed <1-5>` (default 3), `--top-k <n>` |
 | `eval <input.json>` | `-o/--output <dir>`, `--max-price <usd>`, `--output-tokens <n>`, `--budget-mode strict\|fit-output` |
+| `cachelint <input.json \| ->` | `--json`, raw-text mode via `--provider <name>` + `--model <name>`; exact OpenAI/xAI counts need `pip install tryaii[cachelint]` |
 | `models` | `--provider <name>`, `--json` |
 | `benchmarks` | `--json` |
 | `setup` / `regenerate` | `--model <name>` |

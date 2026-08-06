@@ -1,0 +1,47 @@
+==============================================================================
+ CACHELINT - prompt-cache pre-flight report
+   knowledge base: cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)
+==============================================================================
+
+ INPUT #0 -- OpenAI / gpt-5.2
+------------------------------------------------------------------------------
+ Verdict   : CACHEABLE
+             ~1330 tok of stable content, above the 1024 minimum — should
+             cache.
+ Tokens    : total ~1,330  (tiktoken(o200k_base))
+             system=~1,321 messages[0]:user=~9
+ Threshold : 1,024 min (uniform for all OpenAI models (+128-token steps), +128-tok steps) -> prompt meets the floor
+ SystemRpt : system ~1,321 tok | cached unit (tools+system) ~1,321 tok -> clears the floor alone
+ Findings  : none — no dynamic-content indicators detected
+ StablePfx : ~1,330 tok (entire prompt is stable)
+ Enablement: AUTOMATIC
+             Caching is on by default for prompts >= 1,024 tokens — no request
+             changes needed. Reuse the exact prefix; cached amounts grow in
+             128-token steps.
+ Recommendations:
+    1. [routing] prompt_cache_key — same string per prefix-group; keep <= ~15
+    RPM per key
+    2. [verify] After deploying, assert
+    usage.prompt_tokens_details.cached_tokens > 0 in responses. 0 across
+    identical-prefix requests = a silent invalidator is still present.
+    3. [ttl] 5-10 min sliding; up to 24h extended retention (non-ZDR default
+    since May 2026)
+    4. [batch] batch x caching stacking is UNDOCUMENTED (open question in the
+    research)
+ Intel     :
+      TTL: 5-10 min sliding; up to 24h extended retention (non-ZDR default
+      since May 2026)
+      Read discount: per-model 50% -> 98.75% (90% on GPT-5.x) — NOT a flat 50%
+      Write cost: free through GPT-5.5; ~1.25x input on GPT-5.6+ (single-use
+      large prompts pay the premium for nothing)
+      Verify via: usage.prompt_tokens_details.cached_tokens
+      ! A cache entry becomes readable only after the writing request
+      completes — N simultaneous cold requests all pay full price. Warm one,
+      then fan out.
+      ! Discount is per-model; verify against the live pricing page before
+      quoting numbers.
+      ! Org-level cache scope.
+
+==============================================================================
+ Caveat: Thresholds/prices are time-sensitive; verify against live provider
+ docs.

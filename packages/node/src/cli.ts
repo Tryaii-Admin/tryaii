@@ -5,6 +5,7 @@
  * Commands (kept in parity with the Python SDK's `tryaii`):
  *   tryaii route "your prompt here"   -- Route a prompt and show recommendations
  *   tryaii eval prompts.json          -- Route a JSON prompt dataset
+ *   tryaii cachelint input.json       -- Pre-flight prompt-cache analysis
  *   tryaii setup                      -- Download the embedding model + warm centroids
  *   tryaii models                     -- List available models
  *   tryaii benchmarks                 -- List available benchmarks
@@ -185,6 +186,74 @@ async function cmdRoute(subArgs: string[]): Promise<void> {
 // ---------------------------------------------------------------------------
 // models
 // ---------------------------------------------------------------------------
+
+async function cmdCachelint(subArgs: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args: subArgs,
+    allowPositionals: true,
+    options: {
+      provider: { type: 'string' },
+      model: { type: 'string' },
+      json: { type: 'boolean', default: false },
+    },
+  });
+
+  if (values.model && !values.provider) {
+    throw new CliUsageError('--model requires --provider (raw-text mode)');
+  }
+  const input = positionals[0];
+  if (input === undefined) {
+    throw new CliUsageError('cachelint: missing required argument: input');
+  }
+
+  let raw: string;
+  if (input === '-') {
+    // Mirror Python sys.stdin.read(): universal newlines, no BOM strip.
+    raw = readFileSync(0, 'utf-8').replace(/\r\n/g, '\n');
+  } else {
+    let bytes: string;
+    try {
+      bytes = readFileSync(input, 'utf-8');
+    } catch {
+      throw new CliError(`file not found: ${input}`);
+    }
+    // Mirror Python's utf-8-sig + text-mode read: strip a BOM, normalize \r\n.
+    if (bytes.charCodeAt(0) === 0xfeff) bytes = bytes.slice(1);
+    raw = bytes.replace(/\r\n/g, '\n');
+  }
+
+  // Lazy import: the tokenizer rank data is multi-MB and must not load for
+  // any other command (the cachelint module is also not in the root barrel).
+  const cachelint = await import('./cachelint/index.js');
+
+  let data: unknown;
+  if (values.provider) {
+    // Raw-text mode: the ENTIRE input is one prompt string, never parsed as JSON.
+    data = { prompt: raw, llm: { provider: values.provider, name: values.model ?? '' } };
+  } else {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      // Parser-neutral message (SPEC.md delta n): json and JSON.parse differ.
+      const where = input === '-' ? 'on stdin' : `in '${input}'`;
+      throw new CliUsageError(`invalid JSON ${where}`);
+    }
+  }
+
+  let result: Record<string, unknown>;
+  try {
+    result = cachelint.analyze(data);
+  } catch (error) {
+    // Engine validation errors are usage errors (exit 2), like Python's ValueError path.
+    throw new CliUsageError((error as Error).message);
+  }
+
+  if (values.json) {
+    out.write(JSON.stringify(result, null, 2) + '\n');
+  } else {
+    await writePaced(cachelint.renderReport(result) + '\n');
+  }
+}
 
 async function cmdModels(subArgs: string[]): Promise<void> {
   const { values } = parseArgs({
@@ -732,6 +801,7 @@ Usage:
 Commands:
   route <prompt>        Route a prompt to the best model and show recommendations
   eval <input.json>     Route a JSON dataset; writes results.jsonl, summary.json, index.html
+  cachelint <input.json>  Analyze prompt-cache readiness before sending (--json, --provider)
   models                List available models (--provider <name>, --json)
   benchmarks            List available benchmarks (--json)
   setup                 Download the embedding model and warm centroids (--model <name>)
@@ -770,6 +840,7 @@ Examples:
   tryaii eval examples/prompts.json --output results/run --quality=5 --cost=1 --speed=1
   tryaii eval examples/prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
   tryaii eval examples/prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
+  tryaii cachelint request.json --json
 `;
 
 // Per-command help. Each constant must stay byte-identical to the matching
@@ -939,6 +1010,47 @@ Exit codes:
 Docs: docs/cli/regenerate.md
 `;
 
+const HELP_CACHELINT = `tryaii cachelint -- Pre-flight prompt-cache analysis
+
+Usage:
+  tryaii cachelint <input.json | -> [options]
+
+Analyze prompts BEFORE they are sent: 18 dynamic-content detectors, per-model
+token floors for 7 providers, stable-prefix computation, and predicted
+HIT/PARTIAL/MISS across request sequences. Runs locally -- nothing is called.
+
+Arguments:
+  <input.json>          Request JSON: an object with "prompt" and "llm"
+                        ({"provider": ..., "name": ...}), a list of those, or
+                        {"inputs": [...]}. Use '-' to read from stdin.
+
+Options:
+  --provider <name>     Raw-text mode: treat the ENTIRE input as one prompt
+                        string for this provider (openai, anthropic, gemini,
+                        xai, openrouter, bedrock, vertex -- aliases accepted)
+  --model <name>        Model name for raw-text mode (requires --provider;
+                        omit to use the provider's conservative default floor)
+  --json                Emit the full machine-readable result instead of the
+                        text report
+
+Notes:
+  cachelint warns, it never blocks: findings do not change the exit code.
+  Exact OpenAI/xAI token counts use the o200k tokenizer -- install the extra
+  on Python ('pip install tryaii[cachelint]'); the Node SDK bundles it.
+  Thresholds/prices are time-sensitive; verify against live provider docs.
+
+Examples:
+  tryaii cachelint request.json
+  tryaii cachelint requests.json --json
+  cat prompt.txt | tryaii cachelint - --provider anthropic --model claude-fable-5
+
+Exit codes:
+  0 analysis completed (findings included), 1 runtime failure, 2 usage error
+  or invalid input.
+
+Docs: docs/cli/cachelint.md
+`;
+
 const HELP_HELP = `tryaii help -- Show help for tryaii or a specific command
 
 Usage:
@@ -950,7 +1062,7 @@ detailed help for that command. The flags -h/--help after any command do
 the same thing.
 
 Topics:
-  route, eval, models, benchmarks, setup, regenerate, help
+  route, eval, cachelint, models, benchmarks, setup, regenerate, help
 
 Examples:
   tryaii help
@@ -967,6 +1079,7 @@ Docs: docs/cli/README.md
 const COMMAND_HELP: Record<string, string> = {
   route: HELP_ROUTE,
   eval: HELP_EVAL,
+  cachelint: HELP_CACHELINT,
   models: HELP_MODELS,
   benchmarks: HELP_BENCHMARKS,
   setup: HELP_SETUP,
@@ -1053,6 +1166,9 @@ async function main(): Promise<void> {
       break;
     case 'eval':
       await cmdEval(subArgs);
+      break;
+    case 'cachelint':
+      await cmdCachelint(subArgs);
       break;
     case 'models':
       await cmdModels(subArgs);

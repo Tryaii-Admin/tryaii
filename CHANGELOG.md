@@ -1,5 +1,47 @@
 # Changelog
 
+## Unreleased
+
+### cachelint — pre-flight prompt-cache analysis (both SDKs)
+
+New `tryaii.cachelint` (Python) / `tryaii/cachelint` (Node subpath export)
+module and a `tryaii cachelint` CLI subcommand: analyze prompts BEFORE they
+are sent and predict whether they will hit the provider's prompt cache.
+
+- **18 dynamic-content detectors** (timestamps, UUIDs, session IDs, secrets,
+  unrendered template slots, date literals; three severity tiers) with exact
+  code-point offsets, plus **stable-prefix computation** — caching is a prefix
+  match, so *where* a dynamic value sits decides how much can cache.
+- **7-provider knowledge base** (OpenAI, Anthropic, Gemini, xAI, OpenRouter,
+  Bedrock, Vertex): per-model token floors, enablement modes (automatic vs
+  `cache_control`/`cachePoint` opt-in), TTLs, verify fields, and gateway
+  upstream inheritance. Ships as shared data
+  (`shared/cachelint/providers.json`), synced into both packages and
+  byte-compared by the parity suite.
+- **Six verdicts** (`CACHEABLE` ... `EFFECTIVELY_UNCACHEABLE`) with ordered,
+  actionable recommendations ending in the exact `usage` field to assert
+  after deploying.
+- **Sequence analysis** for request lists: per-transition `HIT` / `PARTIAL` /
+  `MISS` / `AT_RISK` / `UNKNOWN` predictions, divergence forensics (offset,
+  section, likely cause), and TTL-gap checks via optional `sent_at`.
+- **CLI**: `tryaii cachelint <input.json | -> [--json]`, plus a raw-text mode
+  (`--provider`/`--model`) that treats the entire input as one pasted prompt.
+  Warn-only by design: findings never change the exit code.
+- **Cross-SDK parity, enforced**: both engines conform to 148 frozen golden
+  fixtures generated from the Python reference
+  (`scripts/gen-cachelint-fixtures.py`), and a cross-CLI test asserts
+  **byte-identical stdout** (including `--json`) for every CLI fixture. The
+  behavior contract lives in `shared/cachelint/SPEC.md`.
+- **Dependencies**: exact OpenAI/xAI token counts use the o200k tokenizer —
+  a new `cachelint` pip extra (`pip install tryaii[cachelint]`) on Python;
+  bundled via `js-tiktoken` (the package's first runtime dependency) on Node,
+  loaded only by the cachelint module so router users never pay for it.
+
+Origin: the `cache_providers` prompt-caching research (2026-07) and its
+cachelint prototype, ported with 16 deliberate fixes (crash-free timestamp
+parsing, canonical JSON, Claude-on-Vertex verdicts, and more — see SPEC.md
+§2). Thresholds/prices are time-sensitive; refresh policy in SPEC.md §5.
+
 ## 0.4.0 (2026-06-29)
 
 ### Catalog: bump flagship latency tier (claude-fable-5, claude-opus-4-8)

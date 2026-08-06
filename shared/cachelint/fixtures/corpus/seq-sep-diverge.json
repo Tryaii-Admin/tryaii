@@ -1,0 +1,32 @@
+[
+  {
+    "prompt": {
+      "system": "Hello",
+      "messages": [
+        {
+          "role": "user",
+          "content": "q"
+        }
+      ]
+    },
+    "llm": {
+      "provider": "anthropic",
+      "name": "claude-fable-5"
+    }
+  },
+  {
+    "prompt": {
+      "system": "Hello!",
+      "messages": [
+        {
+          "role": "user",
+          "content": "q"
+        }
+      ]
+    },
+    "llm": {
+      "provider": "anthropic",
+      "name": "claude-fable-5"
+    }
+  }
+]
