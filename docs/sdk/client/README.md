@@ -28,10 +28,11 @@ for await (const chunk of client.stream('Write a haiku about routing')) process.
 
 | Python | Node |
 |---|---|
-| `DREClient(api_key=None, priorities=None, embedding_model=None)` | `new DREClient({ apiKey?, priorities?, baseUrl? })` |
+| `DREClient(api_key=None, priorities=None, embedding_model=None, cache_lint=None)` | `new DREClient({ apiKey?, priorities?, baseUrl?, cacheLint? })` |
 
 - Missing key → error on the first `chat`/`stream` (not at construction).
 - Node accepts a configurable `baseUrl` (default `https://openrouter.ai/api/v1`); Python configures the embedding model instead.
+- `cache_lint="warn"` / `cacheLint: 'warn'` enables the pre-flight prompt-cache lint + runtime verification — see [cache-lint.md](cache-lint.md).
 - Neither accepts a custom `Router` — for custom registries/providers, drop down to [`Router`](../routing/README.md) + [`OpenRouterIntegration`](openrouter.md).
 
 ## Methods

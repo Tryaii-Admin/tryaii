@@ -42,6 +42,30 @@ cachelint prototype, ported with 16 deliberate fixes (crash-free timestamp
 parsing, canonical JSON, Claude-on-Vertex verdicts, and more — see SPEC.md
 §2). Thresholds/prices are time-sensitive; refresh policy in SPEC.md §5.
 
+### cachelint — SDK warn hook + runtime cache verification (both SDKs)
+
+The engine now runs inside the clients. `cache_lint="warn"` (Python:
+`DREClient`, `AsyncDREClient`, `OpenRouterIntegration`) / `cacheLint: 'warn'`
+(Node: `DREClient`, `OpenRouterIntegration`) — or `TRYAII_CACHE_LINT=warn` —
+enables two things on every `chat`/`stream` (and async `route_and_chat`):
+
+- **Pre-flight lint of the actual outgoing prompt** — post routing, message
+  assembly, and truncation, the exact payload is analyzed and problems print
+  1–3 stderr lines (verdict + first blocker). Problems only (`BELOW_THRESHOLD`,
+  `EFFECTIVELY_UNCACHEABLE`, `UNKNOWN_THRESHOLD` with blocking findings), and
+  only **once per unique prompt shape per client instance** (hash-deduped,
+  FIFO-capped, 1h stale reset) — quiet in agent loops.
+- **Runtime verification** — from the second same-shape call onward, a prompt
+  predicted cacheable that reports 0 cached tokens in the response `usage`
+  (`prompt_tokens_details.cached_tokens` / `cached_tokens` / `cache_discount`,
+  read defensively) warns `VERIFY_MISS` once. First calls are the expected
+  cache write; streams verify best-effort when a usage chunk is present.
+
+Warn-only and **fail-open by design**: no lint failure — engine error, missing
+tiktoken (one-time install hint instead), broken stderr — can ever raise into
+or block an API call. Warning strings are byte-identical across both SDKs,
+pinned by mirrored unit tests. Docs: `docs/sdk/client/cache-lint.md`.
+
 ## 0.4.0 (2026-06-29)
 
 ### Catalog: bump flagship latency tier (claude-fable-5, claude-opus-4-8)

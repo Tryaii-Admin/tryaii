@@ -77,6 +77,11 @@ tryaii cachelint request.json                  # verdict-first report; warns, ne
 cat prompt.txt | tryaii cachelint - --provider anthropic --model claude-fable-5
 ```
 
+The same engine runs inside the SDK clients: `cache_lint="warn"` (Python) /
+`cacheLint: 'warn'` (Node) lints every outgoing chat request at the moment it
+leaves and verifies predictions against the provider's `usage` response —
+warn-only, fail-open, once per prompt shape ([docs](docs/sdk/client/cache-lint.md)).
+
 Full flag reference is in the [command-line interface](#command-line-interface) section below.
 
 ## Fast repeated routing (daemon)
