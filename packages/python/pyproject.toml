@@ -61,6 +61,9 @@ dev = [
     "mypy>=1.5.0",
     # cachelint fixture tests freeze tiktoken-exact counts
     "tiktoken>=0.5.0",
+    # the cache_lint hook wiring tests drive OpenRouterIntegration.chat(),
+    # whose retry helper imports httpx even when the HTTP client is faked
+    "httpx>=0.25.0",
 ]
 
 [project.scripts]
