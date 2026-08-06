@@ -18,6 +18,7 @@
  *   console.log(response.content);
  */
 
+import { buildCacheLintHook, CacheLintHook } from '../cachelint/hook.js';
 import type { Priorities, PrioritiesData } from '../scoring/priorities.js';
 
 /** Mapping from our model IDs to OpenRouter model slugs. */
@@ -121,6 +122,7 @@ export class OpenRouterIntegration {
   private _router: any;
   private _apiKey: string;
   private _appName: string;
+  private _cacheLint: CacheLintHook | null;
 
   constructor(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -128,11 +130,18 @@ export class OpenRouterIntegration {
     opts?: {
       apiKey?: string;
       appName?: string;
+      /**
+       * 'warn' enables the pre-flight prompt-cache lint + runtime
+       * verification (stderr warnings, fail-open). Default 'off';
+       * TRYAII_CACHE_LINT=warn also enables.
+       */
+      cacheLint?: 'off' | 'warn';
     },
   ) {
     this._router = router;
     this._apiKey = opts?.apiKey ?? '';
     this._appName = opts?.appName ?? 'tryaii';
+    this._cacheLint = buildCacheLintHook(opts?.cacheLint);
   }
 
   private _ensureApiKey(): void {
@@ -144,6 +153,26 @@ export class OpenRouterIntegration {
   /** Convert TryAii model ID to OpenRouter slug. */
   private _resolveModel(modelId: string): string {
     return MODEL_ID_TO_OPENROUTER[modelId] ?? modelId;
+  }
+
+  /** Build an OpenRouter chat payload (single payload seat for chat + stream). */
+  private _buildPayload(
+    openrouterModel: string,
+    messages: Array<{ role: string; content: string }>,
+    opts: OpenRouterChatOptions | undefined,
+    stream: boolean,
+  ): Record<string, unknown> {
+    const payload: Record<string, unknown> = {
+      model: openrouterModel,
+      messages,
+      temperature: opts?.temperature ?? 0.7,
+    };
+    if (stream) payload.stream = true;
+    // Only send max_tokens when it is a finite, positive number (0 is not meaningful).
+    if (opts?.maxTokens != null && Number.isFinite(opts.maxTokens) && opts.maxTokens > 0) {
+      payload.max_tokens = opts.maxTokens;
+    }
+    return payload;
   }
 
   /**
@@ -185,16 +214,12 @@ export class OpenRouterIntegration {
     }
     messages.push({ role: 'user', content: prompt });
 
-    // Build payload
-    const payload: Record<string, unknown> = {
-      model: openrouterModel,
-      messages,
-      temperature: opts?.temperature ?? 0.7,
-    };
-    // Only send max_tokens when it is a finite, positive number (0 is not meaningful).
-    if (opts?.maxTokens != null && Number.isFinite(opts.maxTokens) && opts.maxTokens > 0) {
-      payload.max_tokens = opts.maxTokens;
-    }
+    // Pre-flight cache lint on the ACTUAL outgoing messages (fail-open).
+    const lintKey = this._cacheLint
+      ? await this._cacheLint.preflight(openrouterModel, messages)
+      : null;
+
+    const payload = this._buildPayload(openrouterModel, messages, opts, false);
 
     // Make API call using native fetch
     const response = await fetch(`${OpenRouterIntegration.OPENROUTER_BASE_URL}/chat/completions`, {
@@ -221,6 +246,9 @@ export class OpenRouterIntegration {
     }
     const content = data.choices?.[0]?.message?.content ?? '';
     const usage = data.usage ?? {};
+
+    // Predicted-vs-actual cache verification (fail-open, warns at most once).
+    if (this._cacheLint) this._cacheLint.verify(lintKey, usage);
 
     return {
       content,
@@ -265,16 +293,12 @@ export class OpenRouterIntegration {
     }
     messages.push({ role: 'user', content: prompt });
 
-    const payload: Record<string, unknown> = {
-      model: openrouterModel,
-      messages,
-      temperature: opts?.temperature ?? 0.7,
-      stream: true,
-    };
-    // Only send max_tokens when it is a finite, positive number (0 is not meaningful).
-    if (opts?.maxTokens != null && Number.isFinite(opts.maxTokens) && opts.maxTokens > 0) {
-      payload.max_tokens = opts.maxTokens;
-    }
+    // Pre-flight cache lint on the ACTUAL outgoing messages (fail-open).
+    const lintKey = this._cacheLint
+      ? await this._cacheLint.preflight(openrouterModel, messages)
+      : null;
+
+    const payload = this._buildPayload(openrouterModel, messages, opts, true);
 
     const response = await fetch(`${OpenRouterIntegration.OPENROUTER_BASE_URL}/chat/completions`, {
       method: 'POST',
@@ -297,6 +321,7 @@ export class OpenRouterIntegration {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let lastUsage: Record<string, unknown> | null = null;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -309,7 +334,12 @@ export class OpenRouterIntegration {
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
         const dataStr = line.slice(6).trim();
-        if (dataStr === '[DONE]') return;
+        if (dataStr === '[DONE]') {
+          // Best-effort cache verification (usage only present when the
+          // caller enabled usage accounting upstream).
+          if (this._cacheLint) this._cacheLint.verify(lintKey, lastUsage);
+          return;
+        }
 
         let chunk: any;
         try {
@@ -325,9 +355,14 @@ export class OpenRouterIntegration {
           const message = typeof err === 'string' ? err : err.message ?? 'OpenRouter returned an error';
           throw new Error(`OpenRouter stream error: ${message}`);
         }
+        // Capture usage BEFORE the delta read (the final usage chunk has empty choices).
+        if (chunk?.usage != null && typeof chunk.usage === 'object') {
+          lastUsage = chunk.usage as Record<string, unknown>;
+        }
         const content = chunk.choices?.[0]?.delta?.content ?? '';
         if (content) yield content;
       }
     }
+    if (this._cacheLint) this._cacheLint.verify(lintKey, lastUsage);
   }
 }
