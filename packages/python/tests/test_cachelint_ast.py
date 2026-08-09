@@ -95,18 +95,19 @@ resp = client.chat(
 class TestSlotWarnings:
     def test_inline_dynamic_slot_exact_literal(self, hook, sink, tmp_path):
         path = write_fixture(tmp_path, "app.py", INLINE_DYNAMIC.replace("{BASE}", "{PREFIX_TEXT}"))
-        # align: the fixture's f-string has slots {PREFIX_TEXT} and the datetime
-        # call; render both so the guard passes.
         rendered = PREFIX + "Today is Monday, plan the routes."
         key = preflight(hook, path, 3, rendered)
         assert key is not None
-        assert sink[0] == (
-            "[tryaii cachelint] template slot {PREFIX_TEXT} at app.py:3 renders "
+        # The datetime slot is tier-2 dynamic (contains a call): exact literal,
+        # byte-format-identical to the Node twin's template-slot line.
+        assert (
+            "[tryaii cachelint] template slot "
+            "{datetime.datetime.now().strftime('%A')} at app.py:3 renders "
             "inside your cacheable prefix — its value changes between calls and "
             "breaks the cache there"
-        ) or sink[0].startswith("[tryaii cachelint] template slot {")
-        # the datetime slot is tier-2 dynamic and must be among the warnings
-        assert any("datetime.datetime.now().strftime('%A')" in line for line in sink)
+        ) in sink
+        # PREFIX_TEXT is an unbound identifier: tier-1 unarmed -> silent.
+        assert all("{PREFIX_TEXT}" not in line for line in sink)
         assert sink[-1] == NOTE_LINE
 
     def test_traced_variable_slot_and_resolved_line(self, hook, sink, tmp_path):
@@ -124,15 +125,16 @@ class TestSlotWarnings:
             "datetime.datetime.now().strftime('%A') at app.py:3"
         ) in sink
 
-    def test_tail_slot_stays_silent(self, hook, sink, tmp_path):
+    def test_dynamic_slots_warn_once_each(self, hook, sink, tmp_path):
         path = write_fixture(tmp_path, "app.py", PREFIX_AND_TAIL)
-        # The uuid slots render values the engine's detectors catch — use
-        # stand-in text WITHOUT detector patterns so the verdict stays clean
-        # and only slot positioning drives the outcome.
+        # Stand-in values WITHOUT detector patterns keep the verdict clean.
+        # Clean verdict -> boundary is the whole prompt, so BOTH uuid slots are
+        # in-prefix — but they share the expr text `uuid.uuid4()`, so the
+        # (site, expr) dedup collapses them to ONE warning. (True tail
+        # classification needs a blocker boundary — see TestAttribution.)
         rendered = f"Session alpha opened. {PREFIX}Ref tail omega."
         preflight(hook, path, 3, rendered)
-        prefix_lines = [ln for ln in sink if "template slot" in ln]
-        # first uuid slot is inside the prefix -> warns; tail slot silent
+        prefix_lines = [ln for ln in sink if "template slot" in ln and "more" not in ln]
         assert len(prefix_lines) == 1
         assert "at app.py:3" in prefix_lines[0]
 
@@ -342,3 +344,56 @@ class TestLiveStackWalk:
         source = Path(__file__).read_text(encoding="utf-8").splitlines()
         marker_line = next(i + 1 for i, ln in enumerate(source) if "LINE-MARKER-A" in ln)
         assert site.line == marker_line
+
+
+class FakeResponse:
+    def __init__(self, body):
+        self._body = body
+        self.status_code = 200
+
+    def json(self):
+        return self._body
+
+    def raise_for_status(self):
+        pass
+
+
+class FakeHttpxClient:
+    def __init__(self, body):
+        self._body = body
+
+    def request(self, method, url, **kwargs):
+        return FakeResponse(self._body)
+
+
+CHAT_BODY = {
+    "choices": [{"message": {"content": "OK."}}],
+    "usage": {"total_tokens": 42},
+}
+
+
+class TestLiveWiring:
+    """End-to-end: a REAL chat() call from this file, HTTP faked, no call_site
+    injection — the full stack walk -> parse THIS test file -> trace the
+    inline f-string -> slot warning on the default stderr sink."""
+
+    def test_integration_chat_traces_this_file(self, capsys):
+        import datetime
+        from pathlib import Path
+
+        from tryaii.integrations.openrouter import OpenRouterIntegration
+
+        integ = OpenRouterIntegration(router=None, api_key="k", cache_lint="warn")
+        integ._client = FakeHttpxClient(CHAT_BODY)
+        resp = integ.chat(  # LINE-MARKER-B
+            f"{PREFIX}Today is {datetime.datetime.now().strftime('%A')}, plan the routes.",
+            override_model="google/gemini-2.5-pro",
+        )
+        assert resp.content == "OK."
+        err = capsys.readouterr().err
+        source = Path(__file__).read_text(encoding="utf-8").splitlines()
+        marker_line = next(i + 1 for i, ln in enumerate(source) if "LINE-MARKER-B" in ln)
+        assert (
+            f"template slot {{datetime.datetime.now().strftime('%A')}} at "
+            f"test_cachelint_ast.py:{marker_line} renders inside your cacheable prefix"
+        ) in err

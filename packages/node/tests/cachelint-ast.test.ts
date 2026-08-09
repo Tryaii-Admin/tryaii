@@ -341,6 +341,52 @@ const resp = await client
   });
 });
 
+describe('live wiring', () => {
+  const realFetch = globalThis.fetch;
+  afterAll(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it('a real chat() call from an untransformed user module traces live', async () => {
+    // vitest transforms THIS file (import hoisting shifts line numbers), so
+    // the user call must live in a plain .mjs module imported from tmpdir —
+    // executed untransformed, exactly like real user code under plain node.
+    // Bonus: this exercises the acorn (JS) parse path in a live flow.
+    const { pathToFileURL } = await import('node:url');
+    const { OpenRouterIntegration } = await import('../src/integrations/openrouter.js');
+
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({ choices: [{ message: { content: 'OK.' } }], usage: { total_tokens: 42 } }),
+        { status: 200 },
+      )) as typeof fetch;
+
+    const userSource = `export async function run(integ, prefixText) {
+  return await integ.chat(
+    \`\${prefixText}Today is day \${new Date().getDay()}, plan the routes.\`,
+    { overrideModel: 'google/gemini-2.5-pro' },
+  );
+}
+`; // chat call spans lines 2-5 of the user module
+    const userPath = writeFixture('live-user.mjs', userSource);
+    const user = await import(pathToFileURL(userPath).href);
+
+    const sink: string[] = [];
+    const integ = new OpenRouterIntegration(null, { apiKey: 'k', cacheLint: 'warn' });
+    (integ as unknown as { _cacheLint: CacheLintHook })._cacheLint = makeHook(sink);
+
+    const resp = await user.run(integ, PREFIX);
+    expect(resp.content).toBe('OK.');
+    // getDay() renders a bare digit (not a detector pattern), so the engine is
+    // silent and the slot line is the standalone blind-spot insight; the call
+    // starts at line 2 of the user module.
+    const base = userPath.split(/[\\/]/).pop();
+    const slotLine = sink.find((l) => l.includes('template slot {new Date().getDay()}'));
+    expect(slotLine).toBeDefined();
+    expect(slotLine).toContain(`at ${base}:2`);
+  });
+});
+
 describe('typescript fixture parsing', () => {
   it('traces a .ts fixture identically when typescript is importable', async () => {
     const sink: string[] = [];
