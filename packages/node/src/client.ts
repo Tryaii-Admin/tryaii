@@ -18,6 +18,7 @@
  *   console.log(response.modelUsed, response.content);
  */
 
+import { buildCacheLintHook, CacheLintHook } from './cachelint/hook.js';
 import { MODEL_ID_TO_OPENROUTER } from './integrations/index.js';
 import { Router } from './router.js';
 import { Priorities } from './scoring/priorities.js';
@@ -67,12 +68,14 @@ export class DREClient {
   private readonly _baseUrl: string;
   private readonly _defaultPriorities: PrioritiesData;
   private readonly _router: Router;
+  private readonly _cacheLint: CacheLintHook | null;
 
   constructor(options?: DREClientOptions) {
     this._apiKey = options?.apiKey ?? process.env.OPENROUTER_API_KEY ?? '';
     this._baseUrl = options?.baseUrl ?? 'https://openrouter.ai/api/v1';
     this._defaultPriorities = mergePriorities(options?.priorities);
     this._router = new Router();
+    this._cacheLint = buildCacheLintHook(options?.cacheLint);
   }
 
   /** Throw early with a clear message when chat/stream is called without an API key. */
@@ -113,6 +116,26 @@ export class DREClient {
     return this._toSdkResult(coreResult, priorities);
   }
 
+  /** Build an OpenRouter chat payload (single payload seat for chat + stream). */
+  private _buildPayload(
+    openrouterModel: string,
+    messages: Array<{ role: string; content: string }>,
+    options: ChatOptions | undefined,
+    stream: boolean,
+  ): Record<string, unknown> {
+    const payload: Record<string, unknown> = {
+      model: openrouterModel,
+      messages,
+      temperature: options?.temperature ?? 0.7,
+    };
+    if (stream) payload.stream = true;
+    // Only send max_tokens when it is a finite, positive number (0 is not meaningful).
+    if (options?.maxTokens != null && Number.isFinite(options.maxTokens) && options.maxTokens > 0) {
+      payload.max_tokens = options.maxTokens;
+    }
+    return payload;
+  }
+
   // -----------------------------------------------------------------------
   // chat -- async, makes API call
   // -----------------------------------------------------------------------
@@ -142,16 +165,12 @@ export class DREClient {
     }
     messages.push({ role: 'user', content: prompt });
 
-    // Build payload
-    const payload: Record<string, unknown> = {
-      model: openrouterModel,
-      messages,
-      temperature: options?.temperature ?? 0.7,
-    };
-    // Only send max_tokens when it is a finite, positive number (0 is not meaningful).
-    if (options?.maxTokens != null && Number.isFinite(options.maxTokens) && options.maxTokens > 0) {
-      payload.max_tokens = options.maxTokens;
-    }
+    // Pre-flight cache lint on the ACTUAL outgoing messages (fail-open).
+    const lintKey = this._cacheLint
+      ? await this._cacheLint.preflight(openrouterModel, messages)
+      : null;
+
+    const payload = this._buildPayload(openrouterModel, messages, options, false);
 
     // Call OpenRouter API
     const response = await fetch(`${this._baseUrl}/chat/completions`, {
@@ -181,6 +200,11 @@ export class DREClient {
     const content = choices?.[0]?.message?.content ?? '';
 
     const rawUsage = data.usage as Record<string, number> | undefined;
+
+    // Predicted-vs-actual cache verification with the RAW usage object
+    // (the mapped TokenUsage drops prompt_tokens_details). Fail-open.
+    if (this._cacheLint) this._cacheLint.verify(lintKey, rawUsage ?? {});
+
     const usage: TokenUsage = {
       promptTokens: rawUsage?.prompt_tokens,
       completionTokens: rawUsage?.completion_tokens,
@@ -227,17 +251,12 @@ export class DREClient {
     }
     messages.push({ role: 'user', content: prompt });
 
-    // Build payload
-    const payload: Record<string, unknown> = {
-      model: openrouterModel,
-      messages,
-      temperature: options?.temperature ?? 0.7,
-      stream: true,
-    };
-    // Only send max_tokens when it is a finite, positive number (0 is not meaningful).
-    if (options?.maxTokens != null && Number.isFinite(options.maxTokens) && options.maxTokens > 0) {
-      payload.max_tokens = options.maxTokens;
-    }
+    // Pre-flight cache lint on the ACTUAL outgoing messages (fail-open).
+    const lintKey = this._cacheLint
+      ? await this._cacheLint.preflight(openrouterModel, messages)
+      : null;
+
+    const payload = this._buildPayload(openrouterModel, messages, options, true);
 
     // Call OpenRouter API with streaming
     const response = await fetch(`${this._baseUrl}/chat/completions`, {
@@ -262,6 +281,7 @@ export class DREClient {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let lastUsage: Record<string, unknown> | null = null;
 
     try {
       while (true) {
@@ -277,11 +297,17 @@ export class DREClient {
           if (!trimmed || !trimmed.startsWith('data: ')) continue;
 
           const dataStr = trimmed.slice(6);
-          if (dataStr === '[DONE]') return;
+          if (dataStr === '[DONE]') {
+            // Best-effort cache verification (usage only present when the
+            // caller enabled usage accounting upstream).
+            if (this._cacheLint) this._cacheLint.verify(lintKey, lastUsage);
+            return;
+          }
 
           let chunk: {
             choices?: Array<{ delta: { content?: string } }>;
             error?: { message?: string } | string;
+            usage?: Record<string, unknown>;
           };
           try {
             chunk = JSON.parse(dataStr);
@@ -297,10 +323,15 @@ export class DREClient {
               typeof err === 'string' ? err : err.message ?? 'OpenRouter returned an error';
             throw new Error(`OpenRouter stream error: ${message}`);
           }
+          // Capture usage BEFORE the delta read (the final usage chunk has empty choices).
+          if (chunk.usage != null && typeof chunk.usage === 'object') {
+            lastUsage = chunk.usage;
+          }
           const content = chunk.choices?.[0]?.delta?.content;
           if (content) yield content;
         }
       }
+      if (this._cacheLint) this._cacheLint.verify(lintKey, lastUsage);
     } finally {
       reader.releaseLock();
     }

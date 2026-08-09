@@ -20,10 +20,11 @@ asyncio.run(main())
 
 ## Surface
 
-`AsyncDREClient(api_key=None, priorities=None, embedding_model=None)` with `route`, `chat`, `stream`, `route_and_chat` — identical signatures and semantics to the sync client — plus `close()` / `async with` support.
+`AsyncDREClient(api_key=None, priorities=None, embedding_model=None, cache_lint=None)` with `route`, `chat`, `stream`, `route_and_chat` — identical signatures and semantics to the sync client — plus `close()` / `async with` support.
 
 ## Differences from the sync client
 
 - Requires `httpx` for `chat`/`stream` (`pip install tryaii[openrouter]`); the `ImportError` is raised lazily on the first API call, so pure `route()` works without it.
+- `cache_lint="warn"` works here too (all three network methods lint + verify) — see [cache-lint.md](cache-lint.md).
 - Exposes `client.router` but **not** `client.openrouter` (it manages its own `httpx.AsyncClient`, timeout 120 s).
 - Retry behavior matches the sync integration: statuses 429/500/502/503/504, up to 3 retries with exponential backoff + jitter, `Retry-After` honored on 429. Streaming retries only before the first byte is yielded — once content has flowed, a mid-stream failure re-raises rather than replaying.

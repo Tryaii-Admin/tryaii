@@ -31,6 +31,7 @@ from tryaii.config import TryaiiDreConfig
 from tryaii.integrations.openrouter import (
     MODEL_ID_TO_OPENROUTER,
     OpenRouterResponse,
+    _build_cache_lint_hook,
 )
 from tryaii.router import Router, RouteResult
 from tryaii.scoring.priorities import Priorities
@@ -58,6 +59,9 @@ class AsyncDREClient:
         api_key: OpenRouter API key. Falls back to OPENROUTER_API_KEY env var.
         priorities: Default priorities for all routing calls.
         embedding_model: Sentence-transformers model name for embeddings.
+        cache_lint: "warn" enables the pre-flight prompt-cache lint +
+            runtime verification (stderr warnings, fail-open). Default
+            "off"; TRYAII_CACHE_LINT=warn also enables.
     """
 
     def __init__(
@@ -65,6 +69,7 @@ class AsyncDREClient:
         api_key: Optional[str] = None,
         priorities: Optional[Priorities] = None,
         embedding_model: Optional[str] = None,
+        cache_lint: Optional[str] = None,
     ):
         self._api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
         self._default_priorities = priorities
@@ -80,6 +85,10 @@ class AsyncDREClient:
 
         # Async HTTP client (lazy-initialized)
         self._http_client: Optional[httpx.AsyncClient] = None
+
+        # Pre-flight cache lint hook (same resolution as the sync integration:
+        # explicit value > TRYAII_CACHE_LINT env > off; fail-open).
+        self._cache_lint = _build_cache_lint_hook(cache_lint)
 
     def _ensure_http_client(self) -> httpx.AsyncClient:
         """Lazy-initialize the async HTTP client."""
@@ -295,6 +304,10 @@ class AsyncDREClient:
             messages.append({"role": "system", "content": system_message})
         messages.append({"role": "user", "content": prompt})
 
+        # Pre-flight cache lint on the ACTUAL outgoing messages (fail-open).
+        lint_key = self._cache_lint.preflight(openrouter_model, messages) \
+            if self._cache_lint else None
+
         payload = self._build_payload(openrouter_model, messages, temperature, max_tokens)
 
         # Async API call
@@ -305,6 +318,10 @@ class AsyncDREClient:
 
         content = self._content_from_data(data)
         usage = data.get("usage", {})
+
+        # Predicted-vs-actual cache verification (fail-open, warns at most once).
+        if self._cache_lint:
+            self._cache_lint.verify(lint_key, usage)
 
         return OpenRouterResponse(
             content=content,
@@ -356,6 +373,10 @@ class AsyncDREClient:
             messages.append({"role": "system", "content": system_message})
         messages.append({"role": "user", "content": prompt})
 
+        # Pre-flight cache lint on the ACTUAL outgoing messages (fail-open).
+        lint_key = self._cache_lint.preflight(openrouter_model, messages) \
+            if self._cache_lint else None
+
         payload = self._build_payload(
             openrouter_model, messages, temperature, max_tokens, stream=True
         )
@@ -366,6 +387,7 @@ class AsyncDREClient:
         # already-emitted content).
         client = self._ensure_http_client()
         yielded_any = False
+        last_usage: Optional[dict] = None
         last_exc: Exception | None = None
         for attempt in range(self._MAX_RETRIES + 1):
             try:
@@ -389,6 +411,11 @@ class AsyncDREClient:
                                 raise ValueError(
                                     f"OpenRouter stream error: {err_msg}"
                                 )
+                            # Capture usage BEFORE the delta read: the final
+                            # usage chunk often has empty choices, which would
+                            # hit the IndexError continue below.
+                            if isinstance(chunk.get("usage"), dict) and chunk["usage"]:
+                                last_usage = chunk["usage"]
                             delta = chunk["choices"][0].get("delta", {})
                             content = delta.get("content", "")
                             if content:
@@ -396,6 +423,10 @@ class AsyncDREClient:
                                 yield content
                         except (json.JSONDecodeError, KeyError, IndexError):
                             continue
+                    # Best-effort cache verification (usage only present when
+                    # the caller enabled usage accounting upstream).
+                    if self._cache_lint:
+                        self._cache_lint.verify(lint_key, last_usage)
                     return  # Stream completed successfully; exit retry loop
             except (httpx.TransportError, httpx.HTTPStatusError) as exc:
                 last_exc = exc
@@ -453,6 +484,10 @@ class AsyncDREClient:
             messages.append({"role": "system", "content": system_message})
         messages.append({"role": "user", "content": prompt})
 
+        # Pre-flight cache lint on the ACTUAL outgoing messages (fail-open).
+        lint_key = self._cache_lint.preflight(openrouter_model, messages) \
+            if self._cache_lint else None
+
         payload = self._build_payload(openrouter_model, messages, temperature, max_tokens)
 
         # Async API call
@@ -463,6 +498,10 @@ class AsyncDREClient:
 
         content = self._content_from_data(data)
         usage = data.get("usage", {})
+
+        # Predicted-vs-actual cache verification (fail-open, warns at most once).
+        if self._cache_lint:
+            self._cache_lint.verify(lint_key, usage)
 
         api_response = OpenRouterResponse(
             content=content,

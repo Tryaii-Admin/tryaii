@@ -32,6 +32,7 @@ for await (const chunk of integration.stream('Explain TCP vs UDP')) process.stdo
 - `chat(prompt, …) → OpenRouterResponse` and `stream(prompt, …)` yielding content chunks. Options: `priorities` (plain dict, partial OK), `system_message`/`systemMessage`, `temperature` (default 0.7), `max_tokens`/`maxTokens` (sent only when finite and > 0), `override_model`/`overrideModel`.
 - Python: `close()` + sync context manager; retries 429/5xx up to 3 times with backoff, honors `Retry-After`; stream retries only before the first yielded byte.
 - Base URL is fixed to `https://openrouter.ai/api/v1`. The `X-Title` header is the `app_name`/`appName` (default `tryaii`).
+- Constructor accepts `cache_lint="warn"` / `cacheLint: 'warn'` — pre-flight prompt-cache lint + runtime verification on every chat/stream, fail-open. See [cache-lint.md](cache-lint.md).
 
 ## OpenRouterResponse
 

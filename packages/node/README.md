@@ -55,6 +55,12 @@ tryaii cachelint request.json              # pre-flight prompt-cache analysis (w
 | `route "<prompt>"` | `--quality/--cost/--speed <1-5>` (default 3), `--top-k <n>` |
 | `eval <input.json>` | `-o/--output <dir>`, `--max-price <usd>`, `--output-tokens <n>`, `--budget-mode strict\|fit-output` |
 | `cachelint <input.json \| ->` | `--json`, raw-text mode via `--provider <name>` + `--model <name>` (o200k tokenizer bundled) |
+
+The cachelint engine also runs inside the clients: pass `cacheLint: 'warn'` to
+`DREClient`/`OpenRouterIntegration` (or set `TRYAII_CACHE_LINT=warn`) to lint
+every outgoing chat request and verify cache predictions against the response
+`usage` — warn-only and fail-open.
+
 | `models` | `--provider <name>`, `--json` |
 | `benchmarks` | `--json` |
 | `setup` / `regenerate` | `--model <name>` |

@@ -32,3 +32,7 @@ export { scan, blocking, firstBlocking } from './detectors.js';
 export type { Finding } from './detectors.js';
 export { countTokens } from './tokenizers.js';
 export type { TokenCount } from './tokenizers.js';
+// The SDK warn hook is a LIGHT module (no static engine imports) — safe to
+// import from the integrations without loading the tokenizer rank data.
+export { buildCacheLintHook, CacheLintHook } from './hook.js';
+export type { CacheLintHookOptions } from './hook.js';
