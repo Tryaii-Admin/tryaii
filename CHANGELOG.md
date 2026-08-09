@@ -66,6 +66,42 @@ tiktoken (one-time install hint instead), broken stderr — can ever raise into
 or block an API call. Warning strings are byte-identical across both SDKs,
 pinned by mirrored unit tests. Docs: `docs/sdk/client/cache-lint.md`.
 
+### cachelint — AST template introspection (both SDKs)
+
+The warn hook now closes its founding blind spot. A rendered
+`f"...{DAY_OF_WEEK}..."` reaches the provider as `"...Monday..."` — invisible
+to every regex detector — but the SDK runs in-process, so at the wrapped call
+it traces the prompt back to its template and names the exact slot:
+
+```
+[tryaii cachelint] template slot {DAY_OF_WEEK} at app.py:21 renders inside your cacheable prefix — its value changes between calls and breaks the cache there
+[tryaii cachelint]   {DAY_OF_WEEK} = datetime.now().strftime('%A') at app.py:9
+```
+
+- **Automatic within warn mode** — no new API surface. Stack-walk capture to
+  the user's frame (no hardcoded depths; exact call spans via `co_positions`
+  on Python 3.11+, V8 structured CallSites with the spike-pinned await-unwrap
+  rule on Node), then parse-never-execute AST tracing of f-strings / template
+  literals, `.format()`, concatenation, and single-assignment variables.
+- **Validation guard**: the traced template's static text is re-aligned
+  against the ACTUAL rendered prompt; any mismatch (stale source, wrong node,
+  conditionals, bundler rewrites, truncation) discards the analysis — wrong
+  insights are structurally impossible, only missing ones.
+- **Noise policy**: structurally dynamic slots (call-bearing) warn on first
+  sight; bare-name slots arm on first value and warn when it changes; once
+  per (call site, slot); max 3 lines + a summary; where the engine's
+  detectors already catch the rendered value the slot stays silent, and
+  existing blocker warns gain a `rendered by template slot ...` attribution.
+- **Privacy**: the calling module's source is read locally, parsed, never
+  executed, never transmitted; warnings carry file basenames only.
+- **Dependencies**: `acorn` joins the Node package (tiny, zero-dep) for JS
+  parsing; `typescript` becomes an *optional* peer for `.ts` frames (tsx/
+  ts-node users already have it) — unimportable → fail open. Python needs
+  nothing new (stdlib `ast`/`inspect`).
+- Fail-open remains absolute: REPLs, frozen bundles, exec'd code, reassigned
+  variables, function-parameter prompts, `create_task`/`gather` sites, files
+  over 1 MB — all silently produce exactly the previous behavior.
+
 ## 0.4.0 (2026-06-29)
 
 ### Catalog: bump flagship latency tier (claude-fable-5, claude-opus-4-8)
