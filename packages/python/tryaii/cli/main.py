@@ -61,13 +61,6 @@ Eval-only options:
   --difficulty-source <s>  Gauge task complexity: 'intrinsic' (default), 'capability', or 'blend'
   --difficulty-gamma <n>   How hard to shift budget toward complex prompts (default 1; 0 disables)
 
-Daemon (faster repeated routing):
-  route and eval auto-start a background daemon that keeps the embedding model
-  warm, so repeated calls skip the multi-second model load. The first call is
-  slow; the rest are near-instant.
-  --no-daemon           Route in-process for this call; do not use or start a daemon
-  TRYAII_NO_DAEMON=1    Disable the daemon globally (always route in-process)
-  TRYAII_DAEMON_IDLE=<s>  Shut the daemon down after this many idle seconds (default 900)
 
 Global flags:
   --no-banner           Disable the startup banner (also honored via TRYAII_NO_BANNER)
@@ -101,11 +94,15 @@ Options:
   --cost <1-5>          Cost priority (default 3; out-of-range clamped)
   --speed <1-5>         Speed priority (default 3; out-of-range clamped)
   --top-k <n>           Number of recommendations shown (default 5)
+  --no-daemon           Route in-process for this call; do not use or start a daemon
 
 Notes:
   Text output only -- there is no --json for route (use 'eval' or the SDK
   for machine-readable output). Scores are relative per call; do not
   compare them across prompts.
+  A background daemon keeps the embedding model warm, so only the first
+  call pays the multi-second model load. TRYAII_NO_DAEMON=1 disables it
+  globally; TRYAII_DAEMON_IDLE=<s> tunes its idle shutdown (default 900).
 
 Examples:
   tryaii route "Write a Python function to merge sorted arrays"
@@ -146,6 +143,12 @@ Options:
   --budget-mode <mode>  'strict' (default) or 'fit-output'
   --difficulty-source <s>  'intrinsic' (default), 'capability', or 'blend'
   --difficulty-gamma <n>   Shift budget toward harder prompts (default 1; 0 disables)
+  --no-daemon           Route in-process for this call; do not use or start a daemon
+
+Notes:
+  A background daemon keeps the embedding model warm, so only the first
+  call pays the multi-second model load. TRYAII_NO_DAEMON=1 disables it
+  globally; TRYAII_DAEMON_IDLE=<s> tunes its idle shutdown (default 900).
 
 Examples:
   tryaii eval examples/prompts.json --output results/run --quality=5 --cost=1 --speed=1
