@@ -14,6 +14,10 @@ const requiredPaths = [
   'dist/cachelint/index.js',
   'dist/cachelint/index.d.ts',
   'dist/cachelint/data/providers.json',
+  'dist/diagnose/index.js',
+  'dist/diagnose/index.d.ts',
+  'dist/diagnose/data/plan.json',
+  'dist/diagnose/data/costmodel.json',
   'dist/registry/presets/defaultModels.json',
   'dist/centroids/data/centroids_all-MiniLM-L6-v2.json',
 ];
@@ -61,6 +65,30 @@ const lint = cachelintModule.analyze({
 });
 if (!lint.items?.[0]?.verdict?.code) {
   throw new Error('cachelint analyze() returned no verdict from dist assets');
+}
+
+const diagnoseModule = await import(
+  pathToFileURL(join(packageDir, 'dist/diagnose/index.js')).href
+);
+if (typeof diagnoseModule.analyzeInventory !== 'function') {
+  throw new Error('dist/diagnose/index.js does not export analyzeInventory');
+}
+const findings = await diagnoseModule.analyzeInventory(
+  {
+    sites: [
+      {
+        file: 'smoke.py',
+        line: 1,
+        provider: 'anthropic',
+        model: 'claude-fable-5',
+        prompt: 'Smoke-test prompt.',
+      },
+    ],
+  },
+  { run_id: 'verify-dist' },
+);
+if (findings.summary?.schema !== 'tryaii.diagnose.summary/1') {
+  throw new Error('diagnose analyzeInventory() returned no summary from dist assets');
 }
 
 console.log('dist verification passed');

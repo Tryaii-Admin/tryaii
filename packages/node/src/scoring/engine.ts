@@ -5,6 +5,11 @@
  * weighted by user priorities. This is the heart of the routing logic.
  */
 
+// The half-even helpers replicate Python round()/f"{x:.Nf}" exactly (see
+// shared/cachelint/SPEC.md §1.2/§1.5) — the Python engine is this engine's
+// byte-parity reference, and Math.round/toFixed diverge from it on ties.
+// halfEven.ts is a tiny pure module (no tokenizer data comes with it).
+import { formatFixed, halfEvenRound } from '../cachelint/util/halfEven.js';
 import { ModelInfo } from '../registry/models.js';
 import { BenchmarkNormalizer } from './benchmarks.js';
 import { DEFAULT_PRIORITIES, Priorities } from './priorities.js';
@@ -198,7 +203,7 @@ export class ScoringEngine {
           s.finalScore = 0.5;
         } else {
           const normalized = (s.finalScore - minRaw) / (maxRaw - minRaw);
-          s.finalScore = Math.round((0.1 + 0.85 * normalized) * 10000) / 10000;
+          s.finalScore = halfEvenRound(0.1 + 0.85 * normalized, 4);
         }
       }
     } else if (scores.length === 1) {
@@ -206,7 +211,7 @@ export class ScoringEngine {
       // (that forced ~0.95 regardless of how good the model actually is).
       // Surface its own unnormalized weighted score, clamped to [0,1].
       const only = scores[0];
-      only.finalScore = Math.round(Math.max(0, Math.min(1, only.finalScore)) * 10000) / 10000;
+      only.finalScore = halfEvenRound(Math.max(0, Math.min(1, only.finalScore)), 4);
     }
 
     return scores.slice(0, topK);
@@ -340,14 +345,14 @@ export class ScoringEngine {
     // Generate reasoning
     const topBenchStr = modelTopBenchmarks
       .slice(0, 2)
-      .map(([b, s]) => `${b} (${Math.round(s * 100)}%)`)
+      .map(([b, s]) => `${b} (${formatFixed(s * 100, 0)}%)`)
       .join(', ');
 
     let reasoning: string;
     if (noSignal) {
       reasoning = 'No benchmark signal -- routed on cost/speed';
     } else {
-      reasoning = `Quality: ${qualityScore.toFixed(2)} on [${topBenchStr}]`;
+      reasoning = `Quality: ${formatFixed(qualityScore, 2)} on [${topBenchStr}]`;
       if (imputedCount > 0) {
         // Tell the reader the score is partly an estimate. Useful when reading
         // eval output and wondering why a model with thin coverage ranked here.
@@ -356,21 +361,21 @@ export class ScoringEngine {
       }
     }
     if (costScore > 0) {
-      reasoning += ` | Cost efficiency: ${costScore.toFixed(2)}`;
+      reasoning += ` | Cost efficiency: ${formatFixed(costScore, 2)}`;
     }
     if (speedScore > 0) {
-      reasoning += ` | Speed: ${speedScore.toFixed(2)} (${model.latency})`;
+      reasoning += ` | Speed: ${formatFixed(speedScore, 2)} (${model.latency})`;
     }
 
     return {
       modelId: model.modelId,
       finalScore: final,
-      qualityScore: Math.round(qualityScore * 10000) / 10000,
-      costScore: Math.round(costScore * 10000) / 10000,
-      speedScore: Math.round(speedScore * 10000) / 10000,
-      qualityContribution: Math.round(qContrib * 10000) / 10000,
-      costContribution: Math.round(cContrib * 10000) / 10000,
-      speedContribution: Math.round(sContrib * 10000) / 10000,
+      qualityScore: halfEvenRound(qualityScore, 4),
+      costScore: halfEvenRound(costScore, 4),
+      speedScore: halfEvenRound(speedScore, 4),
+      qualityContribution: halfEvenRound(qContrib, 4),
+      costContribution: halfEvenRound(cContrib, 4),
+      speedContribution: halfEvenRound(sContrib, 4),
       topBenchmarks: modelTopBenchmarks,
       reasoning,
     };

@@ -20,6 +20,10 @@
     "./cachelint": {
       "types": "./dist/cachelint/index.d.ts",
       "import": "./dist/cachelint/index.js"
+    },
+    "./diagnose": {
+      "types": "./dist/diagnose/index.d.ts",
+      "import": "./dist/diagnose/index.js"
     }
   },
   "files": [
