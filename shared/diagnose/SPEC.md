@@ -263,13 +263,66 @@ swap_stats                {sites_with_cheaper_swap, median_current_rank}
 
 ## §4 Report rendering
 
-(Frozen when the report renderer lands; run-dir layout is contract now.)
-
 Run directory: `<out_dir>/<run_id>/` containing `inventory.json` (the
 intake, verbatim re-dump with indent 2), `findings.json`, `meta.json`
-(`{run_id, generated_at, tool}`), later `index.html`. `<out_dir>/latest` is
+(`{run_id, generated_at, tool}`), `index.html`. `<out_dir>/latest` is
 a plain text file holding `<run_id>\n` (never a symlink). Run ids sort
 lexicographically; the CLI default is UTC `YYYYMMDDTHHMMSSZ`.
+
+### §4.1 Template + substitution language
+
+The report HTML comes from ONE shared template
+(`shared/diagnose/report/template.html`, packed by sync-shared into both
+packages' `diagnose/data/report_template.json` as `{"html": "..."}`).
+Both renderers implement the same two-construct substitution language —
+the eval dashboard's silent cross-SDK drift is the cautionary tale this
+design exists to prevent:
+
+1. `{{key}}` — replaced with the HTML-ESCAPED string value of `key`,
+   resolved innermost-scope-first. A missing key is a renderer ERROR in
+   both languages (never silently empty), so template and scope builder
+   cannot drift apart.
+2. `<!--BEGIN name-->inner<!--END name-->` — `name` must resolve to a list
+   of scopes; `inner` renders once per item (item scope chained onto the
+   parent), concatenated. Conditional content = a 0-or-1-item list.
+   Blocks nest; the SAME name never nests inside itself.
+
+Escape table (applied to every `{{key}}` value; the fixed markup is never
+escaped): `&`→`&amp;` `<`→`&lt;` `>`→`&gt;` `"`→`&quot;` `'`→`&#39;`.
+
+Every scope value is a pre-formatted STRING (built with the SPEC'd helpers
+below) — no numbers ever cross the render boundary, so formatting parity
+lives in one place. Helpers: `money2(x)` = `"$" + <half-even .2f>`;
+`money4(x)` = `"$" + <half-even .4f>`; signed variants prefix `+`/`-`;
+integers/pre-rounded floats stringify natively (the §1.3 normalizer
+already made integral floats integers).
+
+The HTML is a pure function of findings.json + the previous run's
+findings.json (deltas) — the only timestamp shown is `generated_at` from
+the findings document. Written with `\n` newlines.
+
+### §4.2 Deltas (report-time, vs the previous run)
+
+`previous` = the run id immediately before the current one in the store
+(§4). When present, the report shows a delta band computed per `site_id`
+present in BOTH runs, comparing each of the four checks where both
+statuses are in {`ok`, `finding`}: `finding`→`ok` is an improvement event,
+`ok`→`finding` a regression event (transitions involving
+`insufficient_data`/`skipped` are ignored — data availability changes are
+not quality changes). Then:
+
+- `sites_improved` = sites with ≥1 improvement and NO regression
+- `sites_regressed` = sites with ≥1 regression (a mixed site counts here)
+- `sites_added` / `sites_removed` = site_id set differences
+- monthly delta = current − previous `totals.est_monthly_cost_usd`, only
+  when both are non-null, formatted signed money2.
+
+### §4.3 The `report` verb
+
+`tryaii diagnose report [--run <id>] [--out-dir <dir>] [--out <file>]` —
+loads `--run` (default: the `latest` pointer), renders against the
+previous run when one exists, writes `<out_dir>/<run_id>/index.html`
+(or `--out`), echoes `-> <path>` with forward slashes. No runs → exit 1.
 
 ## §5 Fixtures
 

@@ -18,6 +18,7 @@ const requiredPaths = [
   'dist/diagnose/index.d.ts',
   'dist/diagnose/data/plan.json',
   'dist/diagnose/data/costmodel.json',
+  'dist/diagnose/data/report_template.json',
   'dist/registry/presets/defaultModels.json',
   'dist/centroids/data/centroids_all-MiniLM-L6-v2.json',
 ];

@@ -8,11 +8,36 @@ Usage:
     python scripts/sync-shared.py
 """
 
+import json
 import shutil
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 SHARED = ROOT / "shared"
+
+
+def pack_json(payload: dict) -> str:
+    """Deterministic packed-JSON serialization (both package copies must be
+    byte-identical; test_parity.py re-packs and compares)."""
+    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+
+
+# Non-JSON masters packed INTO json so they flow through the existing
+# JSON-only asset pipeline (copy-assets.mjs) unchanged:
+# (source file, payload key, destinations)
+_PY_DIAGNOSE_DATA = ROOT / "packages" / "python" / "tryaii" / "diagnose" / "data"
+_NODE_DIAGNOSE_DATA = ROOT / "packages" / "node" / "src" / "diagnose" / "data"
+
+PACKS = [
+    (
+        SHARED / "diagnose" / "report" / "template.html",
+        "html",
+        [
+            _PY_DIAGNOSE_DATA / "report_template.json",
+            _NODE_DIAGNOSE_DATA / "report_template.json",
+        ],
+    ),
+]
 
 TARGETS = [
     # (source, destinations...)
@@ -72,6 +97,19 @@ def sync():
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, dest)
             print(f"  {source.name} -> {dest.relative_to(ROOT)}")
+            copied += 1
+
+    # Packed masters (non-JSON sources wrapped in JSON)
+    for source, key, dests in PACKS:
+        if not source.exists():
+            print(f"  SKIP {source} (not found)")
+            continue
+        packed = pack_json({key: source.read_text(encoding="utf-8")})
+        for dest in dests:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with open(dest, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(packed)
+            print(f"  {source.name} (packed) -> {dest.relative_to(ROOT)}")
             copied += 1
 
     # Centroids (all files)

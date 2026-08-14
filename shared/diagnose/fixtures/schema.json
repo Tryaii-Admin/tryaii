@@ -7,7 +7,7 @@
   "properties": {
     "suite": {
       "type": "string",
-      "enum": ["intake", "resolve", "modelfit", "cost", "hygiene", "check", "cli"]
+      "enum": ["intake", "resolve", "modelfit", "cost", "hygiene", "check", "report", "cli"]
     },
     "target": {
       "type": "string",
@@ -31,7 +31,7 @@
           },
           "input": {
             "type": "object",
-            "description": "Suite-specific input. intake/check: {data} inline or {input_file} relative to the fixtures dir; check also takes {opts}. resolve: {model}. modelfit: {classification, resolved_model_id?, declared_model?, priorities?}. cost: run_cost keyword inputs ({canonical_text?, resolved_model_id?, declared_model?, output_tokens?, calls_per_day?, cache_ctx?, classification?, priorities?} — classification builds fit_internal via run_model_fit). hygiene: {prompt}. cli: {argv, stdin_file?, copy_from_corpus?} — run in a FRESH temp cwd (check writes a run dir), with copy_from_corpus files staged into it; expected = {stdout_golden, stderr, exit_code}, and test_diagnose_cli_parity.py additionally byte-compares the files both CLIs write."
+            "description": "Suite-specific input. intake/check: {data} inline or {input_file} relative to the fixtures dir; check also takes {opts}. resolve: {model}. modelfit: {classification, resolved_model_id?, declared_model?, priorities?}. cost: run_cost keyword inputs ({canonical_text?, resolved_model_id?, declared_model?, output_tokens?, calls_per_day?, cache_ctx?, classification?, priorities?} — classification builds fit_internal via run_model_fit). hygiene: {prompt}. report: {inventory_file, opts, previous?: {inventory_file, opts}} — findings are produced by analyze_inventory (never hand-frozen) and rendered; expected = {golden: '<case>.golden.html'}. cli: {argv, stdin_file?, copy_from_corpus?, pre_argv?} — run in a FRESH temp cwd (check writes a run dir), with copy_from_corpus files staged into it and pre_argv commands run first in the same cwd; expected = {stdout_golden, stderr, exit_code}, and test_diagnose_cli_parity.py additionally byte-compares the files both CLIs write."
           },
           "expected": {
             "description": "Machine-generated golden output. null until frozen. intake: normalize_inventory result or {error}. resolve: {model_id, method}. modelfit: the run_model_fit payload. cost: the run_cost payload. hygiene: the run_hygiene payload. check: the full findings document or {error}."

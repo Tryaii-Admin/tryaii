@@ -37,7 +37,8 @@ PKG_PYTHON = REPO / "packages" / "python"
 
 sys.path.insert(0, str(PKG_PYTHON))
 
-SUITES = ("intake", "resolve", "modelfit", "cost", "hygiene", "check", "cli")
+SUITES = ("intake", "resolve", "modelfit", "cost", "hygiene", "check",
+          "report", "cli")
 
 
 def _dump(obj) -> str:
@@ -139,12 +140,34 @@ def gen_check(inp):
         return {"error": str(exc)}
 
 
+def _gen_findings(inp: dict) -> dict:
+    """analyze_inventory over a report-suite input's {inventory_file, opts}."""
+    from tryaii.diagnose.api import analyze_inventory
+
+    data = json.loads((FIXTURES / inp["inventory_file"]).read_text(encoding="utf-8"))
+    return analyze_inventory(data, inp.get("opts") or {})
+
+
+def gen_report(inp, case_name: str):
+    """Report fixtures render findings PRODUCED BY THE ENGINE (never
+    hand-frozen findings corpora), so engine changes regenerate check and
+    report suites consistently."""
+    from tryaii.diagnose.report import render_report_html
+
+    findings = _gen_findings(inp)
+    previous = _gen_findings(inp["previous"]) if "previous" in inp else None
+    golden = case_name + ".golden.html"
+    return {"golden": golden}, {golden: render_report_html(findings, previous)}
+
+
 def run_cli_case(inp: dict) -> subprocess.CompletedProcess:
     """Run the Python CLI for a cli-suite case in a FRESH temp cwd.
 
     `check` writes a run dir, so cli cases never run inside the fixtures
-    tree; `copy_from_corpus` names corpus files staged into the temp cwd.
-    Cross-CLI byte parity of the WRITTEN files is asserted separately by
+    tree; `copy_from_corpus` names corpus files staged into the temp cwd,
+    and `pre_argv` (a list of argv arrays) runs setup commands in the SAME
+    cwd first (e.g. check runs a report case renders). Cross-CLI byte
+    parity of the WRITTEN files is asserted separately by
     test_diagnose_cli_parity.py — the frozen goldens cover stdout/stderr.
     """
     env = dict(os.environ,
@@ -157,6 +180,12 @@ def run_cli_case(inp: dict) -> subprocess.CompletedProcess:
     with tempfile.TemporaryDirectory() as tmp:
         for name in inp.get("copy_from_corpus", []):
             shutil.copy2(FIXTURES / "corpus" / name, Path(tmp) / name)
+        for pre in inp.get("pre_argv", []):
+            subprocess.run(
+                [sys.executable, "-c",
+                 "from tryaii.cli.main import cli; cli()", *pre],
+                capture_output=True, cwd=tmp, env=env, check=True,
+            )
         return subprocess.run(
             [sys.executable, "-c",
              "from tryaii.cli.main import cli; cli()", *inp["argv"]],
@@ -183,8 +212,9 @@ def run_suite(name: str) -> dict:
     out_files: dict[str, str] = {}
 
     for case in doc["cases"]:
-        if name == "cli":
-            expected, goldens = gen_cli(case["input"], case["name"])
+        if name in ("cli", "report"):
+            gen = gen_cli if name == "cli" else gen_report
+            expected, goldens = gen(case["input"], case["name"])
             case["expected"] = expected
             for fname, text in goldens.items():
                 out_files[f"{name}/{fname}"] = text

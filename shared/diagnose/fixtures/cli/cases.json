@@ -148,6 +148,118 @@
       }
     },
     {
+      "name": "report-latest",
+      "description": "report renders the latest run's index.html; the parity test byte-compares the written HTML between the two CLIs.",
+      "input": {
+        "copy_from_corpus": [
+          "inventory-mixed.json"
+        ],
+        "pre_argv": [
+          [
+            "diagnose",
+            "check",
+            "inventory-mixed.json",
+            "--quality",
+            "3",
+            "--cost",
+            "4",
+            "--speed",
+            "2",
+            "--goal",
+            "reduce prices",
+            "--run-id",
+            "fixture-run",
+            "--now",
+            "2026-01-01T00:00:00Z",
+            "--out-dir",
+            "out"
+          ]
+        ],
+        "argv": [
+          "diagnose",
+          "report",
+          "--out-dir",
+          "out"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "report-latest.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "report-delta-run",
+      "description": "Two check runs then report: the second run renders with the delta band vs the first (verified byte-for-byte across CLIs via the written index.html).",
+      "input": {
+        "copy_from_corpus": [
+          "inventory-mixed.json"
+        ],
+        "pre_argv": [
+          [
+            "diagnose",
+            "check",
+            "inventory-mixed.json",
+            "--quality",
+            "5",
+            "--cost",
+            "1",
+            "--speed",
+            "1",
+            "--run-id",
+            "run-a",
+            "--now",
+            "2026-01-01T00:00:00Z",
+            "--out-dir",
+            "out"
+          ],
+          [
+            "diagnose",
+            "check",
+            "inventory-mixed.json",
+            "--quality",
+            "3",
+            "--cost",
+            "4",
+            "--speed",
+            "2",
+            "--run-id",
+            "run-b",
+            "--now",
+            "2026-01-02T00:00:00Z",
+            "--out-dir",
+            "out"
+          ]
+        ],
+        "argv": [
+          "diagnose",
+          "report",
+          "--out-dir",
+          "out"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "report-delta-run.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "report-no-runs",
+      "description": "report with an empty store -> exit 1.",
+      "input": {
+        "argv": [
+          "diagnose",
+          "report"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "report-no-runs.stdout.golden.txt",
+        "stderr": "error: no diagnose runs found in '.tryaii/diagnose' (run 'tryaii diagnose check' first)\n",
+        "exit_code": 1
+      }
+    },
+    {
       "name": "unknown-verb",
       "description": "Unknown diagnose verb -> exit 2.",
       "input": {

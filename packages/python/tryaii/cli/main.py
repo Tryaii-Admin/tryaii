@@ -306,6 +306,7 @@ Insight-only -- it never edits code and never sends anything anywhere.
 Verbs:
   plan                  Print the check catalog + interview for the agent (--json)
   check <inventory>     Run the checks over an agent-written inventory JSON
+  report                Render a run's findings to a self-contained index.html
 
 The four checks: model_fit (is each call site's model the right one for its
 prompt under your priorities), cache_readiness (will the prompt hit the
@@ -316,6 +317,7 @@ placement).
 Examples:
   tryaii diagnose plan --json
   tryaii diagnose check inventory.json --quality 3 --cost 4 --speed 2
+  tryaii diagnose report
 
 Exit codes:
   0 checks completed (findings included), 1 runtime failure, 2 usage error.
@@ -395,6 +397,32 @@ Exit codes:
 Docs: docs/cli/diagnose/check.md
 """
 
+HELP_DIAGNOSE_REPORT = """tryaii diagnose report -- Render a run to a self-contained HTML page
+
+Usage:
+  tryaii diagnose report [options]
+
+Renders <out-dir>/<run-id>/findings.json into index.html next to it: check
+chips per site (green = healthy), monthly cost/savings tiles, expandable
+detail per check, and -- when a previous run exists -- a delta band
+("since <run>: N improved..."). A pure function of the stored findings;
+the page is self-contained and everything stays local.
+
+Options:
+  --run <id>            Run to render (default: the 'latest' pointer)
+  --out-dir <dir>       Run store directory (default .tryaii/diagnose)
+  --out <file>          Write the HTML somewhere else instead
+
+Examples:
+  tryaii diagnose report
+  tryaii diagnose report --run 20260814T101530Z
+
+Exit codes:
+  0 success, 1 no runs found / runtime failure, 2 usage error.
+
+Docs: docs/cli/diagnose/report.md
+"""
+
 HELP_HELP = """tryaii help -- Show help for tryaii or a specific command
 
 Usage:
@@ -437,6 +465,7 @@ COMMAND_HELP = {
 DIAGNOSE_VERB_HELP = {
     "plan": HELP_DIAGNOSE_PLAN,
     "check": HELP_DIAGNOSE_CHECK,
+    "report": HELP_DIAGNOSE_REPORT,
 }
 
 # Per-line delay (seconds) when revealing human-readable output interactively.
@@ -1429,10 +1458,54 @@ def _diagnose_check(argv):
         _write_paced(_diagnose_summary_text(findings, out_dir_display))
 
 
+def _diagnose_report(argv):
+    parser = argparse.ArgumentParser(prog="tryaii diagnose report", add_help=False)
+    parser.add_argument("--run")
+    parser.add_argument("--out-dir", default=".tryaii/diagnose", dest="out_dir")
+    parser.add_argument("--out")
+    args = parser.parse_args(argv)
+
+    from tryaii.diagnose import (
+        latest_run_id,
+        load_run_findings,
+        previous_run_id,
+        render_report_html,
+    )
+
+    out_dir = Path(args.out_dir)
+    run_id = args.run or latest_run_id(out_dir)
+    if run_id is None:
+        print(f"error: no diagnose runs found in '{args.out_dir}' "
+              "(run 'tryaii diagnose check' first)", file=sys.stderr)
+        sys.exit(1)
+    try:
+        findings = load_run_findings(out_dir, run_id)
+    except FileNotFoundError:
+        print(f"error: run '{run_id}' not found in '{args.out_dir}'",
+              file=sys.stderr)
+        sys.exit(1)
+    prev_id = previous_run_id(out_dir, run_id)
+    previous = load_run_findings(out_dir, prev_id) if prev_id is not None else None
+
+    html = render_report_html(findings, previous)
+    out_dir_display = args.out_dir.replace("\\", "/")
+    if args.out:
+        out_path = Path(args.out)
+        display = args.out.replace("\\", "/")
+    else:
+        out_path = out_dir / run_id / "index.html"
+        display = f"{out_dir_display}/{run_id}/index.html"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(html)
+    print(f"-> {display}")
+
+
 def cmd_diagnose(argv):
     """Verb dispatcher for `tryaii diagnose` (verb-peeling; no argparse
     sub-subparsers exist in this CLI -- mirrors cmdDiagnose in cli.ts)."""
-    verbs = {"plan": _diagnose_plan, "check": _diagnose_check}
+    verbs = {"plan": _diagnose_plan, "check": _diagnose_check,
+             "report": _diagnose_report}
     verb = argv[0] if argv else None
     if verb is None:
         print('error: missing diagnose verb. Run "tryaii help diagnose".',

@@ -23,6 +23,7 @@ import {
   analyzeInventory,
   normalizeInventory,
   readDiscountFactors,
+  renderReportHtml,
   resolveModelId,
   runCost,
   runHygiene,
@@ -142,5 +143,21 @@ describe.skipIf(skipAll)('diagnose check fixtures', () => {
       return;
     }
     expectFrozen(await analyzeInventory(data, opts), c.expected);
+  });
+});
+
+async function reportFindings(inp: Record<string, any>): Promise<Record<string, unknown>> {
+  const data = JSON.parse(readFileSync(join(FIXTURES, inp.inventory_file), 'utf-8'));
+  return analyzeInventory(data, inp.opts ?? {});
+}
+
+describe.skipIf(skipAll)('diagnose report fixtures', () => {
+  it.each(cases('report').map((c) => [c.name, c] as const))('%s', async (_name, c) => {
+    const findings = await reportFindings(c.input);
+    const previous = 'previous' in c.input ? await reportFindings(c.input.previous) : null;
+    const golden = readFileSync(join(FIXTURES, 'report', c.expected.golden), 'utf-8');
+    // Byte-for-byte against the Python-rendered golden — the whole point of
+    // the shared template + string-only scopes (SPEC §4.1).
+    expect(renderReportHtml(findings, previous)).toBe(golden.replace(/\r\n/g, '\n'));
   });
 });

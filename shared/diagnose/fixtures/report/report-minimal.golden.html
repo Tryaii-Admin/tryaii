@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>tryaii diagnose — 1 sites</title>
+<style>
+  :root {
+    --bg: #0b0d10;
+    --panel: #14181d;
+    --panel-2: #1b2026;
+    --text: #e6e9ee;
+    --muted: #8a939d;
+    --line: #232932;
+    --ok: #6ee7b7;
+    --warn: #fcd34d;
+    --info: #93c5fd;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#fafbfc; --panel:#ffffff; --panel-2:#f4f6f9; --text:#0f1419; --muted:#5b6470; --line:#e6eaef; --ok:#059669; --warn:#b45309; --info:#2563eb; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 24px 64px; }
+  header.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  header.top h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.2px; }
+  header.top h1 small { color: var(--muted); font-weight: 400; margin-left: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .meta { color: var(--muted); font-size: 12px; }
+  .goal { margin: 16px 0 0; padding: 10px 14px; border: 1px solid var(--line); border-left: 3px solid var(--info);
+    border-radius: 8px; background: var(--panel); font-size: 13px; }
+  .goal b { color: var(--info); font-weight: 600; }
+  .chips { display: flex; gap: 8px; margin: 16px 0 24px; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+    background: var(--panel-2); border: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .chip b { color: var(--text); font-weight: 600; }
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 24px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .stat .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); }
+  .stat .v { font-size: 20px; font-weight: 600; margin-top: 4px; }
+  .stat .v.warn { color: var(--warn); }
+  .stat .v.ok { color: var(--ok); }
+  .delta { margin: 0 0 24px; padding: 10px 14px; border: 1px solid var(--line); border-left: 3px solid var(--ok);
+    border-radius: 8px; background: var(--panel); font-size: 13px; }
+  .delta code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); }
+  section { margin-bottom: 28px; }
+  section > h2 { font-size: 13px; letter-spacing: 0.4px; color: var(--muted); font-weight: 600; margin: 0 0 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; }
+  table.counts { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.counts td, table.counts th { padding: 5px 8px; text-align: right; border-bottom: 1px dashed var(--line); font-variant-numeric: tabular-nums; }
+  table.counts tr:last-child td { border-bottom: 0; }
+  table.counts th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; }
+  table.counts td.name, table.counts th.name { text-align: left; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .card-head h3 { font-size: 14px; margin: 0; font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .card-head .muted { font-size: 12px; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--line); font-size: 12px; background: var(--panel-2); color: var(--muted); }
+  .badge .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .badge.ok .dot { background: var(--ok); }
+  .badge.ok { color: var(--ok); border-color: var(--ok); }
+  .badge.finding .dot { background: var(--warn); }
+  .badge.finding { color: var(--warn); border-color: var(--warn); }
+  .badge.skipped { border-style: dashed; }
+  details { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px; }
+  details summary { cursor: pointer; font-size: 12px; color: var(--muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.6px; }
+  details[open] summary { color: var(--text); }
+  .kv { list-style: none; margin: 8px 0 0; padding: 0; font-size: 13px; }
+  .kv li { display: flex; justify-content: space-between; gap: 16px; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+  .kv li:last-child { border-bottom: 0; }
+  .kv .k { color: var(--muted); }
+  .kv .v { font-variant-numeric: tabular-nums; text-align: right; }
+  table.rank { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+  table.rank td, table.rank th { padding: 4px 8px; text-align: right; border-bottom: 1px dashed var(--line); font-variant-numeric: tabular-nums; }
+  table.rank th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; }
+  table.rank td.m, table.rank th.m { text-align: left; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  table.rank tr.current td { color: var(--info); font-weight: 600; }
+  table.rank td.r { color: var(--muted); font-size: 11px; text-align: left; }
+  .bar { background: var(--panel-2); border-radius: 4px; height: 8px; overflow: hidden; margin-top: 6px; }
+  .bar-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--ok), var(--info)); }
+  ul.findings { list-style: none; margin: 8px 0 0; padding: 0; font-size: 13px; }
+  ul.findings li { padding: 6px 0; border-bottom: 1px dashed var(--line); }
+  ul.findings li:last-child { border-bottom: 0; }
+  ul.findings .kind { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--warn); }
+  ul.findings .where { color: var(--muted); font-size: 12px; margin-left: 8px; }
+  ul.findings .excerpt { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;
+    background: var(--panel-2); border-radius: 4px; padding: 1px 6px; margin-left: 8px; }
+  ul.findings .why { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  ul.plain { list-style: none; margin: 8px 0 0; padding: 0; font-size: 13px; color: var(--muted); }
+  ul.plain li { padding: 3px 0; }
+  .muted { color: var(--muted); }
+  .reason { font-size: 12px; color: var(--muted); font-style: italic; }
+  footer { color: var(--muted); font-size: 12px; margin-top: 32px; display: flex; gap: 16px; flex-wrap: wrap; }
+  footer a { color: var(--info); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+  @media (max-width: 720px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <h1>tryaii diagnose <small>fixture-min</small></h1>
+    <span class="meta">2026-01-01T00:00:00Z · tryaii 0.0.0</span>
+  </header>
+
+
+  <div class="chips">
+    <span class="chip">quality <b>3</b></span>
+    <span class="chip">cost <b>3</b></span>
+    <span class="chip">speed <b>3</b></span>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="k">Sites</div><div class="v">1</div></div>
+    <div class="stat"><div class="k">Findings</div><div class="v">0</div></div>
+    <div class="stat"><div class="k">Est. monthly cost</div><div class="v">n/a</div></div>
+    <div class="stat"><div class="k">Cache savings (max)</div><div class="v">n/a</div></div>
+    <div class="stat"><div class="k">Swap savings</div><div class="v">n/a</div></div>
+  </div>
+
+
+  <section>
+    <h2>check status</h2>
+    <div class="panel">
+      <table class="counts">
+        <tr><th class="name">check</th><th>ok</th><th>finding</th><th>insufficient</th><th>skipped</th></tr>
+
+        <tr><td class="name">model_fit</td><td>0</td><td>0</td><td>1</td><td>0</td></tr>
+
+        <tr><td class="name">cache_readiness</td><td>0</td><td>0</td><td>1</td><td>0</td></tr>
+
+        <tr><td class="name">cost_exposure</td><td>0</td><td>0</td><td>1</td><td>0</td></tr>
+
+        <tr><td class="name">hygiene</td><td>1</td><td>0</td><td>0</td><td>0</td></tr>
+
+      </table>
+
+    </div>
+  </section>
+
+
+  <section>
+    <h2>main.go</h2>
+
+    <article class="card">
+      <header class="card-head">
+        <h3>main.go:101</h3>
+        <span class="muted">line 101 · model: none declared</span>
+      </header>
+      <div class="badges">
+
+        <span class="badge insufficient"><span class="dot"></span>model fit: insufficient</span>
+
+        <span class="badge insufficient"><span class="dot"></span>cache readiness: insufficient</span>
+
+        <span class="badge insufficient"><span class="dot"></span>cost exposure: insufficient</span>
+
+        <span class="badge ok"><span class="dot"></span>hygiene: ok</span>
+
+      </div>
+
+      <div class="reason">model fit: no classifier available</div>
+
+      <div class="reason">cache readiness: no provider declared</div>
+
+      <div class="reason">cost exposure: no model declared</div>
+
+
+
+
+
+      <details>
+        <summary>hygiene — 0 finding(s), 0 blocking, 0 in system</summary>
+
+
+      </details>
+
+    </article>
+
+  </section>
+
+
+  <footer>
+    <span>artifacts:</span>
+    <a href="findings.json">findings.json</a>
+    <a href="inventory.json">inventory.json</a>
+    <span>everything on this page was produced locally — nothing was sent anywhere.</span>
+  </footer>
+</main>
+</body>
+</html>

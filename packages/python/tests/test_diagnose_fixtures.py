@@ -155,11 +155,34 @@ def test_check(case):
         expected, ensure_ascii=False)
 
 
+def _report_findings(inp: dict) -> dict:
+    from tryaii.diagnose.api import analyze_inventory
+
+    data = json.loads(
+        (FIXTURES / inp["inventory_file"]).read_text(encoding="utf-8"))
+    return analyze_inventory(data, inp.get("opts") or {})
+
+
+@pytest.mark.parametrize("case", _cases("report"))
+def test_report(case):
+    """Report fixtures render findings PRODUCED BY THE ENGINE, so engine
+    changes regenerate check and report suites consistently."""
+    from tryaii.diagnose.report import render_report_html
+
+    expected = _require_frozen(case)
+    inp = case["input"]
+    findings = _report_findings(inp)
+    previous = _report_findings(inp["previous"]) if "previous" in inp else None
+    golden = (FIXTURES / "report" / expected["golden"]).read_text(encoding="utf-8")
+    assert render_report_html(findings, previous) == golden
+
+
 @pytest.mark.parametrize("case", _cases("cli"))
 def test_cli(case):
     """Runs the real `tryaii diagnose` subcommand as a subprocess in a FRESH
     temp cwd (`check` writes a run dir, so cli cases never run inside the
-    fixtures tree; corpus inputs are staged via copy_from_corpus)."""
+    fixtures tree; corpus inputs are staged via copy_from_corpus and
+    pre_argv commands run first in the same cwd)."""
     expected = _require_frozen(case)
     inp = case["input"]
     env = dict(os.environ,
@@ -172,6 +195,12 @@ def test_cli(case):
     with tempfile.TemporaryDirectory() as tmp:
         for name in inp.get("copy_from_corpus", []):
             shutil.copy2(FIXTURES / "corpus" / name, Path(tmp) / name)
+        for pre in inp.get("pre_argv", []):
+            subprocess.run(
+                [sys.executable, "-c",
+                 "from tryaii.cli.main import cli; cli()", *pre],
+                capture_output=True, cwd=tmp, env=env, check=True,
+            )
         proc = subprocess.run(
             [sys.executable, "-c",
              "from tryaii.cli.main import cli; cli()", *inp["argv"]],

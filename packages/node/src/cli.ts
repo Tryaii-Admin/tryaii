@@ -1044,11 +1044,56 @@ async function diagnoseCheck(argv: string[]): Promise<void> {
   }
 }
 
+async function diagnoseReport(argv: string[]): Promise<void> {
+  const { values } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      'run': { type: 'string' },
+      'out-dir': { type: 'string', default: '.tryaii/diagnose' },
+      'out': { type: 'string' },
+    },
+  });
+
+  const diagnose = await import('./diagnose/index.js');
+  const outDir = values['out-dir'];
+  const runId = values.run ?? diagnose.latestRunId(outDir);
+  if (runId === null) {
+    throw new CliError(
+      `no diagnose runs found in '${outDir}' (run 'tryaii diagnose check' first)`,
+    );
+  }
+  let findings: Record<string, unknown>;
+  try {
+    findings = diagnose.loadRunFindings(outDir, runId);
+  } catch {
+    throw new CliError(`run '${runId}' not found in '${outDir}'`);
+  }
+  const prevId = diagnose.previousRunId(outDir, runId);
+  const previous = prevId !== null ? diagnose.loadRunFindings(outDir, prevId) : null;
+
+  const html = diagnose.renderReportHtml(findings, previous);
+  const outDirDisplay = outDir.replace(/\\/g, '/');
+  let outPath: string;
+  let display: string;
+  if (values.out) {
+    outPath = values.out;
+    display = values.out.replace(/\\/g, '/');
+  } else {
+    outPath = join(outDir, runId, 'index.html');
+    display = `${outDirDisplay}/${runId}/index.html`;
+  }
+  mkdirSync(resolve(outPath, '..'), { recursive: true });
+  writeFileSync(outPath, html, 'utf-8');
+  out.write(`-> ${display}\n`);
+}
+
 /** Verb dispatcher for `tryaii diagnose` (verb-peeling, like `help <topic>`). */
 async function cmdDiagnose(subArgs: string[]): Promise<void> {
   const verbs: Record<string, (argv: string[]) => Promise<void>> = {
     plan: diagnosePlan,
     check: diagnoseCheck,
+    report: diagnoseReport,
   };
   const verb = subArgs[0];
   if (verb === undefined) {
@@ -1340,6 +1385,7 @@ Insight-only -- it never edits code and never sends anything anywhere.
 Verbs:
   plan                  Print the check catalog + interview for the agent (--json)
   check <inventory>     Run the checks over an agent-written inventory JSON
+  report                Render a run's findings to a self-contained index.html
 
 The four checks: model_fit (is each call site's model the right one for its
 prompt under your priorities), cache_readiness (will the prompt hit the
@@ -1350,6 +1396,7 @@ placement).
 Examples:
   tryaii diagnose plan --json
   tryaii diagnose check inventory.json --quality 3 --cost 4 --speed 2
+  tryaii diagnose report
 
 Exit codes:
   0 checks completed (findings included), 1 runtime failure, 2 usage error.
@@ -1429,6 +1476,32 @@ Exit codes:
 Docs: docs/cli/diagnose/check.md
 `;
 
+const HELP_DIAGNOSE_REPORT = `tryaii diagnose report -- Render a run to a self-contained HTML page
+
+Usage:
+  tryaii diagnose report [options]
+
+Renders <out-dir>/<run-id>/findings.json into index.html next to it: check
+chips per site (green = healthy), monthly cost/savings tiles, expandable
+detail per check, and -- when a previous run exists -- a delta band
+("since <run>: N improved..."). A pure function of the stored findings;
+the page is self-contained and everything stays local.
+
+Options:
+  --run <id>            Run to render (default: the 'latest' pointer)
+  --out-dir <dir>       Run store directory (default .tryaii/diagnose)
+  --out <file>          Write the HTML somewhere else instead
+
+Examples:
+  tryaii diagnose report
+  tryaii diagnose report --run 20260814T101530Z
+
+Exit codes:
+  0 success, 1 no runs found / runtime failure, 2 usage error.
+
+Docs: docs/cli/diagnose/report.md
+`;
+
 const HELP_HELP = `tryaii help -- Show help for tryaii or a specific command
 
 Usage:
@@ -1473,6 +1546,7 @@ const COMMAND_HELP: Record<string, string> = {
 const DIAGNOSE_VERB_HELP: Record<string, string> = {
   plan: HELP_DIAGNOSE_PLAN,
   check: HELP_DIAGNOSE_CHECK,
+  report: HELP_DIAGNOSE_REPORT,
 };
 
 function version(): string {

@@ -44,12 +44,15 @@ def _cases() -> list:
     return [pytest.param(c, id=c["name"]) for c in doc["cases"]]
 
 
-def _run_in(cmd: list, stdin_data, env, cwd: Path,
-            corpus: list) -> tuple[int, str, str]:
-    for name in corpus:
+def _run_in(cmd_prefix: list, inp: dict, stdin_data, env,
+            cwd: Path) -> tuple[int, str, str]:
+    for name in inp.get("copy_from_corpus", []):
         shutil.copy2(FIXTURES / "corpus" / name, cwd / name)
-    proc = subprocess.run(cmd, input=stdin_data, capture_output=True,
-                          cwd=str(cwd), env=env)
+    for pre in inp.get("pre_argv", []):
+        subprocess.run([*cmd_prefix, *pre], capture_output=True,
+                       cwd=str(cwd), env=env, check=True)
+    proc = subprocess.run([*cmd_prefix, *inp["argv"]], input=stdin_data,
+                          capture_output=True, cwd=str(cwd), env=env)
     return (proc.returncode,
             proc.stdout.decode("utf-8").replace("\r\n", "\n"),
             proc.stderr.decode("utf-8").replace("\r\n", "\n"))
@@ -74,7 +77,6 @@ def test_cli_outputs_byte_identical(case):
     if case["expected"] is None:
         pytest.skip("expected block not frozen yet")
     inp = case["input"]
-    argv = inp["argv"]
     corpus = inp.get("copy_from_corpus", [])
     env = dict(os.environ, TRYAII_NO_BANNER="1", PYTHONIOENCODING="utf-8",
                PYTHONPATH=str(REPO_ROOT / "packages" / "python"))
@@ -86,10 +88,10 @@ def test_cli_outputs_byte_identical(case):
             tempfile.TemporaryDirectory() as node_tmp:
         py_cwd, node_cwd = Path(py_tmp), Path(node_tmp)
         py_code, py_out, py_err = _run_in(
-            [sys.executable, "-c", "from tryaii.cli.main import cli; cli()", *argv],
-            stdin_data, env, py_cwd, corpus)
+            [sys.executable, "-c", "from tryaii.cli.main import cli; cli()"],
+            inp, stdin_data, env, py_cwd)
         node_code, node_out, node_err = _run_in(
-            [NODE_EXE, str(NODE_CLI), *argv], stdin_data, env, node_cwd, corpus)
+            [NODE_EXE, str(NODE_CLI)], inp, stdin_data, env, node_cwd)
 
         assert node_code == py_code, (
             f"exit codes differ: python={py_code} node={node_code}\n"

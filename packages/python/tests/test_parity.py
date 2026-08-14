@@ -159,6 +159,7 @@ COMMAND_HELP_CONSTANTS = {
 DIAGNOSE_VERB_HELP_CONSTANTS = {
     "plan": "HELP_DIAGNOSE_PLAN",
     "check": "HELP_DIAGNOSE_CHECK",
+    "report": "HELP_DIAGNOSE_REPORT",
 }
 
 
@@ -311,5 +312,33 @@ def test_diagnose_package_data_matches_shared_master(filename):
     assert not stale, (
         f"Package copies out of sync with shared/diagnose/{filename}: "
         + ", ".join(stale)
+        + " -- run scripts/sync-shared.py"
+    )
+
+
+def test_diagnose_report_template_pack_matches_shared_master():
+    """The packed report template must equal a re-pack of the shared master.
+
+    The template ships packed into JSON (report_template.json) so it flows
+    through the JSON-only asset pipeline; this re-packs the master with the
+    same serialization sync-shared.py uses and byte-compares both copies.
+    """
+    master_path = SHARED_DIAGNOSE / "report" / "template.html"
+    if not master_path.exists():
+        pytest.skip("shared/diagnose not present (package-only checkout)")
+
+    expected = json.dumps(
+        {"html": master_path.read_text(encoding="utf-8")},
+        ensure_ascii=False, indent=2) + "\n"
+    stale = [
+        str(path.relative_to(REPO_ROOT))
+        for path in (PY_DIAGNOSE_DATA / "report_template.json",
+                     NODE_DIAGNOSE_DATA / "report_template.json")
+        if path.exists()
+        and path.read_text(encoding="utf-8") != expected
+    ]
+    assert not stale, (
+        "Packed report template out of sync with "
+        "shared/diagnose/report/template.html: " + ", ".join(stale)
         + " -- run scripts/sync-shared.py"
     )
