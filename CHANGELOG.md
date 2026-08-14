@@ -2,6 +2,53 @@
 
 ## Unreleased
 
+### diagnose — agent-first codebase LLM diagnostics (both SDKs)
+
+New `tryaii diagnose` command (verbs: `init`, `plan`, `check`, `report`) and
+`tryaii.diagnose` / `tryaii/diagnose` engine modules. The user's coding
+agent interviews the user, discovers the codebase's LLM call sites
+free-form (any language), and writes an inventory JSON; tryaii runs
+deterministic checks over it and renders a local HTML report.
+**Insight-only**: never edits code, never sends anything anywhere.
+
+- **Four checks per call site** — `model_fit` (full-catalog ranking under
+  the user's quality/cost/speed priorities; rank + absolute dimension
+  scores, never renormalized cross-set deltas), `cache_readiness` (the
+  cachelint engine per site), `cost_exposure` (per-call/monthly cost,
+  upper-bound cache savings via conservative read-discount factors in
+  `shared/diagnose/costmodel.json`, quality-tolerant cheaper-swap
+  suggestion), `hygiene` (canonical prompt scan + fix hints via a new
+  public `cachelint.analyzer.hygiene_findings` seam).
+- **Lenient intake, honest degradation**: loosely-shaped inventories are
+  accepted; anything missing marks that check `insufficient data` with a
+  reason for that site — nothing is guessed. Every site appears in the
+  report; healthy ones as green checks.
+- **Agent playbook**: `diagnose init` installs
+  `.claude/skills/tryaii-diagnose/SKILL.md`, an AGENTS.md marker block,
+  and an anchored `/.tryaii/` gitignore entry (idempotent; masters live in
+  `shared/diagnose/skill/`). `diagnose plan --json` hands the agent the
+  check catalog, interview questions, and the exact inventory shape.
+- **Run store + deltas**: each `check` writes
+  `.tryaii/diagnose/<run-id>/` (inventory, findings.json, meta) plus a
+  `latest` pointer; `report` renders a self-contained `index.html` from
+  ONE shared template (`shared/diagnose/report/template.html`) and shows a
+  delta band vs the previous run. `findings.json` carries a redacted
+  `summary` layer (`tryaii.diagnose.summary/1`) — no code, prompts, or
+  paths — designed as the payload for a future opt-in upload (not built).
+- **Live classification** rides the routing daemon (one embedding-model
+  load for N sites) and is gated on `tryaii setup`, which now writes a
+  `setup.json` marker; inventories with precomputed `_classification`
+  need neither.
+- **Cross-SDK parity, enforced**: `shared/diagnose/SPEC.md` contract, 8
+  fixture suites frozen from the Python reference
+  (`scripts/gen-diagnose-fixtures.py --check`), a Node conformance suite
+  (including byte-identical HTML against the Python-rendered goldens), and
+  a cross-CLI test asserting byte-identical stdout/stderr AND written
+  files (findings, meta, report HTML, installed skill) for every CLI
+  fixture. En route, the Node scoring engine switched to half-even
+  rounding/formatting (`halfEvenRound`/`formatFixed`), fixing a real
+  cross-SDK divergence on rounding-boundary scores.
+
 ### cachelint — pre-flight prompt-cache analysis (both SDKs)
 
 New `tryaii.cachelint` (Python) / `tryaii/cachelint` (Node subpath export)

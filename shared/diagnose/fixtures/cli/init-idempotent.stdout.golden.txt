@@ -1,0 +1,3 @@
+ok .claude/skills/tryaii-diagnose/SKILL.md (up to date)
+ok AGENTS.md (up to date)
+ok .gitignore (up to date)

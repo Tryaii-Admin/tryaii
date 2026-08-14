@@ -24,17 +24,26 @@ def pack_json(payload: dict) -> str:
 
 # Non-JSON masters packed INTO json so they flow through the existing
 # JSON-only asset pipeline (copy-assets.mjs) unchanged:
-# (source file, payload key, destinations)
+# ([(payload key, source file), ...], destinations)
 _PY_DIAGNOSE_DATA = ROOT / "packages" / "python" / "tryaii" / "diagnose" / "data"
 _NODE_DIAGNOSE_DATA = ROOT / "packages" / "node" / "src" / "diagnose" / "data"
 
 PACKS = [
     (
-        SHARED / "diagnose" / "report" / "template.html",
-        "html",
+        [("html", SHARED / "diagnose" / "report" / "template.html")],
         [
             _PY_DIAGNOSE_DATA / "report_template.json",
             _NODE_DIAGNOSE_DATA / "report_template.json",
+        ],
+    ),
+    (
+        [
+            ("skill_md", SHARED / "diagnose" / "skill" / "SKILL.md"),
+            ("agents_pointer_md", SHARED / "diagnose" / "skill" / "agents-pointer.md"),
+        ],
+        [
+            _PY_DIAGNOSE_DATA / "skill.json",
+            _NODE_DIAGNOSE_DATA / "skill.json",
         ],
     ),
 ]
@@ -100,16 +109,19 @@ def sync():
             copied += 1
 
     # Packed masters (non-JSON sources wrapped in JSON)
-    for source, key, dests in PACKS:
-        if not source.exists():
-            print(f"  SKIP {source} (not found)")
+    for parts, dests in PACKS:
+        missing = [source for _key, source in parts if not source.exists()]
+        if missing:
+            print(f"  SKIP {missing[0]} (not found)")
             continue
-        packed = pack_json({key: source.read_text(encoding="utf-8")})
+        packed = pack_json({key: source.read_text(encoding="utf-8")
+                            for key, source in parts})
+        names = "+".join(source.name for _key, source in parts)
         for dest in dests:
             dest.parent.mkdir(parents=True, exist_ok=True)
             with open(dest, "w", encoding="utf-8", newline="\n") as fh:
                 fh.write(packed)
-            print(f"  {source.name} (packed) -> {dest.relative_to(ROOT)}")
+            print(f"  {names} (packed) -> {dest.relative_to(ROOT)}")
             copied += 1
 
     # Centroids (all files)

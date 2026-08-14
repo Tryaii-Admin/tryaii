@@ -157,6 +157,7 @@ COMMAND_HELP_CONSTANTS = {
 # diagnose verb -> the constant that holds its verb help in both CLIs
 # (`tryaii diagnose <verb> --help`).
 DIAGNOSE_VERB_HELP_CONSTANTS = {
+    "init": "HELP_DIAGNOSE_INIT",
     "plan": "HELP_DIAGNOSE_PLAN",
     "check": "HELP_DIAGNOSE_CHECK",
     "report": "HELP_DIAGNOSE_REPORT",
@@ -316,29 +317,43 @@ def test_diagnose_package_data_matches_shared_master(filename):
     )
 
 
-def test_diagnose_report_template_pack_matches_shared_master():
-    """The packed report template must equal a re-pack of the shared master.
+# Packed masters: output filename -> [(payload key, master path), ...].
+# Must mirror PACKS in scripts/sync-shared.py.
+DIAGNOSE_PACKS = {
+    "report_template.json": [
+        ("html", SHARED_DIAGNOSE / "report" / "template.html"),
+    ],
+    "skill.json": [
+        ("skill_md", SHARED_DIAGNOSE / "skill" / "SKILL.md"),
+        ("agents_pointer_md", SHARED_DIAGNOSE / "skill" / "agents-pointer.md"),
+    ],
+}
 
-    The template ships packed into JSON (report_template.json) so it flows
-    through the JSON-only asset pipeline; this re-packs the master with the
-    same serialization sync-shared.py uses and byte-compares both copies.
+
+@pytest.mark.parametrize("filename", sorted(DIAGNOSE_PACKS))
+def test_diagnose_packed_data_matches_shared_masters(filename):
+    """Packed diagnose data must equal a re-pack of its shared masters.
+
+    Non-JSON masters (HTML template, skill markdown) ship packed into JSON
+    so they flow through the JSON-only asset pipeline; this re-packs them
+    with the same serialization sync-shared.py uses and byte-compares both
+    package copies.
     """
-    master_path = SHARED_DIAGNOSE / "report" / "template.html"
-    if not master_path.exists():
+    parts = DIAGNOSE_PACKS[filename]
+    if not all(master.exists() for _key, master in parts):
         pytest.skip("shared/diagnose not present (package-only checkout)")
 
     expected = json.dumps(
-        {"html": master_path.read_text(encoding="utf-8")},
+        {key: master.read_text(encoding="utf-8") for key, master in parts},
         ensure_ascii=False, indent=2) + "\n"
     stale = [
         str(path.relative_to(REPO_ROOT))
-        for path in (PY_DIAGNOSE_DATA / "report_template.json",
-                     NODE_DIAGNOSE_DATA / "report_template.json")
+        for path in (PY_DIAGNOSE_DATA / filename, NODE_DIAGNOSE_DATA / filename)
         if path.exists()
         and path.read_text(encoding="utf-8") != expected
     ]
     assert not stale, (
-        "Packed report template out of sync with "
-        "shared/diagnose/report/template.html: " + ", ".join(stale)
+        f"Packed {filename} out of sync with its shared/diagnose masters: "
+        + ", ".join(stale)
         + " -- run scripts/sync-shared.py"
     )

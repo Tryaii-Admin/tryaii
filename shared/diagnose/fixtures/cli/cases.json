@@ -148,6 +148,61 @@
       }
     },
     {
+      "name": "init-fresh",
+      "description": "init in an empty repo: writes the skill, creates AGENTS.md from the pointer block, creates the anchored .gitignore. The parity test byte-compares all written files across CLIs.",
+      "input": {
+        "argv": [
+          "diagnose",
+          "init"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "init-fresh.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "init-idempotent",
+      "description": "A second init changes nothing: every target reports up to date.",
+      "input": {
+        "pre_argv": [
+          [
+            "diagnose",
+            "init"
+          ]
+        ],
+        "argv": [
+          "diagnose",
+          "init"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "init-idempotent.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "init-existing-agents",
+      "description": "init with a pre-existing AGENTS.md appends the marker block after the existing content (which is never touched).",
+      "input": {
+        "copy_from_corpus": [
+          "AGENTS.md"
+        ],
+        "argv": [
+          "diagnose",
+          "init",
+          "--no-gitignore"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "init-existing-agents.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
       "name": "report-latest",
       "description": "report renders the latest run's index.html; the parity test byte-compares the written HTML between the two CLIs.",
       "input": {

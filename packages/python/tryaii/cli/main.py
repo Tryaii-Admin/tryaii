@@ -304,6 +304,7 @@ deterministic checks over it and stores each run under .tryaii/diagnose/.
 Insight-only -- it never edits code and never sends anything anywhere.
 
 Verbs:
+  init                  Install the agent playbook into this repo (skill + AGENTS.md)
   plan                  Print the check catalog + interview for the agent (--json)
   check <inventory>     Run the checks over an agent-written inventory JSON
   report                Render a run's findings to a self-contained index.html
@@ -315,6 +316,7 @@ cheaper-swap suggestion), hygiene (prompt structure and dynamic-value
 placement).
 
 Examples:
+  tryaii diagnose init
   tryaii diagnose plan --json
   tryaii diagnose check inventory.json --quality 3 --cost 4 --speed 2
   tryaii diagnose report
@@ -323,6 +325,40 @@ Exit codes:
   0 checks completed (findings included), 1 runtime failure, 2 usage error.
 
 Docs: docs/cli/diagnose/README.md
+"""
+
+HELP_DIAGNOSE_INIT = """tryaii diagnose init -- Install the agent playbook into a repo
+
+Usage:
+  tryaii diagnose init [options]
+
+Writes the pieces your coding agent needs to run diagnose end to end:
+
+  .claude/skills/tryaii-diagnose/SKILL.md   the playbook (interview ->
+                                            discovery -> inventory ->
+                                            check -> report)
+  AGENTS.md                                 a short pointer block (added
+                                            between tryaii-diagnose
+                                            markers; created if missing)
+  .gitignore                                an anchored /.tryaii/ entry so
+                                            run data stays untracked
+
+Idempotent: files already up to date are left alone (the AGENTS.md block
+is replaced in place on upgrades). Everything outside the marker block is
+never touched.
+
+Options:
+  --dir <path>          Target repo root (default: current directory)
+  --no-gitignore        Do not touch .gitignore
+
+Examples:
+  tryaii diagnose init
+  tryaii diagnose init --dir ../my-app --no-gitignore
+
+Exit codes:
+  0 success, 1 runtime failure, 2 usage error.
+
+Docs: docs/cli/diagnose/init.md
 """
 
 HELP_DIAGNOSE_PLAN = """tryaii diagnose plan -- The check catalog + interview for the agent
@@ -463,6 +499,7 @@ COMMAND_HELP = {
 # Per-verb help for the diagnose command. Mirrors DIAGNOSE_VERB_HELP in the
 # Node CLI (same parity guard as COMMAND_HELP).
 DIAGNOSE_VERB_HELP = {
+    "init": HELP_DIAGNOSE_INIT,
     "plan": HELP_DIAGNOSE_PLAN,
     "check": HELP_DIAGNOSE_CHECK,
     "report": HELP_DIAGNOSE_REPORT,
@@ -1458,6 +1495,73 @@ def _diagnose_check(argv):
         _write_paced(_diagnose_summary_text(findings, out_dir_display))
 
 
+_AGENTS_BEGIN = "<!-- tryaii-diagnose:begin -->"
+_AGENTS_END = "<!-- tryaii-diagnose:end -->"
+_GITIGNORE_LINE = "/.tryaii/"
+
+
+def _init_write(path: Path, content: str, display: str) -> None:
+    """Write `content` if the file differs; echo what happened. All init
+    writes are LF-normalized (both CLIs read+write LF for parity)."""
+    if path.is_file() and path.read_text(encoding="utf-8") == content:
+        print(f"ok {display} (up to date)")
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(content)
+    print(f"-> {display}")
+
+
+def _diagnose_init(argv):
+    parser = argparse.ArgumentParser(prog="tryaii diagnose init", add_help=False)
+    parser.add_argument("--dir", default=".", dest="dir")
+    parser.add_argument("--no-gitignore", action="store_true", dest="no_gitignore")
+    args = parser.parse_args(argv)
+
+    data = json.loads(_diagnose_data_path("skill.json").read_text(encoding="utf-8"))
+    base = Path(args.dir)
+    base_display = args.dir.replace("\\", "/")
+
+    def display(rel: str) -> str:
+        return rel if base_display == "." else f"{base_display}/{rel}"
+
+    # 1. The skill (a tryaii-owned file: always safe to overwrite).
+    _init_write(base / ".claude" / "skills" / "tryaii-diagnose" / "SKILL.md",
+                data["skill_md"],
+                display(".claude/skills/tryaii-diagnose/SKILL.md"))
+
+    # 2. AGENTS.md pointer block (replace between markers / append / create;
+    #    everything outside the markers is never touched).
+    block = data["agents_pointer_md"].strip()
+    agents_path = base / "AGENTS.md"
+    if agents_path.is_file():
+        text = agents_path.read_text(encoding="utf-8")
+        if _AGENTS_BEGIN in text and _AGENTS_END in text:
+            start = text.index(_AGENTS_BEGIN)
+            end = text.index(_AGENTS_END) + len(_AGENTS_END)
+            content = text[:start] + block + text[end:]
+        else:
+            content = text.rstrip("\n") + "\n\n" + block + "\n"
+    else:
+        content = block + "\n"
+    _init_write(agents_path, content, display("AGENTS.md"))
+
+    # 3. Anchored gitignore entry (the 0.2.0 wheel incident is why this is
+    #    anchored: an unanchored pattern can eat package directories).
+    if not args.no_gitignore:
+        gi_path = base / ".gitignore"
+        if gi_path.is_file():
+            text = gi_path.read_text(encoding="utf-8")
+            if _GITIGNORE_LINE in text.splitlines():
+                content = text
+            else:
+                content = (text.rstrip("\n") + "\n\n# tryaii diagnose runs (local)\n"
+                           + _GITIGNORE_LINE + "\n")
+        else:
+            content = "# tryaii diagnose runs (local)\n" + _GITIGNORE_LINE + "\n"
+        _init_write(gi_path, content, display(".gitignore"))
+
+
 def _diagnose_report(argv):
     parser = argparse.ArgumentParser(prog="tryaii diagnose report", add_help=False)
     parser.add_argument("--run")
@@ -1504,8 +1608,8 @@ def _diagnose_report(argv):
 def cmd_diagnose(argv):
     """Verb dispatcher for `tryaii diagnose` (verb-peeling; no argparse
     sub-subparsers exist in this CLI -- mirrors cmdDiagnose in cli.ts)."""
-    verbs = {"plan": _diagnose_plan, "check": _diagnose_check,
-             "report": _diagnose_report}
+    verbs = {"init": _diagnose_init, "plan": _diagnose_plan,
+             "check": _diagnose_check, "report": _diagnose_report}
     verb = argv[0] if argv else None
     if verb is None:
         print('error: missing diagnose verb. Run "tryaii help diagnose".',

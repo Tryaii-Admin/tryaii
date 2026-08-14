@@ -1044,6 +1044,91 @@ async function diagnoseCheck(argv: string[]): Promise<void> {
   }
 }
 
+const AGENTS_BEGIN = '<!-- tryaii-diagnose:begin -->';
+const AGENTS_END = '<!-- tryaii-diagnose:end -->';
+const GITIGNORE_LINE = '/.tryaii/';
+
+/**
+ * Write `content` if the file differs; echo what happened. All init writes
+ * are LF-normalized (both CLIs read+write LF for parity).
+ */
+function initWrite(path: string, content: string, display: string): void {
+  if (existsSync(path) && readFileSync(path, 'utf-8').replace(/\r\n/g, '\n') === content) {
+    out.write(`ok ${display} (up to date)\n`);
+    return;
+  }
+  mkdirSync(resolve(path, '..'), { recursive: true });
+  writeFileSync(path, content, 'utf-8');
+  out.write(`-> ${display}\n`);
+}
+
+function initReadLf(path: string): string {
+  return readFileSync(path, 'utf-8').replace(/\r\n/g, '\n');
+}
+
+async function diagnoseInit(argv: string[]): Promise<void> {
+  const { values } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      'dir': { type: 'string', default: '.' },
+      'no-gitignore': { type: 'boolean', default: false },
+    },
+  });
+
+  const data = JSON.parse(
+    readFileSync(new URL('./diagnose/data/skill.json', import.meta.url), 'utf-8'),
+  ) as { skill_md: string; agents_pointer_md: string };
+  const base = values.dir;
+  const baseDisplay = base.replace(/\\/g, '/');
+  const display = (rel: string): string => (baseDisplay === '.' ? rel : `${baseDisplay}/${rel}`);
+
+  // 1. The skill (a tryaii-owned file: always safe to overwrite).
+  initWrite(
+    join(base, '.claude', 'skills', 'tryaii-diagnose', 'SKILL.md'),
+    data.skill_md,
+    display('.claude/skills/tryaii-diagnose/SKILL.md'),
+  );
+
+  // 2. AGENTS.md pointer block (replace between markers / append / create;
+  //    everything outside the markers is never touched).
+  const block = data.agents_pointer_md.trim();
+  const agentsPath = join(base, 'AGENTS.md');
+  let agentsContent: string;
+  if (existsSync(agentsPath)) {
+    const text = initReadLf(agentsPath);
+    if (text.includes(AGENTS_BEGIN) && text.includes(AGENTS_END)) {
+      const start = text.indexOf(AGENTS_BEGIN);
+      const end = text.indexOf(AGENTS_END) + AGENTS_END.length;
+      agentsContent = text.slice(0, start) + block + text.slice(end);
+    } else {
+      agentsContent = text.replace(/\n+$/, '') + '\n\n' + block + '\n';
+    }
+  } else {
+    agentsContent = block + '\n';
+  }
+  initWrite(agentsPath, agentsContent, display('AGENTS.md'));
+
+  // 3. Anchored gitignore entry (the 0.2.0 wheel incident is why this is
+  //    anchored: an unanchored pattern can eat package directories).
+  if (!values['no-gitignore']) {
+    const giPath = join(base, '.gitignore');
+    let giContent: string;
+    if (existsSync(giPath)) {
+      const text = initReadLf(giPath);
+      if (text.split('\n').includes(GITIGNORE_LINE)) {
+        giContent = text;
+      } else {
+        giContent =
+          text.replace(/\n+$/, '') + '\n\n# tryaii diagnose runs (local)\n' + GITIGNORE_LINE + '\n';
+      }
+    } else {
+      giContent = '# tryaii diagnose runs (local)\n' + GITIGNORE_LINE + '\n';
+    }
+    initWrite(giPath, giContent, display('.gitignore'));
+  }
+}
+
 async function diagnoseReport(argv: string[]): Promise<void> {
   const { values } = parseArgs({
     args: argv,
@@ -1091,6 +1176,7 @@ async function diagnoseReport(argv: string[]): Promise<void> {
 /** Verb dispatcher for `tryaii diagnose` (verb-peeling, like `help <topic>`). */
 async function cmdDiagnose(subArgs: string[]): Promise<void> {
   const verbs: Record<string, (argv: string[]) => Promise<void>> = {
+    init: diagnoseInit,
     plan: diagnosePlan,
     check: diagnoseCheck,
     report: diagnoseReport,
@@ -1383,6 +1469,7 @@ deterministic checks over it and stores each run under .tryaii/diagnose/.
 Insight-only -- it never edits code and never sends anything anywhere.
 
 Verbs:
+  init                  Install the agent playbook into this repo (skill + AGENTS.md)
   plan                  Print the check catalog + interview for the agent (--json)
   check <inventory>     Run the checks over an agent-written inventory JSON
   report                Render a run's findings to a self-contained index.html
@@ -1394,6 +1481,7 @@ cheaper-swap suggestion), hygiene (prompt structure and dynamic-value
 placement).
 
 Examples:
+  tryaii diagnose init
   tryaii diagnose plan --json
   tryaii diagnose check inventory.json --quality 3 --cost 4 --speed 2
   tryaii diagnose report
@@ -1402,6 +1490,40 @@ Exit codes:
   0 checks completed (findings included), 1 runtime failure, 2 usage error.
 
 Docs: docs/cli/diagnose/README.md
+`;
+
+const HELP_DIAGNOSE_INIT = `tryaii diagnose init -- Install the agent playbook into a repo
+
+Usage:
+  tryaii diagnose init [options]
+
+Writes the pieces your coding agent needs to run diagnose end to end:
+
+  .claude/skills/tryaii-diagnose/SKILL.md   the playbook (interview ->
+                                            discovery -> inventory ->
+                                            check -> report)
+  AGENTS.md                                 a short pointer block (added
+                                            between tryaii-diagnose
+                                            markers; created if missing)
+  .gitignore                                an anchored /.tryaii/ entry so
+                                            run data stays untracked
+
+Idempotent: files already up to date are left alone (the AGENTS.md block
+is replaced in place on upgrades). Everything outside the marker block is
+never touched.
+
+Options:
+  --dir <path>          Target repo root (default: current directory)
+  --no-gitignore        Do not touch .gitignore
+
+Examples:
+  tryaii diagnose init
+  tryaii diagnose init --dir ../my-app --no-gitignore
+
+Exit codes:
+  0 success, 1 runtime failure, 2 usage error.
+
+Docs: docs/cli/diagnose/init.md
 `;
 
 const HELP_DIAGNOSE_PLAN = `tryaii diagnose plan -- The check catalog + interview for the agent
@@ -1544,6 +1666,7 @@ const COMMAND_HELP: Record<string, string> = {
  * Python CLI (same parity guard as COMMAND_HELP).
  */
 const DIAGNOSE_VERB_HELP: Record<string, string> = {
+  init: HELP_DIAGNOSE_INIT,
   plan: HELP_DIAGNOSE_PLAN,
   check: HELP_DIAGNOSE_CHECK,
   report: HELP_DIAGNOSE_REPORT,

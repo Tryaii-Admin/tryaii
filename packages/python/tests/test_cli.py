@@ -70,8 +70,10 @@ def test_diagnose_help_prints_command_text(monkeypatch, capsys, argv):
 @pytest.mark.parametrize(
     "argv,verb",
     [
+        (("diagnose", "init", "--help"), "init"),
         (("diagnose", "plan", "--help"), "plan"),
         (("diagnose", "check", "-h"), "check"),
+        (("diagnose", "report", "--help"), "report"),
     ],
 )
 def test_diagnose_verb_help_prints_verb_text(monkeypatch, capsys, argv, verb):

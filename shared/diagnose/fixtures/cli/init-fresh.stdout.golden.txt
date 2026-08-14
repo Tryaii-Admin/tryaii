@@ -1,0 +1,3 @@
+-> .claude/skills/tryaii-diagnose/SKILL.md
+-> AGENTS.md
+-> .gitignore

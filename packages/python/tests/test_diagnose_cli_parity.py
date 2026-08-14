@@ -58,17 +58,19 @@ def _run_in(cmd_prefix: list, inp: dict, stdin_data, env,
             proc.stderr.decode("utf-8").replace("\r\n", "\n"))
 
 
-def _written_files(cwd: Path, corpus: list) -> dict:
-    """Every file the CLI wrote under this cwd (staged corpus files excluded),
-    as {relative posix path: normalized bytes}."""
+def _written_files(cwd: Path) -> dict:
+    """Every file under this cwd as {relative posix path: normalized bytes}.
+
+    Staged corpus files are included on purpose: both cwds get identical
+    copies, so untouched ones compare equal for free — and a verb that
+    MODIFIES a staged file (init + an existing AGENTS.md) is still compared.
+    """
     out = {}
     for path in sorted(cwd.rglob("*")):
         if not path.is_file():
             continue
-        rel = path.relative_to(cwd).as_posix()
-        if rel in corpus:
-            continue
-        out[rel] = path.read_bytes().replace(b"\r\n", b"\n")
+        out[path.relative_to(cwd).as_posix()] = (
+            path.read_bytes().replace(b"\r\n", b"\n"))
     return out
 
 
@@ -77,7 +79,6 @@ def test_cli_outputs_byte_identical(case):
     if case["expected"] is None:
         pytest.skip("expected block not frozen yet")
     inp = case["input"]
-    corpus = inp.get("copy_from_corpus", [])
     env = dict(os.environ, TRYAII_NO_BANNER="1", PYTHONIOENCODING="utf-8",
                PYTHONPATH=str(REPO_ROOT / "packages" / "python"))
     stdin_data = None
@@ -99,8 +100,8 @@ def test_cli_outputs_byte_identical(case):
         assert node_out == py_out, "stdout differs between the two CLIs"
         assert node_err == py_err, "stderr differs between the two CLIs"
 
-        py_files = _written_files(py_cwd, corpus)
-        node_files = _written_files(node_cwd, corpus)
+        py_files = _written_files(py_cwd)
+        node_files = _written_files(node_cwd)
         assert sorted(py_files) == sorted(node_files), (
             "the two CLIs wrote different file sets")
         for rel, content in py_files.items():

@@ -40,6 +40,7 @@ Routing is fully local — no API key. To also *call* the chosen model, use the 
 | **Embeddings** | [embeddings/](embeddings/README.md) | `LocalEmbeddingProvider`, `OpenAIEmbeddingProvider` (Python only), `BaseEmbeddingProvider` |
 | **Configuration & caching** | [configuration/](configuration/README.md) · [caching](configuration/caching.md) | `TryaiiDreConfig` / `createDefaultConfig`, `CacheConfig` |
 | **Eval dashboard** | [dashboard.md](dashboard.md) | `renderDashboard` (Node export) |
+| **Diagnose engine** | [diagnose.md](diagnose.md) · [CLI](../cli/diagnose/README.md) | `tryaii.diagnose` / `tryaii/diagnose` subpath: `analyze_inventory`, `render_report_html`, run store |
 
 ## Import surfaces
 
