@@ -229,3 +229,52 @@ def test_cachelint_package_data_matches_shared_master():
         + ", ".join(stale)
         + " -- run scripts/sync-shared.py"
     )
+
+
+# ---------------------------------------------------------------------------
+# diagnose shared data (plan.json + costmodel.json)
+# ---------------------------------------------------------------------------
+
+SHARED_DIAGNOSE = REPO_ROOT / "shared" / "diagnose"
+PY_DIAGNOSE_DATA = REPO_ROOT / "packages" / "python" / "tryaii" / "diagnose" / "data"
+NODE_DIAGNOSE_DATA = REPO_ROOT / "packages" / "node" / "src" / "diagnose" / "data"
+
+DIAGNOSE_DATA_FILES = ("plan.json", "costmodel.json")
+
+
+@pytest.mark.parametrize("filename", DIAGNOSE_DATA_FILES)
+def test_diagnose_data_identical_across_sdks(filename):
+    """Both SDKs must ship byte-identical diagnose data files.
+
+    plan.json IS the `diagnose plan --json` output; costmodel.json feeds the
+    cache-savings estimate — any drift makes the same inventory produce
+    different findings depending on the SDK language.
+    """
+    node_copy = NODE_DIAGNOSE_DATA / filename
+    if not node_copy.exists():
+        pytest.skip("Node diagnose data not present (python-only checkout)")
+
+    assert (PY_DIAGNOSE_DATA / filename).read_bytes() == node_copy.read_bytes(), (
+        f"diagnose {filename} diverged between the two SDKs -- edit "
+        f"shared/diagnose/{filename} and run scripts/sync-shared.py"
+    )
+
+
+@pytest.mark.parametrize("filename", DIAGNOSE_DATA_FILES)
+def test_diagnose_package_data_matches_shared_master(filename):
+    """Each package's bundled diagnose data must equal the shared/ master."""
+    master_path = SHARED_DIAGNOSE / filename
+    if not master_path.exists():
+        pytest.skip("shared/diagnose not present (package-only checkout)")
+
+    master = master_path.read_bytes()
+    stale = [
+        str(path.relative_to(REPO_ROOT))
+        for path in (PY_DIAGNOSE_DATA / filename, NODE_DIAGNOSE_DATA / filename)
+        if path.exists() and path.read_bytes() != master
+    ]
+    assert not stale, (
+        f"Package copies out of sync with shared/diagnose/{filename}: "
+        + ", ".join(stale)
+        + " -- run scripts/sync-shared.py"
+    )

@@ -214,6 +214,42 @@ def _recommendations(resolved: dict, verdict_code: str, findings: list,
 
 
 # ---------------------------------------------------------------------------
+# Hygiene seam (public — consumed by tryaii.diagnose)
+# ---------------------------------------------------------------------------
+
+DEFAULT_FIX_HINT = "Move this value after the static prefix."
+
+
+def hygiene_findings(prompt: Any) -> dict:
+    """Provider-independent hygiene scan of a prompt.
+
+    Canonical render + detector scan + section attribution + per-kind fix
+    hints — no provider KB, no tokenizer, so it works for sites that declare
+    no provider. Findings carry the standard detector dict plus a ``hint``.
+    """
+    canonical, sections, _non_text = build_canonical(prompt)
+    findings = detectors.scan(canonical)
+    for f in findings:
+        sec = _section_of(sections, f.start)
+        if sec:
+            f.section = sec.name
+            f.section_offset = f.start - sec.start
+    out = []
+    for f in findings:
+        d = f.to_dict()
+        d["hint"] = _FIX_HINTS.get(f.kind, DEFAULT_FIX_HINT)
+        out.append(d)
+    return {
+        "findings": out,
+        "blocking_count": len(detectors.blocking(findings)),
+        "findings_in_system": sum(1 for f in findings if f.section == "system"),
+        "has_system": any(s.name == "system" for s in sections),
+        "has_tools": any(s.name == "tools" for s in sections),
+        "message_count": sum(1 for s in sections if s.name.startswith("messages[")),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Main entry
 # ---------------------------------------------------------------------------
 

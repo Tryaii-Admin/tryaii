@@ -1,0 +1,105 @@
+{
+  "schema": "tryaii.diagnose.plan/1",
+  "about": "tryaii diagnose analyzes the LLM call sites of a codebase. YOU (the coding agent) interview the user, discover the call sites, and write an inventory JSON; tryaii runs deterministic checks over it and renders a local report. diagnose is insight-only: it never edits code and never sends anything anywhere.",
+  "checks": [
+    {
+      "id": "model_fit",
+      "title": "Model fit",
+      "what": "Classifies each call site's prompt and ranks the full model catalog under the user's quality/cost/speed priorities. Shows where the currently used model ranks and what would fit better.",
+      "needs": ["prompt"],
+      "better_with": ["model"],
+      "recommended": true
+    },
+    {
+      "id": "cache_readiness",
+      "title": "Cache readiness",
+      "what": "Pre-flight prompt-cache analysis (cachelint): will this prompt hit the provider's cache, what blocks it, how large is the stable prefix, and what to fix first.",
+      "needs": ["prompt", "provider"],
+      "better_with": ["model"],
+      "recommended": true
+    },
+    {
+      "id": "cost_exposure",
+      "title": "Cost exposure",
+      "what": "Estimated cost per call and per month, potential cache savings, and a cheaper-model swap suggestion that keeps quality within tolerance.",
+      "needs": ["prompt", "model"],
+      "better_with": ["calls_per_day", "provider"],
+      "recommended": true
+    },
+    {
+      "id": "hygiene",
+      "title": "Prompt hygiene",
+      "what": "Structural prompt review: dynamic values (timestamps, IDs, template slots) in the wrong place, dynamic content inside the system block, missing static structure.",
+      "needs": ["prompt"],
+      "better_with": [],
+      "recommended": true
+    }
+  ],
+  "interview": [
+    {
+      "id": "checks",
+      "ask": "Which checks should I run? (recommended: all four)",
+      "type": "multi_select",
+      "options": ["model_fit", "cache_readiness", "cost_exposure", "hygiene"],
+      "default": "all"
+    },
+    {
+      "id": "scope",
+      "ask": "Should I look at the whole repo, specific paths, or only what changed on this branch?",
+      "type": "free_text",
+      "default": "whole repo"
+    },
+    {
+      "id": "priorities",
+      "ask": "How much do you care about quality / cost / speed, each 1-5?",
+      "type": "scale_1_5_triple",
+      "default": { "quality": 3, "cost": 3, "speed": 3 }
+    },
+    {
+      "id": "traffic",
+      "ask": "Roughly how many LLM calls per day does this code make (overall, or per call site if you know)? I will not guess this.",
+      "type": "free_text",
+      "optional": true
+    },
+    {
+      "id": "goal",
+      "ask": "What is the main goal here - reduce prices? faster replies? better quality?",
+      "type": "free_text",
+      "optional": true
+    }
+  ],
+  "inventory": {
+    "required_per_site": ["file", "line", "prompt"],
+    "optional_per_site": ["id", "provider", "model", "calls_per_day", "output_tokens", "notes"],
+    "notes": [
+      "prompt is either the rendered prompt string or {system?, tools?, messages: [{role, content}]}. If you can only see the template, include it with its slots intact - the detectors flag unrendered slots, which is signal, not failure.",
+      "Give each site a stable id (e.g. 'summarize-ticket') so future runs can show deltas even when line numbers move.",
+      "Omit what you do not know. Never invent traffic numbers - ask the user.",
+      "provider is the API the call goes through (openai, anthropic, gemini, xai, openrouter, bedrock, vertex); model is the model id string the code passes."
+    ],
+    "example": {
+      "version": 1,
+      "defaults": { "calls_per_day": 1000, "output_tokens": 500 },
+      "sites": [
+        {
+          "id": "summarize-ticket",
+          "file": "src/agents/summary.py",
+          "line": 42,
+          "provider": "openai",
+          "model": "gpt-4o",
+          "calls_per_day": 2000,
+          "prompt": {
+            "system": "You are a support-ticket summarizer. Always answer in three bullet points.",
+            "messages": [
+              { "role": "user", "content": "Summarize this ticket: {ticket_body}" }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "commands": {
+    "check": "tryaii diagnose check inventory.json --quality 3 --cost 4 --speed 2 --calls-per-day 1000 --goal \"reduce prices\"",
+    "report": "tryaii diagnose report"
+  }
+}

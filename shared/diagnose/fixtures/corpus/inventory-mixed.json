@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "defaults": { "calls_per_day": 1000 },
+  "sites": [
+    {
+      "id": "summarize-ticket",
+      "file": "src/agents/summary.py",
+      "line": 42,
+      "provider": "openai",
+      "model": "gpt-4o",
+      "calls_per_day": 2000,
+      "notes": "main support flow",
+      "prompt": {
+        "system": "You are a support-ticket summarizer for the ACME helpdesk. Always answer with exactly three bullet points: the problem, what was tried, and the recommended next step. Never invent details that are not in the ticket. Write in plain, non-technical language the customer can understand.",
+        "messages": [
+          { "role": "user", "content": "Summarize this ticket: {ticket_body} — opened 2026-08-14T10:00:00Z" }
+        ]
+      },
+      "_classification": {
+        "benchmark_similarities": { "MMLU": 0.55, "Chatbot Arena (LMSys)": 0.48, "DROP": 0.4 },
+        "broad_category": "analysis",
+        "subcategory": "summarization",
+        "confidence": 0.83
+      }
+    },
+    {
+      "id": "quick-answer",
+      "file": "src/handlers/faq.js",
+      "line": 17,
+      "prompt": "Answer the FAQ question briefly.",
+      "_classification": {
+        "benchmark_similarities": { "Chatbot Arena (LMSys)": 0.66, "MT-Bench": 0.5 },
+        "broad_category": "conversation",
+        "subcategory": "chat",
+        "confidence": 0.71
+      }
+    },
+    {
+      "file": "src/broken.py"
+    },
+    {
+      "id": "legacy-model",
+      "file": "src/legacy/report.py",
+      "line": 88,
+      "provider": "anthropic",
+      "model": "claude-9-mega",
+      "prompt": "Write the weekly report intro.",
+      "_classification": {
+        "benchmark_similarities": { "MMLU": 0.5, "TruthfulQA": 0.3 },
+        "broad_category": "writing",
+        "subcategory": "business-writing",
+        "confidence": 0.62
+      }
+    }
+  ]
+}

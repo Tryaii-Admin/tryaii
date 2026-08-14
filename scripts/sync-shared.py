@@ -37,6 +37,20 @@ TARGETS = [
             ROOT / "packages" / "node" / "src" / "cachelint" / "data" / "providers.json",
         ],
     ),
+    (
+        SHARED / "diagnose" / "plan.json",
+        [
+            ROOT / "packages" / "python" / "tryaii" / "diagnose" / "data" / "plan.json",
+            ROOT / "packages" / "node" / "src" / "diagnose" / "data" / "plan.json",
+        ],
+    ),
+    (
+        SHARED / "diagnose" / "costmodel.json",
+        [
+            ROOT / "packages" / "python" / "tryaii" / "diagnose" / "data" / "costmodel.json",
+            ROOT / "packages" / "node" / "src" / "diagnose" / "data" / "costmodel.json",
+        ],
+    ),
 ]
 
 # Centroids: copy all files in shared/centroids/ to both packages

@@ -1,0 +1,486 @@
+{
+  "suite": "intake",
+  "target": "tryaii.diagnose.intake.normalize_inventory",
+  "cases": [
+    {
+      "name": "bare-array",
+      "description": "SPEC §2.0: a bare array of sites is a valid inventory; defaults fall back (output_tokens 500, calls_per_day null).",
+      "input": {
+        "data": [
+          {
+            "file": "src/app.py",
+            "line": 12,
+            "prompt": "Explain how tides work."
+          }
+        ]
+      },
+      "expected": {
+        "defaults": {
+          "calls_per_day": null,
+          "output_tokens": 500
+        },
+        "sites": [
+          {
+            "site_id": "src/app.py:12",
+            "index": 0,
+            "file": "src/app.py",
+            "line": 12,
+            "prompt": "Explain how tides work.",
+            "provider": null,
+            "model": null,
+            "calls_per_day": null,
+            "output_tokens": null,
+            "notes": null,
+            "classification": null
+          }
+        ],
+        "skipped": []
+      }
+    },
+    {
+      "name": "coercions",
+      "description": "SPEC §2.0: integer strings and integral floats coerce for line/output_tokens; numeric strings coerce for calls_per_day; invalid values are simply absent.",
+      "input": {
+        "data": {
+          "version": 1,
+          "defaults": {
+            "calls_per_day": "1500",
+            "output_tokens": 256.0
+          },
+          "sites": [
+            {
+              "file": "  src/a.py  ",
+              "line": "42",
+              "prompt": "hello",
+              "calls_per_day": 12.5,
+              "output_tokens": "300"
+            },
+            {
+              "file": "src/b.py",
+              "line": 7.0,
+              "prompt": "hello",
+              "calls_per_day": "lots",
+              "output_tokens": -5,
+              "provider": "   ",
+              "model": ""
+            }
+          ]
+        }
+      },
+      "expected": {
+        "defaults": {
+          "calls_per_day": 1500,
+          "output_tokens": 256
+        },
+        "sites": [
+          {
+            "site_id": "src/a.py:42",
+            "index": 0,
+            "file": "src/a.py",
+            "line": 42,
+            "prompt": "hello",
+            "provider": null,
+            "model": null,
+            "calls_per_day": 12.5,
+            "output_tokens": 300,
+            "notes": null,
+            "classification": null
+          },
+          {
+            "site_id": "src/b.py:7",
+            "index": 1,
+            "file": "src/b.py",
+            "line": 7,
+            "prompt": "hello",
+            "provider": null,
+            "model": null,
+            "calls_per_day": null,
+            "output_tokens": null,
+            "notes": null,
+            "classification": null
+          }
+        ],
+        "skipped": []
+      }
+    },
+    {
+      "name": "skip-reasons",
+      "description": "SPEC §2.0: non-object sites and sites without usable file/line are skipped with a reason, never guessed.",
+      "input": {
+        "data": {
+          "sites": [
+            "just a string",
+            {
+              "line": 3,
+              "prompt": "no file"
+            },
+            {
+              "file": "a.py",
+              "prompt": "no line"
+            },
+            {
+              "file": "a.py",
+              "line": 0,
+              "prompt": "line below 1"
+            },
+            {
+              "file": "a.py",
+              "line": 9,
+              "prompt": "survivor"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "defaults": {
+          "calls_per_day": null,
+          "output_tokens": 500
+        },
+        "sites": [
+          {
+            "site_id": "a.py:9",
+            "index": 4,
+            "file": "a.py",
+            "line": 9,
+            "prompt": "survivor",
+            "provider": null,
+            "model": null,
+            "calls_per_day": null,
+            "output_tokens": null,
+            "notes": null,
+            "classification": null
+          }
+        ],
+        "skipped": [
+          {
+            "index": 0,
+            "reason": "site is not an object"
+          },
+          {
+            "index": 1,
+            "reason": "missing file"
+          },
+          {
+            "index": 2,
+            "reason": "missing or invalid line"
+          },
+          {
+            "index": 3,
+            "reason": "missing or invalid line"
+          }
+        ]
+      }
+    },
+    {
+      "name": "duplicate-ids",
+      "description": "SPEC §2.0: duplicate site_ids (explicit or file:line fallback) are disambiguated with #2, #3, ...",
+      "input": {
+        "data": {
+          "sites": [
+            {
+              "id": "chat",
+              "file": "a.py",
+              "line": 1,
+              "prompt": "x"
+            },
+            {
+              "id": "chat",
+              "file": "b.py",
+              "line": 2,
+              "prompt": "y"
+            },
+            {
+              "file": "c.py",
+              "line": 3,
+              "prompt": "z"
+            },
+            {
+              "file": "c.py",
+              "line": 3,
+              "prompt": "w"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "defaults": {
+          "calls_per_day": null,
+          "output_tokens": 500
+        },
+        "sites": [
+          {
+            "site_id": "chat",
+            "index": 0,
+            "file": "a.py",
+            "line": 1,
+            "prompt": "x",
+            "provider": null,
+            "model": null,
+            "calls_per_day": null,
+            "output_tokens": null,
+            "notes": null,
+            "classification": null
+          },
+          {
+            "site_id": "chat#2",
+            "index": 1,
+            "file": "b.py",
+            "line": 2,
+            "prompt": "y",
+            "provider": null,
+            "model": null,
+            "calls_per_day": null,
+            "output_tokens": null,
+            "notes": null,
+            "classification": null
+          },
+          {
+            "site_id": "c.py:3",
+            "index": 2,
+            "file": "c.py",
+            "line": 3,
+            "prompt": "z",
+            "provider": null,
+            "model": null,
+            "calls_per_day": null,
+            "output_tokens": null,
+            "notes": null,
+            "classification": null
+          },
+          {
+            "site_id": "c.py:3#2",
+            "index": 3,
+            "file": "c.py",
+            "line": 3,
+            "prompt": "w",
+            "provider": null,
+            "model": null,
+            "calls_per_day": null,
+            "output_tokens": null,
+            "notes": null,
+            "classification": null
+          }
+        ],
+        "skipped": []
+      }
+    },
+    {
+      "name": "classification-seam",
+      "description": "SPEC §2.0: the _classification seam is validated — a valid one survives with coerced floats; missing/empty/ill-typed benchmark_similarities discard it.",
+      "input": {
+        "data": {
+          "sites": [
+            {
+              "file": "a.py",
+              "line": 1,
+              "prompt": "x",
+              "_classification": {
+                "benchmark_similarities": {
+                  "MMLU": 0.7,
+                  "HumanEval": 0.2
+                },
+                "broad_category": "analysis",
+                "subcategory": "summarization",
+                "confidence": 0.83,
+                "difficulty": 0.4
+              }
+            },
+            {
+              "file": "b.py",
+              "line": 2,
+              "prompt": "y",
+              "_classification": {
+                "broad_category": "analysis"
+              }
+            },
+            {
+              "file": "c.py",
+              "line": 3,
+              "prompt": "z",
+              "_classification": {
+                "benchmark_similarities": {
+                  "MMLU": "high"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "defaults": {
+          "calls_per_day": null,
+          "output_tokens": 500
+        },
+        "sites": [
+          {
+            "site_id": "a.py:1",
+            "index": 0,
+            "file": "a.py",
+            "line": 1,
+            "prompt": "x",
+            "provider": null,
+            "model": null,
+            "calls_per_day": null,
+            "output_tokens": null,
+            "notes": null,
+            "classification": {
+              "benchmark_similarities": {
+                "MMLU": 0.7,
+                "HumanEval": 0.2
+              },
+              "broad_category": "analysis",
+              "subcategory": "summarization",
+              "confidence": 0.83,
+              "difficulty": 0.4
+            }
+          },
+          {
+            "site_id": "b.py:2",
+            "index": 1,
+            "file": "b.py",
+            "line": 2,
+            "prompt": "y",
+            "provider": null,
+            "model": null,
+            "calls_per_day": null,
+            "output_tokens": null,
+            "notes": null,
+            "classification": null
+          },
+          {
+            "site_id": "c.py:3",
+            "index": 2,
+            "file": "c.py",
+            "line": 3,
+            "prompt": "z",
+            "provider": null,
+            "model": null,
+            "calls_per_day": null,
+            "output_tokens": null,
+            "notes": null,
+            "classification": null
+          }
+        ],
+        "skipped": []
+      }
+    },
+    {
+      "name": "prompt-shapes",
+      "description": "SPEC §2.0: a prompt is a string or an object; any other type is treated as absent.",
+      "input": {
+        "data": {
+          "sites": [
+            {
+              "file": "a.py",
+              "line": 1,
+              "prompt": "plain string"
+            },
+            {
+              "file": "b.py",
+              "line": 2,
+              "prompt": {
+                "system": "You are concise.",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "hi"
+                  }
+                ]
+              }
+            },
+            {
+              "file": "c.py",
+              "line": 3,
+              "prompt": 42
+            },
+            {
+              "file": "d.py",
+              "line": 4
+            }
+          ]
+        }
+      },
+      "expected": {
+        "defaults": {
+          "calls_per_day": null,
+          "output_tokens": 500
+        },
+        "sites": [
+          {
+            "site_id": "a.py:1",
+            "index": 0,
+            "file": "a.py",
+            "line": 1,
+            "prompt": "plain string",
+            "provider": null,
+            "model": null,
+            "calls_per_day": null,
+            "output_tokens": null,
+            "notes": null,
+            "classification": null
+          },
+          {
+            "site_id": "b.py:2",
+            "index": 1,
+            "file": "b.py",
+            "line": 2,
+            "prompt": {
+              "system": "You are concise.",
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "hi"
+                }
+              ]
+            },
+            "provider": null,
+            "model": null,
+            "calls_per_day": null,
+            "output_tokens": null,
+            "notes": null,
+            "classification": null
+          },
+          {
+            "site_id": "c.py:3",
+            "index": 2,
+            "file": "c.py",
+            "line": 3,
+            "prompt": null,
+            "provider": null,
+            "model": null,
+            "calls_per_day": null,
+            "output_tokens": null,
+            "notes": null,
+            "classification": null
+          },
+          {
+            "site_id": "d.py:4",
+            "index": 3,
+            "file": "d.py",
+            "line": 4,
+            "prompt": null,
+            "provider": null,
+            "model": null,
+            "calls_per_day": null,
+            "output_tokens": null,
+            "notes": null,
+            "classification": null
+          }
+        ],
+        "skipped": []
+      }
+    },
+    {
+      "name": "error-top-level",
+      "description": "SPEC §2.0: a top-level shape that cannot be an inventory raises.",
+      "input": {
+        "data": {
+          "foo": 1
+        }
+      },
+      "expected": {
+        "error": "inventory must be an object with a 'sites' array, or an array of sites"
+      }
+    }
+  ]
+}
