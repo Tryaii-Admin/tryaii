@@ -11,6 +11,11 @@ must regenerate the fixtures (and update the TS port) in the same PR.
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -148,3 +153,33 @@ def test_check(case):
     # via JSON.stringify; pin it here via a serialized comparison too.
     assert json.dumps(result, ensure_ascii=False) == json.dumps(
         expected, ensure_ascii=False)
+
+
+@pytest.mark.parametrize("case", _cases("cli"))
+def test_cli(case):
+    """Runs the real `tryaii diagnose` subcommand as a subprocess in a FRESH
+    temp cwd (`check` writes a run dir, so cli cases never run inside the
+    fixtures tree; corpus inputs are staged via copy_from_corpus)."""
+    expected = _require_frozen(case)
+    inp = case["input"]
+    env = dict(os.environ,
+               TRYAII_NO_BANNER="1",
+               PYTHONIOENCODING="utf-8",
+               PYTHONPATH=str(REPO_ROOT / "packages" / "python"))
+    stdin_data = None
+    if "stdin_file" in inp:
+        stdin_data = (FIXTURES / inp["stdin_file"]).read_bytes()
+    with tempfile.TemporaryDirectory() as tmp:
+        for name in inp.get("copy_from_corpus", []):
+            shutil.copy2(FIXTURES / "corpus" / name, Path(tmp) / name)
+        proc = subprocess.run(
+            [sys.executable, "-c",
+             "from tryaii.cli.main import cli; cli()", *inp["argv"]],
+            input=stdin_data, capture_output=True, cwd=tmp, env=env,
+        )
+    stdout = proc.stdout.decode("utf-8").replace("\r\n", "\n")
+    stderr = proc.stderr.decode("utf-8").replace("\r\n", "\n")
+    golden = (FIXTURES / "cli" / expected["stdout_golden"]).read_text(encoding="utf-8")
+    assert proc.returncode == expected["exit_code"]
+    assert stdout == golden
+    assert stderr == (expected["stderr"] or "")

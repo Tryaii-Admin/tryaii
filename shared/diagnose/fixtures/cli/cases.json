@@ -1,0 +1,180 @@
+{
+  "suite": "cli",
+  "target": "tryaii diagnose (argv-level, both CLIs; run in a fresh temp cwd)",
+  "cases": [
+    {
+      "name": "plan-json",
+      "description": "SPEC §3: 'diagnose plan --json' prints the bundled plan.json verbatim.",
+      "input": {
+        "argv": [
+          "diagnose",
+          "plan",
+          "--json"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "plan-json.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "plan-human",
+      "description": "The human plan rendering is derived purely from plan.json — byte-identical across CLIs.",
+      "input": {
+        "argv": [
+          "diagnose",
+          "plan"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "plan-human.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "check-mixed",
+      "description": "Full check run over the mixed corpus inventory (all sites classification-injected; no setup gate). Summary text + '->' path echoes with forward slashes.",
+      "input": {
+        "copy_from_corpus": [
+          "inventory-mixed.json"
+        ],
+        "argv": [
+          "diagnose",
+          "check",
+          "inventory-mixed.json",
+          "--quality",
+          "3",
+          "--cost",
+          "4",
+          "--speed",
+          "2",
+          "--goal",
+          "reduce prices",
+          "--run-id",
+          "fixture-run",
+          "--now",
+          "2026-01-01T00:00:00Z",
+          "--out-dir",
+          "out"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "check-mixed.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "check-subset",
+      "description": "--checks subsetting: unselected checks count as skipped in the summary.",
+      "input": {
+        "copy_from_corpus": [
+          "inventory-mixed.json"
+        ],
+        "argv": [
+          "diagnose",
+          "check",
+          "inventory-mixed.json",
+          "--checks",
+          "hygiene,cost_exposure",
+          "--run-id",
+          "fixture-subset",
+          "--now",
+          "2026-01-01T00:00:00Z",
+          "--out-dir",
+          "out"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "check-subset.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "check-bad-json",
+      "description": "Malformed JSON on stdin -> exit 2 with the parser-neutral message.",
+      "input": {
+        "stdin_file": "corpus/bad-inventory.json.broken",
+        "argv": [
+          "diagnose",
+          "check",
+          "-"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "check-bad-json.stdout.golden.txt",
+        "stderr": "error: invalid JSON on stdin\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "check-missing-file",
+      "description": "Missing inventory file -> exit 1 (runtime failure).",
+      "input": {
+        "argv": [
+          "diagnose",
+          "check",
+          "nope.json"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "check-missing-file.stdout.golden.txt",
+        "stderr": "error: file not found: nope.json\n",
+        "exit_code": 1
+      }
+    },
+    {
+      "name": "check-unknown-check",
+      "description": "--checks with an unknown name is a usage error (exit 2) before anything runs.",
+      "input": {
+        "copy_from_corpus": [
+          "inventory-mixed.json"
+        ],
+        "argv": [
+          "diagnose",
+          "check",
+          "inventory-mixed.json",
+          "--checks",
+          "bogus"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "check-unknown-check.stdout.golden.txt",
+        "stderr": "error: unknown check 'bogus'. Valid checks: model_fit, cache_readiness, cost_exposure, hygiene\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "unknown-verb",
+      "description": "Unknown diagnose verb -> exit 2.",
+      "input": {
+        "argv": [
+          "diagnose",
+          "bogus"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "unknown-verb.stdout.golden.txt",
+        "stderr": "error: unknown diagnose verb: bogus. Run \"tryaii help diagnose\".\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "missing-verb",
+      "description": "Bare 'tryaii diagnose' -> exit 2 pointing at help.",
+      "input": {
+        "argv": [
+          "diagnose"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "missing-verb.stdout.golden.txt",
+        "stderr": "error: missing diagnose verb. Run \"tryaii help diagnose\".\n",
+        "exit_code": 2
+      }
+    }
+  ]
+}

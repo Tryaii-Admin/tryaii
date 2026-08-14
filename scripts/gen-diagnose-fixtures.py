@@ -24,7 +24,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -33,7 +37,7 @@ PKG_PYTHON = REPO / "packages" / "python"
 
 sys.path.insert(0, str(PKG_PYTHON))
 
-SUITES = ("intake", "resolve", "modelfit", "cost", "hygiene", "check")
+SUITES = ("intake", "resolve", "modelfit", "cost", "hygiene", "check", "cli")
 
 
 def _dump(obj) -> str:
@@ -135,17 +139,60 @@ def gen_check(inp):
         return {"error": str(exc)}
 
 
+def run_cli_case(inp: dict) -> subprocess.CompletedProcess:
+    """Run the Python CLI for a cli-suite case in a FRESH temp cwd.
+
+    `check` writes a run dir, so cli cases never run inside the fixtures
+    tree; `copy_from_corpus` names corpus files staged into the temp cwd.
+    Cross-CLI byte parity of the WRITTEN files is asserted separately by
+    test_diagnose_cli_parity.py — the frozen goldens cover stdout/stderr.
+    """
+    env = dict(os.environ,
+               TRYAII_NO_BANNER="1",
+               PYTHONIOENCODING="utf-8",
+               PYTHONPATH=str(PKG_PYTHON))
+    stdin_data = None
+    if "stdin_file" in inp:
+        stdin_data = (FIXTURES / inp["stdin_file"]).read_bytes()
+    with tempfile.TemporaryDirectory() as tmp:
+        for name in inp.get("copy_from_corpus", []):
+            shutil.copy2(FIXTURES / "corpus" / name, Path(tmp) / name)
+        return subprocess.run(
+            [sys.executable, "-c",
+             "from tryaii.cli.main import cli; cli()", *inp["argv"]],
+            input=stdin_data, capture_output=True, cwd=tmp, env=env,
+        )
+
+
+def gen_cli(inp, case_name: str):
+    proc = run_cli_case(inp)
+    stdout = proc.stdout.decode("utf-8").replace("\r\n", "\n")
+    stderr = proc.stderr.decode("utf-8").replace("\r\n", "\n")
+    golden = case_name + ".stdout.golden.txt"
+    return {"stdout_golden": golden,
+            "stderr": stderr or None,
+            "exit_code": proc.returncode}, {golden: stdout}
+
+
 # ---------------------------------------------------------------------------
 
 def run_suite(name: str) -> dict:
     """Return {relative_path: new_content_str} for every file this suite owns."""
     suite_dir = FIXTURES / name
     doc = json.loads((suite_dir / "cases.json").read_text(encoding="utf-8"))
+    out_files: dict[str, str] = {}
 
     for case in doc["cases"]:
-        case["expected"] = globals()["gen_" + name](case["input"])
+        if name == "cli":
+            expected, goldens = gen_cli(case["input"], case["name"])
+            case["expected"] = expected
+            for fname, text in goldens.items():
+                out_files[f"{name}/{fname}"] = text
+        else:
+            case["expected"] = globals()["gen_" + name](case["input"])
 
-    return {f"{name}/cases.json": _dump(doc)}
+    out_files[f"{name}/cases.json"] = _dump(doc)
+    return out_files
 
 
 def main(argv=None) -> int:

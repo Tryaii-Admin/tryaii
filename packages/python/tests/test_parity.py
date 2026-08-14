@@ -146,11 +146,19 @@ COMMAND_HELP_CONSTANTS = {
     "route": "HELP_ROUTE",
     "eval": "HELP_EVAL",
     "cachelint": "HELP_CACHELINT",
+    "diagnose": "HELP_DIAGNOSE",
     "models": "HELP_MODELS",
     "benchmarks": "HELP_BENCHMARKS",
     "setup": "HELP_SETUP",
     "regenerate": "HELP_REGENERATE",
     "help": "HELP_HELP",
+}
+
+# diagnose verb -> the constant that holds its verb help in both CLIs
+# (`tryaii diagnose <verb> --help`).
+DIAGNOSE_VERB_HELP_CONSTANTS = {
+    "plan": "HELP_DIAGNOSE_PLAN",
+    "check": "HELP_DIAGNOSE_CHECK",
 }
 
 
@@ -181,6 +189,33 @@ def test_command_help_text_identical_across_sdks():
         "Per-command help diverged between Node and Python for: "
         + ", ".join(diffs)
         + " -- keep the HELP_<CMD> blocks identical across both CLIs"
+    )
+
+
+def test_diagnose_verb_help_text_identical_across_sdks():
+    """Diagnose verb help (`tryaii diagnose <verb> --help`) must match too."""
+    if not NODE_CLI.exists():
+        pytest.skip("Node CLI source not present (python-only checkout)")
+
+    from tryaii.cli.main import DIAGNOSE_VERB_HELP
+
+    assert set(DIAGNOSE_VERB_HELP) == set(DIAGNOSE_VERB_HELP_CONSTANTS), (
+        "Python DIAGNOSE_VERB_HELP keys differ from the expected verb set: "
+        f"python={sorted(DIAGNOSE_VERB_HELP)} "
+        f"expected={sorted(DIAGNOSE_VERB_HELP_CONSTANTS)}"
+    )
+
+    source = NODE_CLI.read_text(encoding="utf-8")
+    diffs: list[str] = []
+    for verb, const_name in DIAGNOSE_VERB_HELP_CONSTANTS.items():
+        node_text = _node_template_literal(source, const_name)
+        if node_text != DIAGNOSE_VERB_HELP[verb]:
+            diffs.append(verb)
+
+    assert not diffs, (
+        "Diagnose verb help diverged between Node and Python for: "
+        + ", ".join(diffs)
+        + " -- keep the HELP_DIAGNOSE_<VERB> blocks identical across both CLIs"
     )
 
 
