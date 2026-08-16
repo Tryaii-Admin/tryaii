@@ -1,0 +1,83 @@
+{
+  "suite": "resolve",
+  "target": "tryaii.diagnose.resolve.resolve_model_id",
+  "cases": [
+    {
+      "name": "exact",
+      "description": "SPEC §2.1 step 1: an exact registry id resolves as-is.",
+      "input": {
+        "model": "gpt-4o"
+      },
+      "expected": {
+        "model_id": "gpt-4o",
+        "method": "exact"
+      }
+    },
+    {
+      "name": "openrouter-slug",
+      "description": "SPEC §2.1 step 2: an OpenRouter slug maps back to the registry id via MODEL_ID_TO_OPENROUTER.",
+      "input": {
+        "model": "anthropic/claude-sonnet-4.5"
+      },
+      "expected": {
+        "model_id": "claude-sonnet-4-5-20250929",
+        "method": "slug"
+      }
+    },
+    {
+      "name": "normalized-case",
+      "description": "SPEC §2.1 step 3: case/separator differences resolve through the cachelint norm rule when unambiguous.",
+      "input": {
+        "model": "GPT-4O"
+      },
+      "expected": {
+        "model_id": "gpt-4o",
+        "method": "normalized"
+      }
+    },
+    {
+      "name": "slash-tail",
+      "description": "SPEC §2.1 step 3: with a provider prefix that matches nothing, the text after the last '/' is tried under the same rule.",
+      "input": {
+        "model": "myorg/gpt-4o"
+      },
+      "expected": {
+        "model_id": "gpt-4o",
+        "method": "normalized"
+      }
+    },
+    {
+      "name": "dotted-separators",
+      "description": "SPEC §2.1 step 3: dots normalize to dashes (claude-sonnet-4.6 -> claude-sonnet-4-6).",
+      "input": {
+        "model": "claude.sonnet.4.6"
+      },
+      "expected": {
+        "model_id": "claude-sonnet-4-6",
+        "method": "normalized"
+      }
+    },
+    {
+      "name": "unresolved",
+      "description": "SPEC §2.1: no fuzzy matching — an unknown model resolves to nothing.",
+      "input": {
+        "model": "claude-9-mega"
+      },
+      "expected": {
+        "model_id": null,
+        "method": "none"
+      }
+    },
+    {
+      "name": "empty",
+      "description": "SPEC §2.1: an absent/empty model resolves to nothing.",
+      "input": {
+        "model": ""
+      },
+      "expected": {
+        "model_id": null,
+        "method": "none"
+      }
+    }
+  ]
+}

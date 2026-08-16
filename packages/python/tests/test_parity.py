@@ -146,11 +146,21 @@ COMMAND_HELP_CONSTANTS = {
     "route": "HELP_ROUTE",
     "eval": "HELP_EVAL",
     "cachelint": "HELP_CACHELINT",
+    "diagnose": "HELP_DIAGNOSE",
     "models": "HELP_MODELS",
     "benchmarks": "HELP_BENCHMARKS",
     "setup": "HELP_SETUP",
     "regenerate": "HELP_REGENERATE",
     "help": "HELP_HELP",
+}
+
+# diagnose verb -> the constant that holds its verb help in both CLIs
+# (`tryaii diagnose <verb> --help`).
+DIAGNOSE_VERB_HELP_CONSTANTS = {
+    "init": "HELP_DIAGNOSE_INIT",
+    "plan": "HELP_DIAGNOSE_PLAN",
+    "check": "HELP_DIAGNOSE_CHECK",
+    "report": "HELP_DIAGNOSE_REPORT",
 }
 
 
@@ -181,6 +191,33 @@ def test_command_help_text_identical_across_sdks():
         "Per-command help diverged between Node and Python for: "
         + ", ".join(diffs)
         + " -- keep the HELP_<CMD> blocks identical across both CLIs"
+    )
+
+
+def test_diagnose_verb_help_text_identical_across_sdks():
+    """Diagnose verb help (`tryaii diagnose <verb> --help`) must match too."""
+    if not NODE_CLI.exists():
+        pytest.skip("Node CLI source not present (python-only checkout)")
+
+    from tryaii.cli.main import DIAGNOSE_VERB_HELP
+
+    assert set(DIAGNOSE_VERB_HELP) == set(DIAGNOSE_VERB_HELP_CONSTANTS), (
+        "Python DIAGNOSE_VERB_HELP keys differ from the expected verb set: "
+        f"python={sorted(DIAGNOSE_VERB_HELP)} "
+        f"expected={sorted(DIAGNOSE_VERB_HELP_CONSTANTS)}"
+    )
+
+    source = NODE_CLI.read_text(encoding="utf-8")
+    diffs: list[str] = []
+    for verb, const_name in DIAGNOSE_VERB_HELP_CONSTANTS.items():
+        node_text = _node_template_literal(source, const_name)
+        if node_text != DIAGNOSE_VERB_HELP[verb]:
+            diffs.append(verb)
+
+    assert not diffs, (
+        "Diagnose verb help diverged between Node and Python for: "
+        + ", ".join(diffs)
+        + " -- keep the HELP_DIAGNOSE_<VERB> blocks identical across both CLIs"
     )
 
 
@@ -226,6 +263,97 @@ def test_cachelint_package_data_matches_shared_master():
     ]
     assert not stale, (
         "Package copies out of sync with shared/cachelint/providers.json: "
+        + ", ".join(stale)
+        + " -- run scripts/sync-shared.py"
+    )
+
+
+# ---------------------------------------------------------------------------
+# diagnose shared data (plan.json + costmodel.json)
+# ---------------------------------------------------------------------------
+
+SHARED_DIAGNOSE = REPO_ROOT / "shared" / "diagnose"
+PY_DIAGNOSE_DATA = REPO_ROOT / "packages" / "python" / "tryaii" / "diagnose" / "data"
+NODE_DIAGNOSE_DATA = REPO_ROOT / "packages" / "node" / "src" / "diagnose" / "data"
+
+DIAGNOSE_DATA_FILES = ("plan.json", "costmodel.json")
+
+
+@pytest.mark.parametrize("filename", DIAGNOSE_DATA_FILES)
+def test_diagnose_data_identical_across_sdks(filename):
+    """Both SDKs must ship byte-identical diagnose data files.
+
+    plan.json IS the `diagnose plan --json` output; costmodel.json feeds the
+    cache-savings estimate — any drift makes the same inventory produce
+    different findings depending on the SDK language.
+    """
+    node_copy = NODE_DIAGNOSE_DATA / filename
+    if not node_copy.exists():
+        pytest.skip("Node diagnose data not present (python-only checkout)")
+
+    assert (PY_DIAGNOSE_DATA / filename).read_bytes() == node_copy.read_bytes(), (
+        f"diagnose {filename} diverged between the two SDKs -- edit "
+        f"shared/diagnose/{filename} and run scripts/sync-shared.py"
+    )
+
+
+@pytest.mark.parametrize("filename", DIAGNOSE_DATA_FILES)
+def test_diagnose_package_data_matches_shared_master(filename):
+    """Each package's bundled diagnose data must equal the shared/ master."""
+    master_path = SHARED_DIAGNOSE / filename
+    if not master_path.exists():
+        pytest.skip("shared/diagnose not present (package-only checkout)")
+
+    master = master_path.read_bytes()
+    stale = [
+        str(path.relative_to(REPO_ROOT))
+        for path in (PY_DIAGNOSE_DATA / filename, NODE_DIAGNOSE_DATA / filename)
+        if path.exists() and path.read_bytes() != master
+    ]
+    assert not stale, (
+        f"Package copies out of sync with shared/diagnose/{filename}: "
+        + ", ".join(stale)
+        + " -- run scripts/sync-shared.py"
+    )
+
+
+# Packed masters: output filename -> [(payload key, master path), ...].
+# Must mirror PACKS in scripts/sync-shared.py.
+DIAGNOSE_PACKS = {
+    "report_template.json": [
+        ("html", SHARED_DIAGNOSE / "report" / "template.html"),
+    ],
+    "skill.json": [
+        ("skill_md", SHARED_DIAGNOSE / "skill" / "SKILL.md"),
+        ("agents_pointer_md", SHARED_DIAGNOSE / "skill" / "agents-pointer.md"),
+    ],
+}
+
+
+@pytest.mark.parametrize("filename", sorted(DIAGNOSE_PACKS))
+def test_diagnose_packed_data_matches_shared_masters(filename):
+    """Packed diagnose data must equal a re-pack of its shared masters.
+
+    Non-JSON masters (HTML template, skill markdown) ship packed into JSON
+    so they flow through the JSON-only asset pipeline; this re-packs them
+    with the same serialization sync-shared.py uses and byte-compares both
+    package copies.
+    """
+    parts = DIAGNOSE_PACKS[filename]
+    if not all(master.exists() for _key, master in parts):
+        pytest.skip("shared/diagnose not present (package-only checkout)")
+
+    expected = json.dumps(
+        {key: master.read_text(encoding="utf-8") for key, master in parts},
+        ensure_ascii=False, indent=2) + "\n"
+    stale = [
+        str(path.relative_to(REPO_ROOT))
+        for path in (PY_DIAGNOSE_DATA / filename, NODE_DIAGNOSE_DATA / filename)
+        if path.exists()
+        and path.read_text(encoding="utf-8") != expected
+    ]
+    assert not stale, (
+        f"Packed {filename} out of sync with its shared/diagnose masters: "
         + ", ".join(stale)
         + " -- run scripts/sync-shared.py"
     )

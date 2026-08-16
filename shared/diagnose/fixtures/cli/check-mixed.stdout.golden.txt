@@ -1,0 +1,14 @@
+diagnose: 3 site(s) analyzed, 1 skipped
+
+  model_fit        0 ok | 1 finding | 2 insufficient | 0 skipped
+  cache_readiness  0 ok | 2 finding | 1 insufficient | 0 skipped
+  cost_exposure    0 ok | 1 finding | 2 insufficient | 0 skipped
+  hygiene          2 ok | 1 finding | 0 insufficient | 0 skipped
+
+monthly estimates (1 site(s) with traffic data):
+  est. cost           $312.00
+  swap savings        $306.00
+
+-> out/fixture-run/inventory.json
+-> out/fixture-run/findings.json
+-> out/fixture-run/meta.json

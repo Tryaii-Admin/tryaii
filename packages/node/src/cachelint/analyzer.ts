@@ -273,6 +273,44 @@ function recommendations(
 }
 
 // ---------------------------------------------------------------------------
+// Hygiene seam (public — consumed by the diagnose engine)
+// ---------------------------------------------------------------------------
+
+export const DEFAULT_FIX_HINT = 'Move this value after the static prefix.';
+
+/**
+ * Provider-independent hygiene scan of a prompt.
+ *
+ * Canonical render + detector scan + section attribution + per-kind fix
+ * hints — no provider KB, no tokenizer, so it works for sites that declare
+ * no provider. Findings carry the standard detector dict plus a `hint`.
+ * Mirrors the Python reference (cachelint/analyzer.py hygiene_findings).
+ */
+export function hygieneFindings(prompt: unknown): Record<string, unknown> {
+  const [canonical, sections] = buildCanonical(prompt);
+  const findings = scan(canonical);
+  for (const f of findings) {
+    const sec = sectionOf(sections, f.start);
+    if (sec) {
+      f.section = sec.name;
+      f.section_offset = f.start - sec.start;
+    }
+  }
+  const out = findings.map((f) => ({
+    ...findingToDict(f),
+    hint: FIX_HINTS[f.kind] ?? DEFAULT_FIX_HINT,
+  }));
+  return {
+    findings: out,
+    blocking_count: blocking(findings).length,
+    findings_in_system: findings.filter((f) => f.section === 'system').length,
+    has_system: sections.some((s) => s.name === 'system'),
+    has_tools: sections.some((s) => s.name === 'tools'),
+    message_count: sections.filter((s) => s.name.startsWith('messages[')).length,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Main entry
 // ---------------------------------------------------------------------------
 

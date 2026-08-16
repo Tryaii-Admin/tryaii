@@ -1,0 +1,844 @@
+{
+  "suite": "check",
+  "target": "tryaii.diagnose.api.analyze_inventory",
+  "cases": [
+    {
+      "name": "mixed-inventory",
+      "description": "SPEC §3: the full findings document over a mixed inventory — healthy site, provider-less site, skipped site, unknown model — including the redacted summary layer.",
+      "input": {
+        "input_file": "corpus/inventory-mixed.json",
+        "opts": {
+          "run_id": "fixture-run",
+          "now": "2026-01-01T00:00:00Z",
+          "version": "0.0.0",
+          "priorities": {
+            "quality": 3,
+            "cost": 4,
+            "speed": 2
+          },
+          "goal": "reduce prices"
+        }
+      },
+      "expected": {
+        "version": 1,
+        "run_id": "fixture-run",
+        "generated_at": "2026-01-01T00:00:00Z",
+        "tool": {
+          "name": "tryaii",
+          "version": "0.0.0"
+        },
+        "interview": {
+          "priorities": {
+            "quality": 3,
+            "cost": 4,
+            "speed": 2
+          },
+          "goal": "reduce prices",
+          "defaults": {
+            "calls_per_day": 1000,
+            "output_tokens": 500
+          }
+        },
+        "inventory": {
+          "site_count": 3,
+          "skipped": [
+            {
+              "index": 2,
+              "reason": "missing or invalid line"
+            }
+          ]
+        },
+        "sites": [
+          {
+            "site_id": "summarize-ticket",
+            "file": "src/agents/summary.py",
+            "line": 42,
+            "provider": "openai",
+            "model": "gpt-4o",
+            "resolved_model_id": "gpt-4o",
+            "notes": "main support flow",
+            "checks": {
+              "model_fit": {
+                "status": "finding",
+                "reason": null,
+                "summary": "gpt-4o is a poor fit for this prompt (rank 22 of 39) — best: grok-4-1-fast-reasoning-latest",
+                "classification": {
+                  "broad_category": "analysis",
+                  "subcategory": "summarization",
+                  "confidence": 0.83
+                },
+                "current_rank": 22,
+                "catalog_size": 39,
+                "current": {
+                  "model_id": "gpt-4o",
+                  "quality_score": 0.7641,
+                  "cost_score": 0.9375,
+                  "speed_score": 0.6
+                },
+                "recommended": {
+                  "model_id": "grok-4-1-fast-reasoning-latest",
+                  "quality_score": 0.8299,
+                  "cost_score": 0.9965,
+                  "speed_score": 0.8,
+                  "top_benchmarks": [
+                    [
+                      "MMLU",
+                      0.9679
+                    ],
+                    [
+                      "Chatbot Arena (LMSys)",
+                      0.7045
+                    ],
+                    [
+                      "DROP",
+                      0.7907
+                    ]
+                  ],
+                  "reasoning": "Quality: 0.83 on [MMLU (97%), Chatbot Arena (LMSys) (70%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+                },
+                "top": [
+                  {
+                    "rank": 1,
+                    "model_id": "grok-4-1-fast-reasoning-latest",
+                    "quality_score": 0.8299,
+                    "cost_score": 0.9965,
+                    "speed_score": 0.8,
+                    "reasoning": "Quality: 0.83 on [MMLU (97%), Chatbot Arena (LMSys) (70%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+                  },
+                  {
+                    "rank": 2,
+                    "model_id": "grok-4.3",
+                    "quality_score": 0.9011,
+                    "cost_score": 0.9812,
+                    "speed_score": 0.6,
+                    "reasoning": "Quality: 0.90 on [MMLU (95%), Chatbot Arena (LMSys) (86%)] | Cost efficiency: 0.98 | Speed: 0.60 (medium)"
+                  },
+                  {
+                    "rank": 3,
+                    "model_id": "gemini-3-flash-preview",
+                    "quality_score": 0.819,
+                    "cost_score": 0.996,
+                    "speed_score": 0.8,
+                    "reasoning": "Quality: 0.82 on [MMLU (87%), Chatbot Arena (LMSys) (75%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+                  },
+                  {
+                    "rank": 4,
+                    "model_id": "deepseek-v4-pro",
+                    "quality_score": 0.8625,
+                    "cost_score": 0.9935,
+                    "speed_score": 0.6,
+                    "reasoning": "Quality: 0.86 on [MMLU (92%), Chatbot Arena (LMSys) (82%)] | Cost efficiency: 0.99 | Speed: 0.60 (medium)"
+                  },
+                  {
+                    "rank": 5,
+                    "model_id": "gemini-3.5-flash",
+                    "quality_score": 0.8366,
+                    "cost_score": 0.9475,
+                    "speed_score": 0.8,
+                    "reasoning": "Quality: 0.84 on [MMLU (88%), Chatbot Arena (LMSys) (77%)] | Cost efficiency: 0.95 | Speed: 0.80 (fast)"
+                  }
+                ]
+              },
+              "cache_readiness": {
+                "status": "finding",
+                "reason": null,
+                "verdict": {
+                  "code": "BELOW_THRESHOLD",
+                  "summary": "Total prompt ~86 tok < 1024 minimum — nothing will cache. Expanding the static content to reach the floor is often worthwhile."
+                },
+                "threshold_min_tokens": 1024,
+                "total_tokens": 86,
+                "stable_prefix": {
+                  "tokens": 67,
+                  "pct_of_prompt": 77.9,
+                  "if_first_fixed_tokens": 73
+                },
+                "findings_count": 2,
+                "top_findings": [
+                  {
+                    "kind": "template-braces",
+                    "severity": "medium",
+                    "start": 314,
+                    "end": 327,
+                    "section": "messages[0]:user",
+                    "section_offset": 29,
+                    "pct_into_prompt": 88,
+                    "excerpt": "...ser: Summarize this ticket: {ticket_body} — opened 2026-08-14T10:00:0...",
+                    "why": "Python .format()/f-string style placeholder — a per-call value will land here. (If this is literal JSON/code content, ignore.)"
+                  },
+                  {
+                    "kind": "timestamp-datetime",
+                    "severity": "high",
+                    "start": 337,
+                    "end": 357,
+                    "section": "messages[0]:user",
+                    "section_offset": 52,
+                    "pct_into_prompt": 94.4,
+                    "excerpt": "...ket: {ticket_body} — opened 2026-08-14T10:00:00Z",
+                    "why": "A full datetime changes every call — everything after it can never match byte-for-byte."
+                  }
+                ],
+                "recommendations": [
+                  "[fix:template-braces] at messages[0]:user+29 (88% in): Template slot: keep per-call slots at the tail; slots filled with the SAME value every call are harmless.",
+                  "[fix:timestamp-datetime] at messages[0]:user+52 (94% in): Remove it, round it to a coarse bucket (day/hour), or move it into the final user message (after the cached prefix).",
+                  "[impact] Fixing the FIRST finding alone extends the stable prefix from ~67 to ~73 tok.",
+                  "[routing] prompt_cache_key — same string per prefix-group; keep <= ~15 RPM per key",
+                  "[verify] After deploying, assert usage.prompt_tokens_details.cached_tokens > 0 in responses. 0 across identical-prefix requests = a silent invalidator is still present.",
+                  "[batch] batch x caching stacking is UNDOCUMENTED (open question in the research)"
+                ]
+              },
+              "cost_exposure": {
+                "status": "finding",
+                "reason": null,
+                "input_tokens": 86,
+                "output_tokens": 500,
+                "token_method": "tokenizer",
+                "cost_per_call_usd": 0.0052,
+                "monthly": {
+                  "status": "ok",
+                  "calls_per_day": 2000,
+                  "cost_usd": 312
+                },
+                "swap": {
+                  "model_id": "deepseek-v4-flash",
+                  "cost_per_call_usd": 0.0001,
+                  "monthly_savings_usd": 306
+                }
+              },
+              "hygiene": {
+                "status": "finding",
+                "reason": null,
+                "findings_count": 2,
+                "blocking_count": 2,
+                "findings_in_system": 0,
+                "findings": [
+                  {
+                    "kind": "template-braces",
+                    "severity": "medium",
+                    "section": "messages[0]:user",
+                    "section_offset": 29,
+                    "pct_into_prompt": 88,
+                    "excerpt": "...ser: Summarize this ticket: {ticket_body} — opened 2026-08-14T10:00:0...",
+                    "why": "Python .format()/f-string style placeholder — a per-call value will land here. (If this is literal JSON/code content, ignore.)",
+                    "hint": "Template slot: keep per-call slots at the tail; slots filled with the SAME value every call are harmless."
+                  },
+                  {
+                    "kind": "timestamp-datetime",
+                    "severity": "high",
+                    "section": "messages[0]:user",
+                    "section_offset": 52,
+                    "pct_into_prompt": 94.4,
+                    "excerpt": "...ket: {ticket_body} — opened 2026-08-14T10:00:00Z",
+                    "why": "A full datetime changes every call — everything after it can never match byte-for-byte.",
+                    "hint": "Remove it, round it to a coarse bucket (day/hour), or move it into the final user message (after the cached prefix)."
+                  }
+                ],
+                "advisories": []
+              }
+            }
+          },
+          {
+            "site_id": "quick-answer",
+            "file": "src/handlers/faq.js",
+            "line": 17,
+            "provider": null,
+            "model": null,
+            "resolved_model_id": null,
+            "checks": {
+              "model_fit": {
+                "status": "insufficient_data",
+                "reason": "no model declared",
+                "summary": "recommended: grok-4.3 (no current model to compare)",
+                "classification": {
+                  "broad_category": "conversation",
+                  "subcategory": "chat",
+                  "confidence": 0.71
+                },
+                "current_rank": null,
+                "catalog_size": 39,
+                "current": null,
+                "recommended": {
+                  "model_id": "grok-4.3",
+                  "quality_score": 0.8578,
+                  "cost_score": 0.9812,
+                  "speed_score": 0.6,
+                  "top_benchmarks": [
+                    [
+                      "Chatbot Arena (LMSys)",
+                      0.8636
+                    ],
+                    [
+                      "MT-Bench",
+                      0.85
+                    ]
+                  ],
+                  "reasoning": "Quality: 0.86 on [Chatbot Arena (LMSys) (86%), MT-Bench (85%)] | Cost efficiency: 0.98 | Speed: 0.60 (medium)"
+                },
+                "top": [
+                  {
+                    "rank": 1,
+                    "model_id": "grok-4.3",
+                    "quality_score": 0.8578,
+                    "cost_score": 0.9812,
+                    "speed_score": 0.6,
+                    "reasoning": "Quality: 0.86 on [Chatbot Arena (LMSys) (86%), MT-Bench (85%)] | Cost efficiency: 0.98 | Speed: 0.60 (medium)"
+                  },
+                  {
+                    "rank": 2,
+                    "model_id": "gemini-3-flash-preview",
+                    "quality_score": 0.7716,
+                    "cost_score": 0.996,
+                    "speed_score": 0.8,
+                    "reasoning": "Quality: 0.77 on [Chatbot Arena (LMSys) (75%), MT-Bench (80%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+                  },
+                  {
+                    "rank": 3,
+                    "model_id": "gpt-5.4",
+                    "quality_score": 0.9192,
+                    "cost_score": 0.9125,
+                    "speed_score": 0.6,
+                    "reasoning": "Quality: 0.92 on [Chatbot Arena (LMSys) (89%), MT-Bench (96%)] | Cost efficiency: 0.91 | Speed: 0.60 (medium)"
+                  },
+                  {
+                    "rank": 4,
+                    "model_id": "gpt-5.2",
+                    "quality_score": 0.9009,
+                    "cost_score": 0.9213,
+                    "speed_score": 0.6,
+                    "reasoning": "Quality: 0.90 on [Chatbot Arena (LMSys) (86%), MT-Bench (95%)] | Cost efficiency: 0.92 | Speed: 0.60 (medium)"
+                  },
+                  {
+                    "rank": 5,
+                    "model_id": "gemini-3.5-flash",
+                    "quality_score": 0.7953,
+                    "cost_score": 0.9475,
+                    "speed_score": 0.8,
+                    "reasoning": "Quality: 0.80 on [Chatbot Arena (LMSys) (77%), MT-Bench (83%)] | Cost efficiency: 0.95 | Speed: 0.80 (fast)"
+                  }
+                ]
+              },
+              "cache_readiness": {
+                "status": "insufficient_data",
+                "reason": "no provider declared"
+              },
+              "cost_exposure": {
+                "status": "insufficient_data",
+                "reason": "no model declared",
+                "input_tokens": 10,
+                "output_tokens": 500,
+                "token_method": "chars/4",
+                "cost_per_call_usd": null,
+                "monthly": null,
+                "swap": null
+              },
+              "hygiene": {
+                "status": "ok",
+                "reason": null,
+                "findings_count": 0,
+                "blocking_count": 0,
+                "findings_in_system": 0,
+                "findings": [],
+                "advisories": []
+              }
+            }
+          },
+          {
+            "site_id": "legacy-model",
+            "file": "src/legacy/report.py",
+            "line": 88,
+            "provider": "anthropic",
+            "model": "claude-9-mega",
+            "resolved_model_id": null,
+            "checks": {
+              "model_fit": {
+                "status": "insufficient_data",
+                "reason": "unknown model 'claude-9-mega'",
+                "summary": "recommended: grok-4-1-fast-reasoning-latest (no current model to compare)",
+                "classification": {
+                  "broad_category": "writing",
+                  "subcategory": "business-writing",
+                  "confidence": 0.62
+                },
+                "current_rank": null,
+                "catalog_size": 39,
+                "current": null,
+                "recommended": {
+                  "model_id": "grok-4-1-fast-reasoning-latest",
+                  "quality_score": 0.8658,
+                  "cost_score": 0.9965,
+                  "speed_score": 0.8,
+                  "top_benchmarks": [
+                    [
+                      "MMLU",
+                      0.9679
+                    ],
+                    [
+                      "TruthfulQA",
+                      0.6957
+                    ]
+                  ],
+                  "reasoning": "Quality: 0.87 on [MMLU (97%), TruthfulQA (70%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+                },
+                "top": [
+                  {
+                    "rank": 1,
+                    "model_id": "grok-4-1-fast-reasoning-latest",
+                    "quality_score": 0.8658,
+                    "cost_score": 0.9965,
+                    "speed_score": 0.8,
+                    "reasoning": "Quality: 0.87 on [MMLU (97%), TruthfulQA (70%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+                  },
+                  {
+                    "rank": 2,
+                    "model_id": "gemini-3-flash-preview",
+                    "quality_score": 0.8022,
+                    "cost_score": 0.996,
+                    "speed_score": 0.8,
+                    "reasoning": "Quality: 0.80 on [MMLU (87%), TruthfulQA (70%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+                  },
+                  {
+                    "rank": 3,
+                    "model_id": "gpt-5.4",
+                    "quality_score": 0.9365,
+                    "cost_score": 0.9125,
+                    "speed_score": 0.6,
+                    "reasoning": "Quality: 0.94 on [MMLU (94%), TruthfulQA (93%)] | Cost efficiency: 0.91 | Speed: 0.60 (medium)"
+                  },
+                  {
+                    "rank": 4,
+                    "model_id": "gemini-3.1-flash-lite",
+                    "quality_score": 0.7198,
+                    "cost_score": 0.9912,
+                    "speed_score": 1,
+                    "reasoning": "Quality: 0.72 on [MMLU (81%), TruthfulQA (57%)] | Cost efficiency: 0.99 | Speed: 1.00 (very fast)"
+                  },
+                  {
+                    "rank": 5,
+                    "model_id": "gpt-5.2",
+                    "quality_score": 0.9227,
+                    "cost_score": 0.9213,
+                    "speed_score": 0.6,
+                    "reasoning": "Quality: 0.92 on [MMLU (93%), TruthfulQA (91%)] | Cost efficiency: 0.92 | Speed: 0.60 (medium)"
+                  }
+                ]
+              },
+              "cache_readiness": {
+                "status": "finding",
+                "reason": null,
+                "verdict": {
+                  "code": "BELOW_THRESHOLD",
+                  "summary": "Total prompt ~10 tok < 4096 minimum — nothing will cache. Expanding the static content to reach the floor is often worthwhile."
+                },
+                "threshold_min_tokens": 4096,
+                "total_tokens": 10,
+                "stable_prefix": {
+                  "tokens": 10,
+                  "pct_of_prompt": 100,
+                  "if_first_fixed_tokens": null
+                },
+                "findings_count": 0,
+                "top_findings": [],
+                "recommendations": [
+                  "[enablement] Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium).",
+                  "[verify] After deploying, assert usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens) > 0 in responses. 0 across identical-prefix requests = a silent invalidator is still present.",
+                  "[batch] STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off"
+                ]
+              },
+              "cost_exposure": {
+                "status": "insufficient_data",
+                "reason": "unknown model 'claude-9-mega'",
+                "input_tokens": 10,
+                "output_tokens": 500,
+                "token_method": "tokenizer",
+                "cost_per_call_usd": null,
+                "monthly": null,
+                "swap": null
+              },
+              "hygiene": {
+                "status": "ok",
+                "reason": null,
+                "findings_count": 0,
+                "blocking_count": 0,
+                "findings_in_system": 0,
+                "findings": [],
+                "advisories": []
+              }
+            }
+          }
+        ],
+        "summary": {
+          "schema": "tryaii.diagnose.summary/1",
+          "run_id": "fixture-run",
+          "generated_at": "2026-01-01T00:00:00Z",
+          "site_count": 3,
+          "goal_present": true,
+          "priorities": {
+            "quality": 3,
+            "cost": 4,
+            "speed": 2
+          },
+          "check_status_counts": {
+            "model_fit": {
+              "ok": 0,
+              "finding": 1,
+              "insufficient_data": 2,
+              "skipped": 0
+            },
+            "cache_readiness": {
+              "ok": 0,
+              "finding": 2,
+              "insufficient_data": 1,
+              "skipped": 0
+            },
+            "cost_exposure": {
+              "ok": 0,
+              "finding": 1,
+              "insufficient_data": 2,
+              "skipped": 0
+            },
+            "hygiene": {
+              "ok": 2,
+              "finding": 1,
+              "insufficient_data": 0,
+              "skipped": 0
+            }
+          },
+          "cache_verdict_counts": {
+            "BELOW_THRESHOLD": 2
+          },
+          "totals": {
+            "est_monthly_cost_usd": 312,
+            "est_monthly_cache_savings_usd": null,
+            "est_monthly_swap_savings_usd": 306,
+            "sites_with_traffic_data": 1
+          },
+          "swap_stats": {
+            "sites_with_cheaper_swap": 1,
+            "median_current_rank": 22
+          }
+        }
+      }
+    },
+    {
+      "name": "checks-subset",
+      "description": "SPEC §3: opts.checks selects checks; unselected ones emit skipped/not-selected and the cost check loses its swap (no model_fit ranking).",
+      "input": {
+        "data": {
+          "sites": [
+            {
+              "id": "only-two-checks",
+              "file": "app.py",
+              "line": 5,
+              "provider": "anthropic",
+              "model": "claude-sonnet-4-5-20250929",
+              "calls_per_day": 50,
+              "prompt": "Classify the sentiment of: {review_text}"
+            }
+          ]
+        },
+        "opts": {
+          "run_id": "fixture-subset",
+          "now": "2026-01-01T00:00:00Z",
+          "version": "0.0.0",
+          "checks": [
+            "hygiene",
+            "cost_exposure"
+          ]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "run_id": "fixture-subset",
+        "generated_at": "2026-01-01T00:00:00Z",
+        "tool": {
+          "name": "tryaii",
+          "version": "0.0.0"
+        },
+        "interview": {
+          "priorities": {
+            "quality": 3,
+            "cost": 3,
+            "speed": 3
+          },
+          "goal": null,
+          "defaults": {
+            "calls_per_day": null,
+            "output_tokens": 500
+          }
+        },
+        "inventory": {
+          "site_count": 1,
+          "skipped": []
+        },
+        "sites": [
+          {
+            "site_id": "only-two-checks",
+            "file": "app.py",
+            "line": 5,
+            "provider": "anthropic",
+            "model": "claude-sonnet-4-5-20250929",
+            "resolved_model_id": "claude-sonnet-4-5-20250929",
+            "checks": {
+              "model_fit": {
+                "status": "skipped",
+                "reason": "not selected"
+              },
+              "cache_readiness": {
+                "status": "skipped",
+                "reason": "not selected"
+              },
+              "cost_exposure": {
+                "status": "ok",
+                "reason": null,
+                "input_tokens": 12,
+                "output_tokens": 500,
+                "token_method": "chars/4",
+                "cost_per_call_usd": 0.0075,
+                "monthly": {
+                  "status": "ok",
+                  "calls_per_day": 50,
+                  "cost_usd": 11.25
+                },
+                "swap": null
+              },
+              "hygiene": {
+                "status": "finding",
+                "reason": null,
+                "findings_count": 1,
+                "blocking_count": 1,
+                "findings_in_system": 0,
+                "findings": [
+                  {
+                    "kind": "template-braces",
+                    "severity": "medium",
+                    "section": "messages[0]:user",
+                    "section_offset": 33,
+                    "pct_into_prompt": 71.7,
+                    "excerpt": "... Classify the sentiment of: {review_text}",
+                    "why": "Python .format()/f-string style placeholder — a per-call value will land here. (If this is literal JSON/code content, ignore.)",
+                    "hint": "Template slot: keep per-call slots at the tail; slots filled with the SAME value every call are harmless."
+                  }
+                ],
+                "advisories": []
+              }
+            }
+          }
+        ],
+        "summary": {
+          "schema": "tryaii.diagnose.summary/1",
+          "run_id": "fixture-subset",
+          "generated_at": "2026-01-01T00:00:00Z",
+          "site_count": 1,
+          "goal_present": false,
+          "priorities": {
+            "quality": 3,
+            "cost": 3,
+            "speed": 3
+          },
+          "check_status_counts": {
+            "model_fit": {
+              "ok": 0,
+              "finding": 0,
+              "insufficient_data": 0,
+              "skipped": 1
+            },
+            "cache_readiness": {
+              "ok": 0,
+              "finding": 0,
+              "insufficient_data": 0,
+              "skipped": 1
+            },
+            "cost_exposure": {
+              "ok": 1,
+              "finding": 0,
+              "insufficient_data": 0,
+              "skipped": 0
+            },
+            "hygiene": {
+              "ok": 0,
+              "finding": 1,
+              "insufficient_data": 0,
+              "skipped": 0
+            }
+          },
+          "cache_verdict_counts": {},
+          "totals": {
+            "est_monthly_cost_usd": 11.25,
+            "est_monthly_cache_savings_usd": null,
+            "est_monthly_swap_savings_usd": null,
+            "sites_with_traffic_data": 1
+          },
+          "swap_stats": {
+            "sites_with_cheaper_swap": 0,
+            "median_current_rank": null
+          }
+        }
+      }
+    },
+    {
+      "name": "minimal-bare-array",
+      "description": "SPEC §3: a bare-array inventory with only file/line/prompt — every check degrades honestly, defaults fill the interview.",
+      "input": {
+        "data": [
+          {
+            "file": "main.go",
+            "line": 101,
+            "prompt": "Translate to German: good evening"
+          }
+        ],
+        "opts": {
+          "run_id": "fixture-minimal",
+          "now": "2026-01-01T00:00:00Z",
+          "version": "0.0.0"
+        }
+      },
+      "expected": {
+        "version": 1,
+        "run_id": "fixture-minimal",
+        "generated_at": "2026-01-01T00:00:00Z",
+        "tool": {
+          "name": "tryaii",
+          "version": "0.0.0"
+        },
+        "interview": {
+          "priorities": {
+            "quality": 3,
+            "cost": 3,
+            "speed": 3
+          },
+          "goal": null,
+          "defaults": {
+            "calls_per_day": null,
+            "output_tokens": 500
+          }
+        },
+        "inventory": {
+          "site_count": 1,
+          "skipped": []
+        },
+        "sites": [
+          {
+            "site_id": "main.go:101",
+            "file": "main.go",
+            "line": 101,
+            "provider": null,
+            "model": null,
+            "resolved_model_id": null,
+            "checks": {
+              "model_fit": {
+                "status": "insufficient_data",
+                "reason": "no classifier available"
+              },
+              "cache_readiness": {
+                "status": "insufficient_data",
+                "reason": "no provider declared"
+              },
+              "cost_exposure": {
+                "status": "insufficient_data",
+                "reason": "no model declared",
+                "input_tokens": 10,
+                "output_tokens": 500,
+                "token_method": "chars/4",
+                "cost_per_call_usd": null,
+                "monthly": null,
+                "swap": null
+              },
+              "hygiene": {
+                "status": "ok",
+                "reason": null,
+                "findings_count": 0,
+                "blocking_count": 0,
+                "findings_in_system": 0,
+                "findings": [],
+                "advisories": []
+              }
+            }
+          }
+        ],
+        "summary": {
+          "schema": "tryaii.diagnose.summary/1",
+          "run_id": "fixture-minimal",
+          "generated_at": "2026-01-01T00:00:00Z",
+          "site_count": 1,
+          "goal_present": false,
+          "priorities": {
+            "quality": 3,
+            "cost": 3,
+            "speed": 3
+          },
+          "check_status_counts": {
+            "model_fit": {
+              "ok": 0,
+              "finding": 0,
+              "insufficient_data": 1,
+              "skipped": 0
+            },
+            "cache_readiness": {
+              "ok": 0,
+              "finding": 0,
+              "insufficient_data": 1,
+              "skipped": 0
+            },
+            "cost_exposure": {
+              "ok": 0,
+              "finding": 0,
+              "insufficient_data": 1,
+              "skipped": 0
+            },
+            "hygiene": {
+              "ok": 1,
+              "finding": 0,
+              "insufficient_data": 0,
+              "skipped": 0
+            }
+          },
+          "cache_verdict_counts": {},
+          "totals": {
+            "est_monthly_cost_usd": null,
+            "est_monthly_cache_savings_usd": null,
+            "est_monthly_swap_savings_usd": null,
+            "sites_with_traffic_data": 0
+          },
+          "swap_stats": {
+            "sites_with_cheaper_swap": 0,
+            "median_current_rank": null
+          }
+        }
+      }
+    },
+    {
+      "name": "error-unknown-check",
+      "description": "SPEC §3: an unknown check name raises (a usage error at the CLI layer).",
+      "input": {
+        "data": {
+          "sites": []
+        },
+        "opts": {
+          "run_id": "x",
+          "checks": [
+            "hygiene",
+            "bogus"
+          ]
+        }
+      },
+      "expected": {
+        "error": "unknown check 'bogus'"
+      }
+    },
+    {
+      "name": "error-top-level",
+      "description": "SPEC §2.0: an unusable top-level shape raises.",
+      "input": {
+        "data": {
+          "nope": true
+        },
+        "opts": {
+          "run_id": "x"
+        }
+      },
+      "expected": {
+        "error": "inventory must be an object with a 'sites' array, or an array of sites"
+      }
+    }
+  ]
+}

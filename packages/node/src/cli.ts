@@ -18,12 +18,15 @@
  * 2 usage error (unknown command/option, missing argument, invalid value).
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import { showBanner } from './banner.js';
 import { BudgetMode, DifficultySource, routeDatasetWithBudget } from './budget.js';
+// Half-even formatting matches Python's f"{x:.2f}" (parity for money lines
+// in the diagnose summary); halfEven.ts is tiny and data-free.
+import { formatFixed } from './cachelint/util/halfEven.js';
 import { benchmarkToDict, BenchmarkRegistry } from './benchmarks/registry.js';
 import { CentroidGenerator } from './centroids/generator.js';
 import { ClassificationResult } from './classifiers/base.js';
@@ -39,6 +42,7 @@ import { DashboardSummary, renderDashboard } from './dashboard/index.js';
 import { ModelInfo, ModelRegistry } from './registry/models.js';
 import { writePaced } from './output.js';
 import {
+  MAX_PROMPT_LENGTH,
   Router,
   RouteResult,
   routeResultBestReasoning,
@@ -350,6 +354,24 @@ async function cmdSetup(subArgs: string[]): Promise<void> {
     ? new Router({ config: { embeddingModel: values.model } })
     : new Router();
   await router.route('warmup');
+
+  // Marker consumed by `diagnose check` (its setup gate): live classification
+  // is only allowed once setup has completed at least once on this machine.
+  const config = createDefaultConfig();
+  mkdirSync(config.dataDir, { recursive: true });
+  writeFileSync(
+    join(config.dataDir, 'setup.json'),
+    JSON.stringify(
+      {
+        embedding_model: embeddingModel,
+        centroid_count: router.benchmarks.length,
+        completed_at: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+      },
+      null,
+      2,
+    ) + '\n',
+    'utf-8',
+  );
 
   out.write(`Setup complete! ${router.benchmarks.length} benchmark centroids ready.\n`);
 }
@@ -790,6 +812,387 @@ async function cmdEval(subArgs: string[]): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// diagnose (see shared/diagnose/SPEC.md; mirrors cmd_diagnose in main.py)
+// ---------------------------------------------------------------------------
+
+async function diagnosePlan(argv: string[]): Promise<void> {
+  const { values } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: { json: { type: 'boolean', default: false } },
+  });
+
+  const raw = readFileSync(new URL('./diagnose/data/plan.json', import.meta.url), 'utf-8');
+  if (values.json) {
+    // Verbatim bytes of the bundled plan -- parity by construction.
+    out.write(raw);
+    return;
+  }
+
+  const plan = JSON.parse(raw) as Record<string, any>;
+  let buf = 'tryaii diagnose plan -- what diagnose can check\n\n';
+  buf += 'Checks (recommended: run all):\n';
+  for (const check of plan.checks) {
+    buf += `  - ${check.id}: ${check.what}\n`;
+  }
+  buf += '\nInterview -- ask the user:\n';
+  for (const question of plan.interview) {
+    buf += `  - ${question.ask}\n`;
+  }
+  const inv = plan.inventory;
+  buf +=
+    '\nInventory (per site) -- required: ' +
+    inv.required_per_site.join(', ') +
+    '; optional: ' +
+    inv.optional_per_site.join(', ') +
+    '\n';
+  buf += 'Machine-readable plan with the full schema and an example: tryaii diagnose plan --json\n';
+  buf += '\nNext:\n';
+  buf += `  ${plan.commands.check}\n`;
+  buf += `  ${plan.commands.report}\n`;
+  await writePaced(buf);
+}
+
+/** Read + parse the inventory argument ('-' = stdin). Mirrors cachelint. */
+function diagnoseReadInventory(inputArg: string): unknown {
+  let raw: string;
+  if (inputArg === '-') {
+    raw = readFileSync(0, 'utf-8').replace(/\r\n/g, '\n');
+  } else {
+    let bytes: string;
+    try {
+      bytes = readFileSync(inputArg, 'utf-8');
+    } catch {
+      throw new CliError(`file not found: ${inputArg}`);
+    }
+    if (bytes.charCodeAt(0) === 0xfeff) bytes = bytes.slice(1);
+    raw = bytes.replace(/\r\n/g, '\n');
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    // Parser-neutral message: json and JSON.parse phrase errors differently.
+    const where = inputArg === '-' ? 'on stdin' : `in '${inputArg}'`;
+    throw new CliUsageError(`invalid JSON ${where}`);
+  }
+}
+
+function diagnoseMoney(value: number): string {
+  return '$' + formatFixed(value, 2);
+}
+
+/** Human summary of a check run -- byte-identical across both CLIs. */
+function diagnoseSummaryText(findings: Record<string, any>, outDirDisplay: string): string {
+  const summary = findings.summary;
+  const skipped = findings.inventory.skipped.length;
+  const skippedNote = skipped ? `, ${skipped} skipped` : '';
+  let buf = `diagnose: ${summary.site_count} site(s) analyzed${skippedNote}\n\n`;
+  for (const [check, counts] of Object.entries(summary.check_status_counts) as Array<
+    [string, Record<string, number>]
+  >) {
+    buf +=
+      `  ${check.padEnd(16)} ${counts.ok} ok | ${counts.finding} finding | ` +
+      `${counts.insufficient_data} insufficient | ` +
+      `${counts.skipped} skipped\n`;
+  }
+  const totals = summary.totals;
+  if (totals.sites_with_traffic_data > 0) {
+    buf += `\nmonthly estimates (${totals.sites_with_traffic_data} site(s) with traffic data):\n`;
+    if (totals.est_monthly_cost_usd !== null) {
+      buf += `  est. cost           ${diagnoseMoney(totals.est_monthly_cost_usd)}\n`;
+    }
+    if (totals.est_monthly_cache_savings_usd !== null) {
+      buf += `  cache savings (max) ${diagnoseMoney(totals.est_monthly_cache_savings_usd)}\n`;
+    }
+    if (totals.est_monthly_swap_savings_usd !== null) {
+      buf += `  swap savings        ${diagnoseMoney(totals.est_monthly_swap_savings_usd)}\n`;
+    }
+  } else {
+    buf += '\nmonthly estimates: no traffic data (pass --calls-per-day or per-site calls_per_day)\n';
+  }
+  const runId = findings.run_id;
+  buf += '\n';
+  for (const name of ['inventory.json', 'findings.json', 'meta.json']) {
+    buf += `-> ${outDirDisplay}/${runId}/${name}\n`;
+  }
+  return buf;
+}
+
+function diagnoseUtcStamp(): string {
+  const d = new Date();
+  const p = (n: number): string => String(n).padStart(2, '0');
+  return (
+    `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}` +
+    `T${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`
+  );
+}
+
+async function diagnoseCheck(argv: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      'quality': { type: 'string' },
+      'cost': { type: 'string' },
+      'speed': { type: 'string' },
+      'checks': { type: 'string' },
+      'calls-per-day': { type: 'string' },
+      'output-tokens': { type: 'string' },
+      'goal': { type: 'string' },
+      'out-dir': { type: 'string', default: '.tryaii/diagnose' },
+      'run-id': { type: 'string' },
+      'now': { type: 'string' },
+      'json': { type: 'boolean', default: false },
+      'no-daemon': { type: 'boolean', default: false },
+    },
+  });
+
+  const input = positionals[0];
+  if (input === undefined) {
+    throw new CliUsageError('diagnose check: missing required argument: inventory');
+  }
+  const quality = intFlag('--quality', values.quality, 3);
+  const cost = intFlag('--cost', values.cost, 3);
+  const speed = intFlag('--speed', values.speed, 3);
+
+  // Lazy import: diagnose transitively loads the multi-MB tokenizer data.
+  const diagnose = await import('./diagnose/index.js');
+
+  let checks: string[] | null = null;
+  if (values.checks !== undefined) {
+    checks = values.checks
+      .split(',')
+      .map((c) => c.trim())
+      .filter((c) => c.length > 0);
+    const bad = checks.filter((c) => !diagnose.DEFAULT_CHECKS.includes(c));
+    if (bad.length) {
+      throw new CliUsageError(
+        `unknown check '${bad[0]}'. Valid checks: ` + diagnose.DEFAULT_CHECKS.join(', '),
+      );
+    }
+    if (!checks.length) {
+      throw new CliUsageError(
+        '--checks selected nothing. Valid checks: ' + diagnose.DEFAULT_CHECKS.join(', '),
+      );
+    }
+  }
+
+  const data = diagnoseReadInventory(input);
+
+  // Live classification is needed only when model_fit is selected and at
+  // least one prompt-bearing site lacks the _classification seam.
+  const norm = diagnose.normalizeInventory(data);
+  const needsRouting =
+    (checks === null || checks.includes('model_fit')) &&
+    norm.sites.some((site) => site.prompt !== null && site.classification === null);
+
+  let classifyFn: ((canonical: string) => Promise<Record<string, unknown> | null>) | undefined;
+  if (needsRouting) {
+    const config = createDefaultConfig();
+    if (!existsSync(join(config.dataDir, 'setup.json'))) {
+      throw new CliError(
+        "diagnose requires setup: run 'tryaii setup' first " +
+          '(downloads the embedding model and warms centroids)',
+      );
+    }
+
+    const prioritiesObj = new Priorities(quality, cost, speed);
+    const { routeFn } = await acquireRouteFn(config, values['no-daemon']);
+
+    classifyFn = async (canonical: string) => {
+      const result = await routeFn(canonical.slice(0, MAX_PROMPT_LENGTH), prioritiesObj, 1);
+      const c = result.classification;
+      if (!c) return null;
+      return {
+        benchmark_similarities: { ...c.benchmarkScores },
+        broad_category: c.broadCategory,
+        subcategory: c.subcategory,
+        confidence: c.confidence,
+      };
+    };
+  }
+
+  const runId = values['run-id'] ?? diagnoseUtcStamp();
+  const now = values.now ?? new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+
+  const findings = await diagnose.analyzeInventory(
+    data,
+    {
+      run_id: runId,
+      now,
+      version: version(),
+      priorities: { quality, cost, speed },
+      goal: values.goal ?? null,
+      checks,
+      calls_per_day: values['calls-per-day'] !== undefined
+        ? floatFlag('--calls-per-day', values['calls-per-day'])
+        : null,
+      output_tokens: values['output-tokens'] !== undefined
+        ? intFlag('--output-tokens', values['output-tokens'], 500)
+        : null,
+    },
+    classifyFn,
+  );
+
+  diagnose.writeRun(values['out-dir'], data, findings);
+
+  if (values.json) {
+    out.write(JSON.stringify(findings, null, 2) + '\n');
+  } else {
+    const outDirDisplay = values['out-dir'].replace(/\\/g, '/');
+    await writePaced(diagnoseSummaryText(findings, outDirDisplay));
+  }
+}
+
+const AGENTS_BEGIN = '<!-- tryaii-diagnose:begin -->';
+const AGENTS_END = '<!-- tryaii-diagnose:end -->';
+const GITIGNORE_LINE = '/.tryaii/';
+
+/**
+ * Write `content` if the file differs; echo what happened. All init writes
+ * are LF-normalized (both CLIs read+write LF for parity).
+ */
+function initWrite(path: string, content: string, display: string): void {
+  if (existsSync(path) && readFileSync(path, 'utf-8').replace(/\r\n/g, '\n') === content) {
+    out.write(`ok ${display} (up to date)\n`);
+    return;
+  }
+  mkdirSync(resolve(path, '..'), { recursive: true });
+  writeFileSync(path, content, 'utf-8');
+  out.write(`-> ${display}\n`);
+}
+
+function initReadLf(path: string): string {
+  return readFileSync(path, 'utf-8').replace(/\r\n/g, '\n');
+}
+
+async function diagnoseInit(argv: string[]): Promise<void> {
+  const { values } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      'dir': { type: 'string', default: '.' },
+      'no-gitignore': { type: 'boolean', default: false },
+    },
+  });
+
+  const data = JSON.parse(
+    readFileSync(new URL('./diagnose/data/skill.json', import.meta.url), 'utf-8'),
+  ) as { skill_md: string; agents_pointer_md: string };
+  const base = values.dir;
+  const baseDisplay = base.replace(/\\/g, '/');
+  const display = (rel: string): string => (baseDisplay === '.' ? rel : `${baseDisplay}/${rel}`);
+
+  // 1. The skill (a tryaii-owned file: always safe to overwrite).
+  initWrite(
+    join(base, '.claude', 'skills', 'tryaii-diagnose', 'SKILL.md'),
+    data.skill_md,
+    display('.claude/skills/tryaii-diagnose/SKILL.md'),
+  );
+
+  // 2. AGENTS.md pointer block (replace between markers / append / create;
+  //    everything outside the markers is never touched).
+  const block = data.agents_pointer_md.trim();
+  const agentsPath = join(base, 'AGENTS.md');
+  let agentsContent: string;
+  if (existsSync(agentsPath)) {
+    const text = initReadLf(agentsPath);
+    if (text.includes(AGENTS_BEGIN) && text.includes(AGENTS_END)) {
+      const start = text.indexOf(AGENTS_BEGIN);
+      const end = text.indexOf(AGENTS_END) + AGENTS_END.length;
+      agentsContent = text.slice(0, start) + block + text.slice(end);
+    } else {
+      agentsContent = text.replace(/\n+$/, '') + '\n\n' + block + '\n';
+    }
+  } else {
+    agentsContent = block + '\n';
+  }
+  initWrite(agentsPath, agentsContent, display('AGENTS.md'));
+
+  // 3. Anchored gitignore entry (the 0.2.0 wheel incident is why this is
+  //    anchored: an unanchored pattern can eat package directories).
+  if (!values['no-gitignore']) {
+    const giPath = join(base, '.gitignore');
+    let giContent: string;
+    if (existsSync(giPath)) {
+      const text = initReadLf(giPath);
+      if (text.split('\n').includes(GITIGNORE_LINE)) {
+        giContent = text;
+      } else {
+        giContent =
+          text.replace(/\n+$/, '') + '\n\n# tryaii diagnose runs (local)\n' + GITIGNORE_LINE + '\n';
+      }
+    } else {
+      giContent = '# tryaii diagnose runs (local)\n' + GITIGNORE_LINE + '\n';
+    }
+    initWrite(giPath, giContent, display('.gitignore'));
+  }
+}
+
+async function diagnoseReport(argv: string[]): Promise<void> {
+  const { values } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      'run': { type: 'string' },
+      'out-dir': { type: 'string', default: '.tryaii/diagnose' },
+      'out': { type: 'string' },
+    },
+  });
+
+  const diagnose = await import('./diagnose/index.js');
+  const outDir = values['out-dir'];
+  const runId = values.run ?? diagnose.latestRunId(outDir);
+  if (runId === null) {
+    throw new CliError(
+      `no diagnose runs found in '${outDir}' (run 'tryaii diagnose check' first)`,
+    );
+  }
+  let findings: Record<string, unknown>;
+  try {
+    findings = diagnose.loadRunFindings(outDir, runId);
+  } catch {
+    throw new CliError(`run '${runId}' not found in '${outDir}'`);
+  }
+  const prevId = diagnose.previousRunId(outDir, runId);
+  const previous = prevId !== null ? diagnose.loadRunFindings(outDir, prevId) : null;
+
+  const html = diagnose.renderReportHtml(findings, previous);
+  const outDirDisplay = outDir.replace(/\\/g, '/');
+  let outPath: string;
+  let display: string;
+  if (values.out) {
+    outPath = values.out;
+    display = values.out.replace(/\\/g, '/');
+  } else {
+    outPath = join(outDir, runId, 'index.html');
+    display = `${outDirDisplay}/${runId}/index.html`;
+  }
+  mkdirSync(resolve(outPath, '..'), { recursive: true });
+  writeFileSync(outPath, html, 'utf-8');
+  out.write(`-> ${display}\n`);
+}
+
+/** Verb dispatcher for `tryaii diagnose` (verb-peeling, like `help <topic>`). */
+async function cmdDiagnose(subArgs: string[]): Promise<void> {
+  const verbs: Record<string, (argv: string[]) => Promise<void>> = {
+    init: diagnoseInit,
+    plan: diagnosePlan,
+    check: diagnoseCheck,
+    report: diagnoseReport,
+  };
+  const verb = subArgs[0];
+  if (verb === undefined) {
+    throw new CliUsageError('missing diagnose verb. Run "tryaii help diagnose".');
+  }
+  const handler = verbs[verb];
+  if (handler === undefined) {
+    throw new CliUsageError(`unknown diagnose verb: ${verb}. Run "tryaii help diagnose".`);
+  }
+  await handler(subArgs.slice(1));
+}
+
+// ---------------------------------------------------------------------------
 // help / dispatch
 // ---------------------------------------------------------------------------
 
@@ -802,6 +1205,7 @@ Commands:
   route <prompt>        Route a prompt to the best model and show recommendations
   eval <input.json>     Route a JSON dataset; writes results.jsonl, summary.json, index.html
   cachelint <input.json>  Analyze prompt-cache readiness before sending (--json, --provider)
+  diagnose <verb>       Agent-driven codebase diagnostics: plan, check (see 'tryaii help diagnose')
   models                List available models (--provider <name>, --json)
   benchmarks            List available benchmarks (--json)
   setup                 Download the embedding model and warm centroids (--model <name>)
@@ -1054,6 +1458,172 @@ Exit codes:
 Docs: docs/cli/cachelint.md
 `;
 
+const HELP_DIAGNOSE = `tryaii diagnose -- Analyze a codebase's LLM call sites
+
+Usage:
+  tryaii diagnose <verb> [options]
+
+diagnose is agent-first: your coding agent interviews you, finds the LLM
+call sites in the codebase, and writes an inventory JSON; tryaii runs
+deterministic checks over it and stores each run under .tryaii/diagnose/.
+Insight-only -- it never edits code and never sends anything anywhere.
+
+Verbs:
+  init                  Install the agent playbook into this repo (skill + AGENTS.md)
+  plan                  Print the check catalog + interview for the agent (--json)
+  check <inventory>     Run the checks over an agent-written inventory JSON
+  report                Render a run's findings to a self-contained index.html
+
+The four checks: model_fit (is each call site's model the right one for its
+prompt under your priorities), cache_readiness (will the prompt hit the
+provider's cache), cost_exposure (per-call/monthly cost, cache savings,
+cheaper-swap suggestion), hygiene (prompt structure and dynamic-value
+placement).
+
+Examples:
+  tryaii diagnose init
+  tryaii diagnose plan --json
+  tryaii diagnose check inventory.json --quality 3 --cost 4 --speed 2
+  tryaii diagnose report
+
+Exit codes:
+  0 checks completed (findings included), 1 runtime failure, 2 usage error.
+
+Docs: docs/cli/diagnose/README.md
+`;
+
+const HELP_DIAGNOSE_INIT = `tryaii diagnose init -- Install the agent playbook into a repo
+
+Usage:
+  tryaii diagnose init [options]
+
+Writes the pieces your coding agent needs to run diagnose end to end:
+
+  .claude/skills/tryaii-diagnose/SKILL.md   the playbook (interview ->
+                                            discovery -> inventory ->
+                                            check -> report)
+  AGENTS.md                                 a short pointer block (added
+                                            between tryaii-diagnose
+                                            markers; created if missing)
+  .gitignore                                an anchored /.tryaii/ entry so
+                                            run data stays untracked
+
+Idempotent: files already up to date are left alone (the AGENTS.md block
+is replaced in place on upgrades). Everything outside the marker block is
+never touched.
+
+Options:
+  --dir <path>          Target repo root (default: current directory)
+  --no-gitignore        Do not touch .gitignore
+
+Examples:
+  tryaii diagnose init
+  tryaii diagnose init --dir ../my-app --no-gitignore
+
+Exit codes:
+  0 success, 1 runtime failure, 2 usage error.
+
+Docs: docs/cli/diagnose/init.md
+`;
+
+const HELP_DIAGNOSE_PLAN = `tryaii diagnose plan -- The check catalog + interview for the agent
+
+Usage:
+  tryaii diagnose plan [--json]
+
+Prints what diagnose can check, the interview questions the agent should
+ask the user (checks, scope, priorities, traffic, goal), and the inventory
+shape the agent must produce. --json emits the machine-readable plan
+(schema tryaii.diagnose.plan/1) including a complete inventory example --
+agents should consume that.
+
+Options:
+  --json                Emit the machine-readable plan verbatim
+
+Examples:
+  tryaii diagnose plan
+  tryaii diagnose plan --json
+
+Exit codes:
+  0 success, 2 usage error.
+
+Docs: docs/cli/diagnose/plan.md
+`;
+
+const HELP_DIAGNOSE_CHECK = `tryaii diagnose check -- Run the checks over an inventory JSON
+
+Usage:
+  tryaii diagnose check <inventory.json | -> [options]
+
+Reads an agent-written inventory of LLM call sites (see 'diagnose plan
+--json' for the shape), runs the selected checks, and writes the run to
+<out-dir>/<run-id>/ (inventory.json, findings.json, meta.json) plus a
+'latest' pointer. Sites with missing data degrade honestly per check
+('insufficient data' with a reason) -- nothing is guessed.
+
+Requires 'tryaii setup' once beforehand when live classification is needed
+(any site without a precomputed _classification).
+
+Arguments:
+  <inventory.json>      Inventory file, or '-' for stdin
+
+Options:
+  --quality <1-5>       Quality priority (default 3)
+  --cost <1-5>          Cost priority (default 3)
+  --speed <1-5>         Speed priority (default 3)
+  --checks <list>       Comma-separated subset of model_fit, cache_readiness,
+                        cost_exposure, hygiene (default: all)
+  --calls-per-day <n>   Default traffic assumption for sites without one
+  --output-tokens <n>   Default output tokens per call (default 500)
+  --goal <text>         The user's stated goal (echoed into the findings)
+  --out-dir <dir>       Run store directory (default .tryaii/diagnose)
+  --run-id <id>         Override the run id (default: UTC timestamp)
+  --now <iso8601>       Override the generated_at timestamp
+  --json                Print the findings JSON to stdout instead of the summary
+  --no-daemon           Classify in-process; do not use or start a daemon
+
+Notes:
+  diagnose warns, it never blocks: findings do not change the exit code.
+  Cost figures are estimates; cache savings are an upper bound.
+
+Examples:
+  tryaii diagnose check inventory.json --quality 3 --cost 4 --speed 2
+  tryaii diagnose check inventory.json --calls-per-day 1000 --goal "reduce prices"
+  cat inventory.json | tryaii diagnose check - --json
+
+Exit codes:
+  0 checks completed (findings included), 1 runtime failure, 2 usage error
+  or invalid input.
+
+Docs: docs/cli/diagnose/check.md
+`;
+
+const HELP_DIAGNOSE_REPORT = `tryaii diagnose report -- Render a run to a self-contained HTML page
+
+Usage:
+  tryaii diagnose report [options]
+
+Renders <out-dir>/<run-id>/findings.json into index.html next to it: check
+chips per site (green = healthy), monthly cost/savings tiles, expandable
+detail per check, and -- when a previous run exists -- a delta band
+("since <run>: N improved..."). A pure function of the stored findings;
+the page is self-contained and everything stays local.
+
+Options:
+  --run <id>            Run to render (default: the 'latest' pointer)
+  --out-dir <dir>       Run store directory (default .tryaii/diagnose)
+  --out <file>          Write the HTML somewhere else instead
+
+Examples:
+  tryaii diagnose report
+  tryaii diagnose report --run 20260814T101530Z
+
+Exit codes:
+  0 success, 1 no runs found / runtime failure, 2 usage error.
+
+Docs: docs/cli/diagnose/report.md
+`;
+
 const HELP_HELP = `tryaii help -- Show help for tryaii or a specific command
 
 Usage:
@@ -1065,7 +1635,7 @@ detailed help for that command. The flags -h/--help after any command do
 the same thing.
 
 Topics:
-  route, eval, cachelint, models, benchmarks, setup, regenerate, help
+  route, eval, cachelint, diagnose, models, benchmarks, setup, regenerate, help
 
 Examples:
   tryaii help
@@ -1083,11 +1653,23 @@ const COMMAND_HELP: Record<string, string> = {
   route: HELP_ROUTE,
   eval: HELP_EVAL,
   cachelint: HELP_CACHELINT,
+  diagnose: HELP_DIAGNOSE,
   models: HELP_MODELS,
   benchmarks: HELP_BENCHMARKS,
   setup: HELP_SETUP,
   regenerate: HELP_REGENERATE,
   help: HELP_HELP,
+};
+
+/**
+ * Per-verb help for the diagnose command. Mirrors DIAGNOSE_VERB_HELP in the
+ * Python CLI (same parity guard as COMMAND_HELP).
+ */
+const DIAGNOSE_VERB_HELP: Record<string, string> = {
+  init: HELP_DIAGNOSE_INIT,
+  plan: HELP_DIAGNOSE_PLAN,
+  check: HELP_DIAGNOSE_CHECK,
+  report: HELP_DIAGNOSE_REPORT,
 };
 
 function version(): string {
@@ -1158,6 +1740,12 @@ async function main(): Promise<void> {
   }
 
   if (wantsHelp) {
+    if (command === 'diagnose') {
+      // `tryaii diagnose <verb> --help` gets the verb page.
+      const verb = subArgs.find((arg) => !arg.startsWith('-'));
+      await writePaced((verb && DIAGNOSE_VERB_HELP[verb]) || COMMAND_HELP.diagnose);
+      return;
+    }
     // Unknown command + --help still gets the global overview (then nothing else runs).
     await writePaced(COMMAND_HELP[command] ?? HELP);
     return;
@@ -1172,6 +1760,9 @@ async function main(): Promise<void> {
       break;
     case 'cachelint':
       await cmdCachelint(subArgs);
+      break;
+    case 'diagnose':
+      await cmdDiagnose(subArgs);
       break;
     case 'models':
       await cmdModels(subArgs);
