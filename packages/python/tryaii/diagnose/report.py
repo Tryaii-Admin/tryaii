@@ -195,10 +195,19 @@ def _model_fit_scope(payload: dict) -> list[dict]:
             "reasoning": "",
         })
 
+    same_price: list[dict] = []
+    sp = payload["recommended_same_price"]
+    if sp is not None:
+        if sp["is_current"]:
+            same_price.append({"value": "current model is the best at this price"})
+        else:
+            same_price.append({"value": f"{sp['model_id']} (rank {sp['rank']})"})
+
     return [{
         "summary": payload["summary"],
         "category": category,
         "confidence": _s(cls["confidence"]),
+        "same_price": same_price,
         "rows": rows,
     }]
 

@@ -5,7 +5,7 @@
     {
       "id": "model_fit",
       "title": "Model fit",
-      "what": "Classifies each call site's prompt and ranks the full model catalog under the user's quality/cost/speed priorities. Shows where the currently used model ranks and what would fit better.",
+      "what": "Classifies each call site's prompt and ranks the full model catalog under the user's quality/cost/speed priorities. Shows where the currently used model ranks, what would fit better overall, and the best model within +-20% of the current model's price.",
       "needs": ["prompt"],
       "better_with": ["model"],
       "recommended": true

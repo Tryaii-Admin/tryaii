@@ -17,6 +17,7 @@ TOP_EMITTED = 5
 RANK_OK_MAX = 3
 RANK_CONSIDER_MAX = 10
 SWAP_QUALITY_EPSILON = 0.05  # shared with cost_exposure's swap rule
+PRICE_BAND = 0.2  # recommended_same_price: ±20% of the current model's price
 
 
 def _dims(score: ModelScore) -> dict:
@@ -26,6 +27,44 @@ def _dims(score: ModelScore) -> dict:
         "cost_score": score.cost_score,
         "speed_score": score.speed_score,
     }
+
+
+def _blended_price(model) -> Optional[float]:
+    """The scoring engine's cost basis: mean of input/output per-1k prices."""
+    if model is None or model.pricing is None:
+        return None
+    return (model.pricing.input_per_1k + model.pricing.output_per_1k) / 2
+
+
+def _same_price_recommendation(
+    scores: list[ModelScore],
+    resolved_model_id: Optional[str],
+    registry,
+) -> Optional[dict]:
+    """SPEC §2.2.1: the best-RANKED model within ±20% of the current model's
+    blended price. The current model is itself a candidate — being the best
+    at your price is a positive result. None when there is no band to
+    search (current unresolved/unranked/unpriced) — never guessed."""
+    if resolved_model_id is None:
+        return None
+    current_price = _blended_price(registry.get_model(resolved_model_id))
+    if current_price is None:
+        return None
+    low = current_price * (1 - PRICE_BAND)
+    high = current_price * (1 + PRICE_BAND)
+    for rank0, score in enumerate(scores):
+        price = _blended_price(registry.get_model(score.model_id))
+        if price is None or price < low or price > high:
+            continue
+        return {
+            "model_id": score.model_id,
+            "rank": rank0 + 1,
+            "quality_score": score.quality_score,
+            "cost_score": score.cost_score,
+            "speed_score": score.speed_score,
+            "is_current": score.model_id == resolved_model_id,
+        }
+    return None
 
 
 def run_model_fit(
@@ -97,6 +136,9 @@ def run_model_fit(
             "top_benchmarks": [[name, _round4(v)] for name, v in best.top_benchmarks],
             "reasoning": best.reasoning,
         },
+        "recommended_same_price": _same_price_recommendation(
+            scores, resolved_model_id if current_score is not None else None,
+            registry),
         "top": [
             {"rank": i + 1, **_dims(s), "reasoning": s.reasoning}
             for i, s in enumerate(scores[:TOP_EMITTED])

@@ -206,11 +206,22 @@ function modelFitScope(payload: Record<string, any>): Scope[] {
     });
   }
 
+  const samePrice: Scope[] = [];
+  const sp = payload.recommended_same_price;
+  if (sp !== null) {
+    if (sp.is_current) {
+      samePrice.push({ value: 'current model is the best at this price' });
+    } else {
+      samePrice.push({ value: `${sp.model_id} (rank ${sp.rank})` });
+    }
+  }
+
   return [
     {
       summary: payload.summary,
       category,
       confidence: s(cls.confidence),
+      same_price: samePrice,
       rows,
     },
   ];

@@ -128,8 +128,26 @@ number of models actually RANKED — normally the whole catalog; a model the
 engine dropped for lack of signal is not counted), `current` (null or
 `{model_id, quality_score, cost_score, speed_score}`), `recommended`
 (`{model_id, quality_score, cost_score, speed_score, top_benchmarks,
-reasoning}`), `top` (the first **5** of the full ranking: `{rank, model_id,
-quality_score, cost_score, speed_score, reasoning}`).
+reasoning}`), `recommended_same_price` (§2.2.1), `top` (the first **5** of
+the full ranking: `{rank, model_id, quality_score, cost_score, speed_score,
+reasoning}`).
+
+#### §2.2.1 recommended_same_price
+
+Besides the overall best model, the check recommends the best model **in
+the current model's price range**: the FIRST model in ranking order whose
+blended price sits within ±20% of the current model's blended price.
+
+- Blended price = `(input_per_1k + output_per_1k) / 2` — the same average
+  the scoring engine's cost dimension uses.
+- Band = `[0.8 × current_blended, 1.2 × current_blended]`, both ends
+  inclusive. Candidates are the RANKED models that have pricing; the
+  current model is itself a candidate (being the best at your price is a
+  positive result, not an omission).
+- Emitted as `{model_id, rank, quality_score, cost_score, speed_score,
+  is_current}` — `is_current` marks that the current model already wins
+  its band. `null` when the current model is unresolved, unranked, or has
+  no pricing (no band to search — never guessed).
 
 `summary` one-liners (exact strings):
 - ok: `"<model_id> is a strong fit (rank <r> of <n>)"`

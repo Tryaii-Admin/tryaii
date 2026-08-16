@@ -26,7 +26,7 @@ tryaii diagnose report                   # open .tryaii/diagnose/<run-id>/index.
 
 | Check | Question it answers | Needs per site |
 |---|---|---|
-| `model_fit` | Where does the current model rank in the full catalog for THIS prompt under your priorities? | prompt (+ model for the comparison) |
+| `model_fit` | Where does the current model rank in the full catalog for THIS prompt under your priorities — and what is the best model within ±20% of its price? | prompt (+ model for the comparison) |
 | `cache_readiness` | Will this prompt hit the provider's prompt cache — and what blocks it? (the [cachelint](../cachelint.md) engine) | prompt + provider |
 | `cost_exposure` | Cost per call and per month, upper-bound cache savings, and a cheaper swap within quality tolerance | prompt + model (+ traffic for monthly) |
 | `hygiene` | Dynamic values in the wrong place, dynamic content in the system block, missing structure | prompt |
