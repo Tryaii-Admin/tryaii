@@ -21,5 +21,12 @@ export { resolveModelId } from './resolve.js';
 export { runModelFit } from './modelfit.js';
 export { runCost } from './cost.js';
 export { runHygiene } from './hygiene.js';
-export { writeRun, listRunIds, latestRunId, previousRunId, loadRunFindings } from './store.js';
+export {
+  writeRun,
+  listRunIds,
+  latestRunId,
+  previousRunId,
+  loadRunFindings,
+  loadRunInventory,
+} from './store.js';
 export { renderReportHtml, renderTemplate, buildScope } from './report.js';
