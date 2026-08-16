@@ -96,6 +96,14 @@
                   ],
                   "reasoning": "Quality: 0.83 on [MMLU (97%), Chatbot Arena (LMSys) (70%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
                 },
+                "recommended_same_price": {
+                  "model_id": "gemini-3.5-flash",
+                  "rank": 5,
+                  "quality_score": 0.8366,
+                  "cost_score": 0.9475,
+                  "speed_score": 0.8,
+                  "is_current": false
+                },
                 "top": [
                   {
                     "rank": 1,
@@ -274,6 +282,7 @@
                   ],
                   "reasoning": "Quality: 0.86 on [Chatbot Arena (LMSys) (86%), MT-Bench (85%)] | Cost efficiency: 0.98 | Speed: 0.60 (medium)"
                 },
+                "recommended_same_price": null,
                 "top": [
                   {
                     "rank": 1,
@@ -379,6 +388,7 @@
                   ],
                   "reasoning": "Quality: 0.87 on [MMLU (97%), TruthfulQA (70%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
                 },
+                "recommended_same_price": null,
                 "top": [
                   {
                     "rank": 1,

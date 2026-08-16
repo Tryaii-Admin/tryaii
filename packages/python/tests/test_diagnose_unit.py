@@ -59,6 +59,53 @@ def test_resolve_exact_wins_over_normalization():
 
 
 # ---------------------------------------------------------------------------
+# model_fit — recommended_same_price band edges (SPEC §2.2.1)
+# ---------------------------------------------------------------------------
+
+def _run_fit(registry, model_id):
+    from tryaii.diagnose.modelfit import run_model_fit
+    from tryaii.scoring.priorities import Priorities
+
+    payload, _internal = run_model_fit(
+        {"benchmark_similarities": _SIMS}, model_id, model_id,
+        Priorities(5, 1, 1), registry)
+    return payload["recommended_same_price"]
+
+
+def test_same_price_picks_better_model_inside_band():
+    registry = _mini_registry()
+    # blended 0.0014 — inside model-a's ±20% band [0.0012, 0.0018] — and
+    # higher quality, so it outranks model-a under quality-first priorities.
+    registry.add("model-c", "TestCo", benchmarks={"MMLU": 95.0},
+                 pricing=(0.0011, 0.0017), latency="fast")
+    sp = _run_fit(registry, "model-a")
+    assert sp["model_id"] == "model-c"
+    assert sp["is_current"] is False
+
+
+def test_same_price_excludes_out_of_band_models():
+    # model-b (blended 0.00015) is far below model-a's band, so even though
+    # it exists, the band search falls back to model-a itself.
+    sp = _run_fit(_mini_registry(), "model-a")
+    assert sp["model_id"] == "model-a"
+    assert sp["is_current"] is True
+
+
+def test_same_price_null_when_current_unpriced():
+    assert _run_fit(_mini_registry(), "free-model") is None
+
+
+def test_same_price_null_when_current_unresolved():
+    from tryaii.diagnose.modelfit import run_model_fit
+    from tryaii.scoring.priorities import Priorities
+
+    payload, _internal = run_model_fit(
+        {"benchmark_similarities": _SIMS}, None, "claude-9-mega",
+        Priorities(5, 1, 1), _mini_registry())
+    assert payload["recommended_same_price"] is None
+
+
+# ---------------------------------------------------------------------------
 # cost — custom-registry edges
 # ---------------------------------------------------------------------------
 

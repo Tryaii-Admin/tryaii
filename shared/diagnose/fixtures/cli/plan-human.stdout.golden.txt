@@ -1,7 +1,7 @@
 tryaii diagnose plan -- what diagnose can check
 
 Checks (recommended: run all):
-  - model_fit: Classifies each call site's prompt and ranks the full model catalog under the user's quality/cost/speed priorities. Shows where the currently used model ranks and what would fit better.
+  - model_fit: Classifies each call site's prompt and ranks the full model catalog under the user's quality/cost/speed priorities. Shows where the currently used model ranks, what would fit better overall, and the best model within +-20% of the current model's price.
   - cache_readiness: Pre-flight prompt-cache analysis (cachelint): will this prompt hit the provider's cache, what blocks it, how large is the stable prefix, and what to fix first.
   - cost_exposure: Estimated cost per call and per month, potential cache savings, and a cheaper-model swap suggestion that keeps quality within tolerance.
   - hygiene: Structural prompt review: dynamic values (timestamps, IDs, template slots) in the wrong place, dynamic content inside the system block, missing static structure.

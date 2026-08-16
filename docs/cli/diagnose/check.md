@@ -41,6 +41,13 @@ normalization — never fuzzily. Sites may carry a precomputed
 `_classification` (the injection seam); everything else classification-wise
 requires [`tryaii setup`](../setup.md) once.
 
+Besides the overall best model, model_fit also recommends the **best model
+in the current model's price range** (`recommended_same_price`): the
+highest-ranked model whose blended per-1k price sits within ±20% of the
+current model's — a quality upgrade that costs what you already pay. When
+the current model wins its own band, that is reported as a positive
+(`is_current: true`); unresolved/unpriced current models get `null`.
+
 Cost figures are estimates; **cache savings are an upper bound** built on
 conservative per-provider read-discount factors
 (`shared/diagnose/costmodel.json`). The cheaper-swap rule: the cheapest

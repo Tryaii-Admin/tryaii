@@ -13,7 +13,10 @@ deterministic checks over it and renders a local HTML report.
 
 - **Four checks per call site** — `model_fit` (full-catalog ranking under
   the user's quality/cost/speed priorities; rank + absolute dimension
-  scores, never renormalized cross-set deltas), `cache_readiness` (the
+  scores, never renormalized cross-set deltas; also recommends the best
+  model within ±20% of the current model's price —
+  `recommended_same_price`, a quality upgrade at the price already being
+  paid), `cache_readiness` (the
   cachelint engine per site), `cost_exposure` (per-call/monthly cost,
   upper-bound cache savings via conservative read-discount factors in
   `shared/diagnose/costmodel.json`, quality-tolerant cheaper-swap

@@ -67,6 +67,14 @@
           ],
           "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (95%)] | Cost efficiency: 0.83 | Speed: 0.60 (medium)"
         },
+        "recommended_same_price": {
+          "model_id": "claude-fable-5",
+          "rank": 2,
+          "quality_score": 0.9407,
+          "cost_score": 0.7,
+          "speed_score": 0.6,
+          "is_current": true
+        },
         "top": [
           {
             "rank": 1,
@@ -175,6 +183,14 @@
             ]
           ],
           "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (95%)] | Cost efficiency: 0.83 | Speed: 0.60 (medium)"
+        },
+        "recommended_same_price": {
+          "model_id": "claude-opus-4-5-20251101",
+          "rank": 7,
+          "quality_score": 0.8912,
+          "cost_score": 0,
+          "speed_score": 0.3,
+          "is_current": true
         },
         "top": [
           {
@@ -285,6 +301,14 @@
           ],
           "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (95%)] | Cost efficiency: 0.83 | Speed: 0.60 (medium)"
         },
+        "recommended_same_price": {
+          "model_id": "gpt-5",
+          "rank": 8,
+          "quality_score": 0.8825,
+          "cost_score": 0.9437,
+          "speed_score": 0.6,
+          "is_current": false
+        },
         "top": [
           {
             "rank": 1,
@@ -389,6 +413,7 @@
           ],
           "reasoning": "Quality: 0.73 on [HumanEval (87%), SWE-bench (84%)] | Cost efficiency: 0.97 | Speed: 1.00 (very fast)"
         },
+        "recommended_same_price": null,
         "top": [
           {
             "rank": 1,
@@ -481,6 +506,7 @@
           ],
           "reasoning": "Quality: 0.80 on [Chatbot Arena (LMSys) (75%), MT-Bench (80%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
         },
+        "recommended_same_price": null,
         "top": [
           {
             "rank": 1,
