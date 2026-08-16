@@ -1,0 +1,6 @@
+tryaii designpartner -- stage: submitted
+
+could not reach http://127.0.0.1:1/api — submission saved locally at .tryaii/designpartner/submission-20260101T000300Z.json
+
+
+next: Enrollment complete. Nothing further to do.

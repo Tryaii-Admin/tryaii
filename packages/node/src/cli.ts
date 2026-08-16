@@ -1049,21 +1049,102 @@ const AGENTS_END = '<!-- tryaii-diagnose:end -->';
 const GITIGNORE_LINE = '/.tryaii/';
 
 /**
- * Write `content` if the file differs; echo what happened. All init writes
- * are LF-normalized (both CLIs read+write LF for parity).
+ * Write `content` if the file differs; returns 'written' or 'up_to_date'.
+ * All init writes are LF-normalized (both CLIs read+write LF for parity).
  */
-function initWrite(path: string, content: string, display: string): void {
+function writeIfChanged(path: string, content: string): string {
   if (existsSync(path) && readFileSync(path, 'utf-8').replace(/\r\n/g, '\n') === content) {
-    out.write(`ok ${display} (up to date)\n`);
-    return;
+    return 'up_to_date';
   }
   mkdirSync(resolve(path, '..'), { recursive: true });
   writeFileSync(path, content, 'utf-8');
-  out.write(`-> ${display}\n`);
+  return 'written';
 }
 
 function initReadLf(path: string): string {
   return readFileSync(path, 'utf-8').replace(/\r\n/g, '\n');
+}
+
+interface InstallResult {
+  path: string;
+  action: string;
+}
+
+/**
+ * Install a skill + AGENTS.md marker block + anchored gitignore entry.
+ * Shared by `diagnose init` and the designpartner first run (each with its
+ * own markers; both blocks coexist in AGENTS.md). Mirrors
+ * _install_skill_files in main.py.
+ */
+function installSkillFiles(
+  base: string,
+  baseDisplay: string,
+  skillData: { skill_md: string; agents_pointer_md: string },
+  skillSubdir: string,
+  agentsBegin: string,
+  agentsEnd: string,
+  gitignoreComment: string,
+  noGitignore: boolean,
+): InstallResult[] {
+  const display = (rel: string): string => (baseDisplay === '.' ? rel : `${baseDisplay}/${rel}`);
+  const results: InstallResult[] = [];
+
+  // 1. The skill (a tryaii-owned file: always safe to overwrite).
+  const skillRel = `.claude/skills/${skillSubdir}/SKILL.md`;
+  results.push({
+    path: display(skillRel),
+    action: writeIfChanged(join(base, '.claude', 'skills', skillSubdir, 'SKILL.md'), skillData.skill_md),
+  });
+
+  // 2. AGENTS.md pointer block (replace between markers / append / create;
+  //    everything outside the markers is never touched).
+  const block = skillData.agents_pointer_md.trim();
+  const agentsPath = join(base, 'AGENTS.md');
+  let agentsContent: string;
+  if (existsSync(agentsPath)) {
+    const text = initReadLf(agentsPath);
+    if (text.includes(agentsBegin) && text.includes(agentsEnd)) {
+      const start = text.indexOf(agentsBegin);
+      const end = text.indexOf(agentsEnd) + agentsEnd.length;
+      agentsContent = text.slice(0, start) + block + text.slice(end);
+    } else {
+      agentsContent = text.replace(/\n+$/, '') + '\n\n' + block + '\n';
+    }
+  } else {
+    agentsContent = block + '\n';
+  }
+  results.push({ path: display('AGENTS.md'), action: writeIfChanged(agentsPath, agentsContent) });
+
+  // 3. Anchored gitignore entry (the 0.2.0 wheel incident is why this is
+  //    anchored: an unanchored pattern can eat package directories).
+  if (!noGitignore) {
+    const giPath = join(base, '.gitignore');
+    let giContent: string;
+    if (existsSync(giPath)) {
+      const text = initReadLf(giPath);
+      if (text.split('\n').includes(GITIGNORE_LINE)) {
+        giContent = text;
+      } else {
+        giContent =
+          text.replace(/\n+$/, '') + '\n\n' + gitignoreComment + '\n' + GITIGNORE_LINE + '\n';
+      }
+    } else {
+      giContent = gitignoreComment + '\n' + GITIGNORE_LINE + '\n';
+    }
+    results.push({ path: display('.gitignore'), action: writeIfChanged(giPath, giContent) });
+  }
+
+  return results;
+}
+
+function printInstallResults(results: InstallResult[]): void {
+  for (const entry of results) {
+    if (entry.action === 'written') {
+      out.write(`-> ${entry.path}\n`);
+    } else {
+      out.write(`ok ${entry.path} (up to date)\n`);
+    }
+  }
 }
 
 async function diagnoseInit(argv: string[]): Promise<void> {
@@ -1079,54 +1160,18 @@ async function diagnoseInit(argv: string[]): Promise<void> {
   const data = JSON.parse(
     readFileSync(new URL('./diagnose/data/skill.json', import.meta.url), 'utf-8'),
   ) as { skill_md: string; agents_pointer_md: string };
-  const base = values.dir;
-  const baseDisplay = base.replace(/\\/g, '/');
-  const display = (rel: string): string => (baseDisplay === '.' ? rel : `${baseDisplay}/${rel}`);
-
-  // 1. The skill (a tryaii-owned file: always safe to overwrite).
-  initWrite(
-    join(base, '.claude', 'skills', 'tryaii-diagnose', 'SKILL.md'),
-    data.skill_md,
-    display('.claude/skills/tryaii-diagnose/SKILL.md'),
+  printInstallResults(
+    installSkillFiles(
+      values.dir,
+      values.dir.replace(/\\/g, '/'),
+      data,
+      'tryaii-diagnose',
+      AGENTS_BEGIN,
+      AGENTS_END,
+      '# tryaii diagnose runs (local)',
+      values['no-gitignore'],
+    ),
   );
-
-  // 2. AGENTS.md pointer block (replace between markers / append / create;
-  //    everything outside the markers is never touched).
-  const block = data.agents_pointer_md.trim();
-  const agentsPath = join(base, 'AGENTS.md');
-  let agentsContent: string;
-  if (existsSync(agentsPath)) {
-    const text = initReadLf(agentsPath);
-    if (text.includes(AGENTS_BEGIN) && text.includes(AGENTS_END)) {
-      const start = text.indexOf(AGENTS_BEGIN);
-      const end = text.indexOf(AGENTS_END) + AGENTS_END.length;
-      agentsContent = text.slice(0, start) + block + text.slice(end);
-    } else {
-      agentsContent = text.replace(/\n+$/, '') + '\n\n' + block + '\n';
-    }
-  } else {
-    agentsContent = block + '\n';
-  }
-  initWrite(agentsPath, agentsContent, display('AGENTS.md'));
-
-  // 3. Anchored gitignore entry (the 0.2.0 wheel incident is why this is
-  //    anchored: an unanchored pattern can eat package directories).
-  if (!values['no-gitignore']) {
-    const giPath = join(base, '.gitignore');
-    let giContent: string;
-    if (existsSync(giPath)) {
-      const text = initReadLf(giPath);
-      if (text.split('\n').includes(GITIGNORE_LINE)) {
-        giContent = text;
-      } else {
-        giContent =
-          text.replace(/\n+$/, '') + '\n\n# tryaii diagnose runs (local)\n' + GITIGNORE_LINE + '\n';
-      }
-    } else {
-      giContent = '# tryaii diagnose runs (local)\n' + GITIGNORE_LINE + '\n';
-    }
-    initWrite(giPath, giContent, display('.gitignore'));
-  }
 }
 
 async function diagnoseReport(argv: string[]): Promise<void> {
@@ -1193,6 +1238,227 @@ async function cmdDiagnose(subArgs: string[]): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// designpartner (see shared/designpartner/SPEC.md; mirrors cmd_designpartner)
+// ---------------------------------------------------------------------------
+
+const DP_AGENTS_BEGIN = '<!-- tryaii-designpartner:begin -->';
+const DP_AGENTS_END = '<!-- tryaii-designpartner:end -->';
+
+/** Human rendering of the status report -- byte-identical across CLIs. */
+function designpartnerRender(report: Record<string, any>): string {
+  const stage = report.stage as string;
+  const action = report.action as Record<string, any>;
+  let buf = `tryaii designpartner -- stage: ${stage}\n\n`;
+
+  const atype = action.type as string;
+  if (atype === 'enrolled') {
+    for (const entry of action.installed ?? []) {
+      if (entry.action === 'written') {
+        buf += `-> ${entry.path}\n`;
+      } else {
+        buf += `ok ${entry.path} (up to date)\n`;
+      }
+    }
+    buf += '\n';
+  } else if (atype === 'answers_saved') {
+    buf += `answers saved (${action.count})\n`;
+    for (const warning of action.warnings) {
+      buf += `  dropped: ${warning.question} (not applicable)\n`;
+    }
+    buf += '\n';
+  } else if (atype === 'answers_rejected') {
+    buf += `answers rejected: ${action.problems.length} problem(s)\n`;
+    for (const problem of action.problems) {
+      buf += `  - ${problem.question}: ${problem.message}\n`;
+    }
+    buf += '\n';
+  } else if (atype === 'consent_chosen') {
+    buf += `consent recorded: ${action.tier}\n\n`;
+  } else if (atype === 'submitted') {
+    const submission = report.submission;
+    if (submission.delivered) {
+      buf += `delivered to ${submission.url}\n\n`;
+    } else {
+      buf +=
+        `could not reach ${submission.url} — submission saved ` +
+        `locally at ${submission.path}\n\n`;
+    }
+  } else if (atype === 'reset') {
+    buf += 'enrollment state cleared\n';
+    for (const removed of action.removed) {
+      buf += `  removed ${removed}\n`;
+    }
+    buf += '\n';
+  }
+
+  if (stage === 'questionnaire' && 'questionnaire' in report) {
+    const questionnaire = report.questionnaire;
+    const applicable = new Set(questionnaire.applicable as string[]);
+    const answers = questionnaire.answers as Record<string, unknown>;
+    for (const section of questionnaire.sections) {
+      const ids = section.questions
+        .map((q: Record<string, any>) => q.id as string)
+        .filter((qid: string) => applicable.has(qid));
+      const answered = ids.filter((qid: string) => qid in answers).length;
+      buf += `  ${section.title}: ${answered}/${ids.length} answered\n`;
+    }
+    buf += 'machine-readable catalog: tryaii designpartner --json\n';
+  } else if (stage === 'consent' || stage === 'diagnose') {
+    const consent = report.consent;
+    if (stage === 'diagnose') {
+      buf +=
+        `a diagnose run is required for tier '${consent.chosen}' ` +
+        "— run the tryaii-diagnose skill or 'tryaii diagnose " +
+        "check', then re-run designpartner\n";
+    } else {
+      for (const tier of consent.tiers) {
+        buf += `  ${tier.id} — ${tier.title}\n`;
+        buf += `    ${tier.copy}\n`;
+      }
+    }
+  } else if (stage === 'confirm') {
+    const preview = report.preview;
+    buf += `tier: ${preview.tier}\n`;
+    buf += 'will send:\n';
+    for (const item of preview.includes) {
+      buf += `  - ${item}\n`;
+    }
+    buf += `-> ${preview.path}\n`;
+  } else if (stage === 'submitted' && atype === 'status') {
+    const submission = report.submission;
+    if (submission.delivered) {
+      buf += `delivered to ${submission.url} at ${submission.submitted_at}\n`;
+    } else {
+      buf += `saved locally at ${submission.path} (not delivered)\n`;
+    }
+  }
+
+  buf += `\nnext: ${report.next.description}\n`;
+  if (report.next.command !== null) {
+    buf += `  ${report.next.command}\n`;
+  }
+  return buf;
+}
+
+function designpartnerUtc(format: 'iso' | 'stamp'): string {
+  const d = new Date();
+  const p = (n: number): string => String(n).padStart(2, '0');
+  if (format === 'iso') {
+    return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+  }
+  return (
+    `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}` +
+    `T${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`
+  );
+}
+
+async function cmdDesignpartner(subArgs: string[]): Promise<void> {
+  const { values } = parseArgs({
+    args: subArgs,
+    allowPositionals: true,
+    options: {
+      'answers': { type: 'string' },
+      'consent': { type: 'string' },
+      'confirm': { type: 'boolean', default: false },
+      'reset': { type: 'boolean', default: false },
+      'json': { type: 'boolean', default: false },
+      'out-dir': { type: 'string', default: '.tryaii/designpartner' },
+      'no-gitignore': { type: 'boolean', default: false },
+      'now': { type: 'string' },
+      'stamp': { type: 'string' },
+    },
+  });
+
+  const actionFlags = [
+    values.answers !== undefined,
+    values.consent !== undefined,
+    values.confirm,
+    values.reset,
+  ].filter(Boolean).length;
+  if (actionFlags > 1) {
+    throw new CliUsageError('pass at most one of --answers, --consent, --confirm, --reset');
+  }
+
+  let answers: Record<string, unknown> | null = null;
+  if (values.answers !== undefined) {
+    let raw: string;
+    if (values.answers === '-') {
+      raw = readFileSync(0, 'utf-8').replace(/\r\n/g, '\n');
+    } else {
+      let bytes: string;
+      try {
+        bytes = readFileSync(values.answers, 'utf-8');
+      } catch {
+        throw new CliError(`file not found: ${values.answers}`);
+      }
+      if (bytes.charCodeAt(0) === 0xfeff) bytes = bytes.slice(1);
+      raw = bytes.replace(/\r\n/g, '\n');
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      const where = values.answers === '-' ? 'on stdin' : `in '${values.answers}'`;
+      throw new CliUsageError(`invalid JSON ${where}`);
+    }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new CliUsageError('answers must be a JSON object of {"question_id": answer}');
+    }
+    answers = parsed as Record<string, unknown>;
+  }
+
+  const designpartner = await import('./designpartner/index.js');
+
+  // First run installs the agent playbook (skill + AGENTS.md block +
+  // gitignore) before the engine ever runs.
+  let installed: InstallResult[] | null = null;
+  if (!existsSync(join(values['out-dir'], designpartner.STATE_FILE)) && !values.reset) {
+    const data = JSON.parse(
+      readFileSync(new URL('./designpartner/data/skill.json', import.meta.url), 'utf-8'),
+    ) as { skill_md: string; agents_pointer_md: string };
+    installed = installSkillFiles(
+      '.',
+      '.',
+      data,
+      'tryaii-designpartner',
+      DP_AGENTS_BEGIN,
+      DP_AGENTS_END,
+      '# tryaii designpartner state (local)',
+      values['no-gitignore'],
+    );
+  }
+
+  const now = values.now ?? designpartnerUtc('iso');
+  const stamp = values.stamp ?? designpartnerUtc('stamp');
+
+  let report: Record<string, any>;
+  try {
+    report = await designpartner.advance(
+      values['out-dir'],
+      {
+        answers,
+        consent: values.consent ?? null,
+        confirm: values.confirm,
+        reset: values.reset,
+      },
+      { now, stamp, version: version(), url: undefined },
+    );
+  } catch (error) {
+    throw new CliUsageError((error as Error).message);
+  }
+
+  if (installed !== null) {
+    report.action.installed = installed;
+  }
+
+  if (values.json) {
+    out.write(JSON.stringify(report, null, 2) + '\n');
+  } else {
+    await writePaced(designpartnerRender(report));
+  }
+}
+
+// ---------------------------------------------------------------------------
 // help / dispatch
 // ---------------------------------------------------------------------------
 
@@ -1206,6 +1472,7 @@ Commands:
   eval <input.json>     Route a JSON dataset; writes results.jsonl, summary.json, index.html
   cachelint <input.json>  Analyze prompt-cache readiness before sending (--json, --provider)
   diagnose <verb>       Agent-driven codebase diagnostics: plan, check (see 'tryaii help diagnose')
+  designpartner         Enroll as a tryaii design partner (one resumable command)
   models                List available models (--provider <name>, --json)
   benchmarks            List available benchmarks (--json)
   setup                 Download the embedding model and warm centroids (--model <name>)
@@ -1624,6 +1891,54 @@ Exit codes:
 Docs: docs/cli/diagnose/report.md
 `;
 
+const HELP_DESIGNPARTNER = `tryaii designpartner -- Enroll as a tryaii design partner
+
+Usage:
+  tryaii designpartner [options]
+
+ONE resumable command -- no verbs. Every run reads the enrollment state
+(.tryaii/designpartner/), ingests whatever you pass, advances, and prints
+the current stage plus exactly what to do next (--json for agents). The
+flow: questionnaire -> diagnose run (required for insight tiers) ->
+consent -> confirm -> submitted. Your coding agent drives it via the
+tryaii-designpartner skill, installed automatically on the first run.
+
+Nothing is EVER sent without an explicit --confirm, and every submission
+is written to .tryaii/designpartner/ before any network attempt. Three
+consent tiers decide what is shared: contact_only (questionnaire answers
+only), summary_insights (adds the redacted diagnose summary -- no code,
+no paths, no prompts), full_partnership (adds the full findings AND your
+raw prompts -- stated verbatim in its consent copy).
+
+Options:
+  --answers <file|->    Validate + save questionnaire answers (JSON object)
+  --consent <tier>      Choose a consent tier; writes preview.json
+  --confirm             Send the previewed submission (saved locally first)
+  --reset               Clear the enrollment state (submissions are kept)
+  --json                Print the machine-readable status report
+  --out-dir <dir>       State directory (default .tryaii/designpartner)
+  --no-gitignore        First run: do not touch .gitignore
+  --now <iso8601>       Override timestamps (testing seam)
+  --stamp <id>          Override the submission filename stamp (testing seam)
+
+At most one of --answers/--consent/--confirm/--reset per invocation.
+The endpoint (https://designpartners.tryaii.com/api) can be overridden
+via TRYAII_DESIGNPARTNER_URL. If it cannot be reached, the submission
+stays saved locally and the command still succeeds.
+
+Examples:
+  tryaii designpartner
+  tryaii designpartner --answers answers.json
+  tryaii designpartner --consent summary_insights
+  tryaii designpartner --confirm
+
+Exit codes:
+  0 stage reported (including rejected answers), 1 runtime failure,
+  2 usage error.
+
+Docs: docs/cli/designpartner.md
+`;
+
 const HELP_HELP = `tryaii help -- Show help for tryaii or a specific command
 
 Usage:
@@ -1635,7 +1950,8 @@ detailed help for that command. The flags -h/--help after any command do
 the same thing.
 
 Topics:
-  route, eval, cachelint, diagnose, models, benchmarks, setup, regenerate, help
+  route, eval, cachelint, diagnose, designpartner, models, benchmarks, setup,
+  regenerate, help
 
 Examples:
   tryaii help
@@ -1654,6 +1970,7 @@ const COMMAND_HELP: Record<string, string> = {
   eval: HELP_EVAL,
   cachelint: HELP_CACHELINT,
   diagnose: HELP_DIAGNOSE,
+  designpartner: HELP_DESIGNPARTNER,
   models: HELP_MODELS,
   benchmarks: HELP_BENCHMARKS,
   setup: HELP_SETUP,
@@ -1763,6 +2080,9 @@ async function main(): Promise<void> {
       break;
     case 'diagnose':
       await cmdDiagnose(subArgs);
+      break;
+    case 'designpartner':
+      await cmdDesignpartner(subArgs);
       break;
     case 'models':
       await cmdModels(subArgs);

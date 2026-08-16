@@ -2,6 +2,47 @@
 
 ## Unreleased
 
+### designpartner — design-partner enrollment (both SDKs)
+
+New `tryaii designpartner` command — ONE resumable command (no verbs)
+that enrolls a user in tryaii's design-partner program, driven by their
+coding agent via a new `tryaii-designpartner` skill (installed
+automatically on the first run). Every invocation reads the state
+(`.tryaii/designpartner/`), ingests any flags, advances, and prints the
+stage + exactly what to do next (`--json` for agents); the flow resumes
+anywhere.
+
+- **Questionnaire as data** (`shared/designpartner/questions.json`): three
+  sections (About you / How you use AI / Where tryaii fits) of typed
+  questions with explicit `ask_if` conditional gating (per-provider model
+  questions appear only for selected providers). Validation reports ALL
+  problems at once and never blocks (exit 0; the agent loops).
+- **Three consent tiers, shown verbatim**: `contact_only` (answers only),
+  `summary_insights` (+ the redacted diagnose summary — no code, paths,
+  or prompts), `full_partnership` (+ the FULL findings and the raw-prompt
+  inventory of the latest diagnose run — its consent copy states the
+  prompt/path disclosure in plain words). Insight tiers require a
+  diagnose run; `--consent` writes `preview.json` (exactly what will be
+  sent) and `--confirm` — the only sending invocation — rejects a stale
+  preview.
+- **Submission**: versioned payload
+  (`tryaii.designpartner.submission/1`), ALWAYS saved to
+  `.tryaii/designpartner/submission-<stamp>.json` before any network
+  attempt; POST to `https://designpartners.tryaii.com/api` (override
+  `TRYAII_DESIGNPARTNER_URL` — a new env convention) via stdlib urllib
+  (Python; no new dependency) / native fetch (Node), 10s timeout, one
+  attempt; any failure collapses to a deterministic "saved locally"
+  notice with exit 0.
+- **Cross-SDK parity, enforced**: `shared/designpartner/SPEC.md`
+  contract, five fixture suites frozen from the Python reference
+  (`scripts/gen-designpartner-fixtures.py --check`), Node conformance
+  with key-order pinning, and a cross-CLI suite that byte-compares
+  stdout/stderr/exit AND every written file (state, preview, submission,
+  installed skill) — the network save-local branch runs deterministically
+  in fixtures via an instantly-refused URL injected through a new per-case
+  `env` seam. `tryaii diagnose`'s skill-install helpers were generalized
+  in place and are shared by both commands.
+
 ### diagnose — agent-first codebase LLM diagnostics (both SDKs)
 
 New `tryaii diagnose` command (verbs: `init`, `plan`, `check`, `report`) and

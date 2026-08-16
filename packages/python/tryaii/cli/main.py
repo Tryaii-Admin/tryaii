@@ -43,6 +43,7 @@ Commands:
   eval <input.json>     Route a JSON dataset; writes results.jsonl, summary.json, index.html
   cachelint <input.json>  Analyze prompt-cache readiness before sending (--json, --provider)
   diagnose <verb>       Agent-driven codebase diagnostics: plan, check (see 'tryaii help diagnose')
+  designpartner         Enroll as a tryaii design partner (one resumable command)
   models                List available models (--provider <name>, --json)
   benchmarks            List available benchmarks (--json)
   setup                 Download the embedding model and warm centroids (--model <name>)
@@ -459,6 +460,54 @@ Exit codes:
 Docs: docs/cli/diagnose/report.md
 """
 
+HELP_DESIGNPARTNER = """tryaii designpartner -- Enroll as a tryaii design partner
+
+Usage:
+  tryaii designpartner [options]
+
+ONE resumable command -- no verbs. Every run reads the enrollment state
+(.tryaii/designpartner/), ingests whatever you pass, advances, and prints
+the current stage plus exactly what to do next (--json for agents). The
+flow: questionnaire -> diagnose run (required for insight tiers) ->
+consent -> confirm -> submitted. Your coding agent drives it via the
+tryaii-designpartner skill, installed automatically on the first run.
+
+Nothing is EVER sent without an explicit --confirm, and every submission
+is written to .tryaii/designpartner/ before any network attempt. Three
+consent tiers decide what is shared: contact_only (questionnaire answers
+only), summary_insights (adds the redacted diagnose summary -- no code,
+no paths, no prompts), full_partnership (adds the full findings AND your
+raw prompts -- stated verbatim in its consent copy).
+
+Options:
+  --answers <file|->    Validate + save questionnaire answers (JSON object)
+  --consent <tier>      Choose a consent tier; writes preview.json
+  --confirm             Send the previewed submission (saved locally first)
+  --reset               Clear the enrollment state (submissions are kept)
+  --json                Print the machine-readable status report
+  --out-dir <dir>       State directory (default .tryaii/designpartner)
+  --no-gitignore        First run: do not touch .gitignore
+  --now <iso8601>       Override timestamps (testing seam)
+  --stamp <id>          Override the submission filename stamp (testing seam)
+
+At most one of --answers/--consent/--confirm/--reset per invocation.
+The endpoint (https://designpartners.tryaii.com/api) can be overridden
+via TRYAII_DESIGNPARTNER_URL. If it cannot be reached, the submission
+stays saved locally and the command still succeeds.
+
+Examples:
+  tryaii designpartner
+  tryaii designpartner --answers answers.json
+  tryaii designpartner --consent summary_insights
+  tryaii designpartner --confirm
+
+Exit codes:
+  0 stage reported (including rejected answers), 1 runtime failure,
+  2 usage error.
+
+Docs: docs/cli/designpartner.md
+"""
+
 HELP_HELP = """tryaii help -- Show help for tryaii or a specific command
 
 Usage:
@@ -470,7 +519,8 @@ detailed help for that command. The flags -h/--help after any command do
 the same thing.
 
 Topics:
-  route, eval, cachelint, diagnose, models, benchmarks, setup, regenerate, help
+  route, eval, cachelint, diagnose, designpartner, models, benchmarks, setup,
+  regenerate, help
 
 Examples:
   tryaii help
@@ -489,6 +539,7 @@ COMMAND_HELP = {
     "eval": HELP_EVAL,
     "cachelint": HELP_CACHELINT,
     "diagnose": HELP_DIAGNOSE,
+    "designpartner": HELP_DESIGNPARTNER,
     "models": HELP_MODELS,
     "benchmarks": HELP_BENCHMARKS,
     "setup": HELP_SETUP,
@@ -1500,16 +1551,81 @@ _AGENTS_END = "<!-- tryaii-diagnose:end -->"
 _GITIGNORE_LINE = "/.tryaii/"
 
 
-def _init_write(path: Path, content: str, display: str) -> None:
-    """Write `content` if the file differs; echo what happened. All init
-    writes are LF-normalized (both CLIs read+write LF for parity)."""
+def _write_if_changed(path: Path, content: str) -> str:
+    """Write `content` if the file differs; returns 'written' or
+    'up_to_date'. All init writes are LF-normalized (both CLIs read+write
+    LF for parity)."""
     if path.is_file() and path.read_text(encoding="utf-8") == content:
-        print(f"ok {display} (up to date)")
-        return
+        return "up_to_date"
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(content)
-    print(f"-> {display}")
+    return "written"
+
+
+def _install_skill_files(base: Path, base_display: str, skill_data: dict,
+                         skill_subdir: str, agents_begin: str, agents_end: str,
+                         gitignore_comment: str, no_gitignore: bool) -> list:
+    """Install a skill + AGENTS.md marker block + anchored gitignore entry.
+
+    Shared by `diagnose init` and the designpartner first run (each with
+    its own markers; both blocks coexist in AGENTS.md). Returns
+    [{"path": display, "action": "written"|"up_to_date"}] in write order.
+    """
+    def display(rel: str) -> str:
+        return rel if base_display == "." else f"{base_display}/{rel}"
+
+    results = []
+
+    # 1. The skill (a tryaii-owned file: always safe to overwrite).
+    skill_rel = f".claude/skills/{skill_subdir}/SKILL.md"
+    action = _write_if_changed(
+        base / ".claude" / "skills" / skill_subdir / "SKILL.md",
+        skill_data["skill_md"])
+    results.append({"path": display(skill_rel), "action": action})
+
+    # 2. AGENTS.md pointer block (replace between markers / append / create;
+    #    everything outside the markers is never touched).
+    block = skill_data["agents_pointer_md"].strip()
+    agents_path = base / "AGENTS.md"
+    if agents_path.is_file():
+        text = agents_path.read_text(encoding="utf-8")
+        if agents_begin in text and agents_end in text:
+            start = text.index(agents_begin)
+            end = text.index(agents_end) + len(agents_end)
+            content = text[:start] + block + text[end:]
+        else:
+            content = text.rstrip("\n") + "\n\n" + block + "\n"
+    else:
+        content = block + "\n"
+    action = _write_if_changed(agents_path, content)
+    results.append({"path": display("AGENTS.md"), "action": action})
+
+    # 3. Anchored gitignore entry (the 0.2.0 wheel incident is why this is
+    #    anchored: an unanchored pattern can eat package directories).
+    if not no_gitignore:
+        gi_path = base / ".gitignore"
+        if gi_path.is_file():
+            text = gi_path.read_text(encoding="utf-8")
+            if _GITIGNORE_LINE in text.splitlines():
+                content = text
+            else:
+                content = (text.rstrip("\n") + "\n\n" + gitignore_comment + "\n"
+                           + _GITIGNORE_LINE + "\n")
+        else:
+            content = gitignore_comment + "\n" + _GITIGNORE_LINE + "\n"
+        action = _write_if_changed(gi_path, content)
+        results.append({"path": display(".gitignore"), "action": action})
+
+    return results
+
+
+def _print_install_results(results: list) -> None:
+    for entry in results:
+        if entry["action"] == "written":
+            print(f"-> {entry['path']}")
+        else:
+            print(f"ok {entry['path']} (up to date)")
 
 
 def _diagnose_init(argv):
@@ -1519,47 +1635,10 @@ def _diagnose_init(argv):
     args = parser.parse_args(argv)
 
     data = json.loads(_diagnose_data_path("skill.json").read_text(encoding="utf-8"))
-    base = Path(args.dir)
-    base_display = args.dir.replace("\\", "/")
-
-    def display(rel: str) -> str:
-        return rel if base_display == "." else f"{base_display}/{rel}"
-
-    # 1. The skill (a tryaii-owned file: always safe to overwrite).
-    _init_write(base / ".claude" / "skills" / "tryaii-diagnose" / "SKILL.md",
-                data["skill_md"],
-                display(".claude/skills/tryaii-diagnose/SKILL.md"))
-
-    # 2. AGENTS.md pointer block (replace between markers / append / create;
-    #    everything outside the markers is never touched).
-    block = data["agents_pointer_md"].strip()
-    agents_path = base / "AGENTS.md"
-    if agents_path.is_file():
-        text = agents_path.read_text(encoding="utf-8")
-        if _AGENTS_BEGIN in text and _AGENTS_END in text:
-            start = text.index(_AGENTS_BEGIN)
-            end = text.index(_AGENTS_END) + len(_AGENTS_END)
-            content = text[:start] + block + text[end:]
-        else:
-            content = text.rstrip("\n") + "\n\n" + block + "\n"
-    else:
-        content = block + "\n"
-    _init_write(agents_path, content, display("AGENTS.md"))
-
-    # 3. Anchored gitignore entry (the 0.2.0 wheel incident is why this is
-    #    anchored: an unanchored pattern can eat package directories).
-    if not args.no_gitignore:
-        gi_path = base / ".gitignore"
-        if gi_path.is_file():
-            text = gi_path.read_text(encoding="utf-8")
-            if _GITIGNORE_LINE in text.splitlines():
-                content = text
-            else:
-                content = (text.rstrip("\n") + "\n\n# tryaii diagnose runs (local)\n"
-                           + _GITIGNORE_LINE + "\n")
-        else:
-            content = "# tryaii diagnose runs (local)\n" + _GITIGNORE_LINE + "\n"
-        _init_write(gi_path, content, display(".gitignore"))
+    _print_install_results(_install_skill_files(
+        Path(args.dir), args.dir.replace("\\", "/"), data, "tryaii-diagnose",
+        _AGENTS_BEGIN, _AGENTS_END, "# tryaii diagnose runs (local)",
+        args.no_gitignore))
 
 
 def _diagnose_report(argv):
@@ -1603,6 +1682,169 @@ def _diagnose_report(argv):
     with open(out_path, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(html)
     print(f"-> {display}")
+
+
+# ---------------------------------------------------------------------------
+# designpartner (see shared/designpartner/SPEC.md)
+# ---------------------------------------------------------------------------
+
+_DP_AGENTS_BEGIN = "<!-- tryaii-designpartner:begin -->"
+_DP_AGENTS_END = "<!-- tryaii-designpartner:end -->"
+
+
+def _designpartner_render(report: dict) -> str:
+    """Human rendering of the status report -- byte-identical across CLIs."""
+    stage = report["stage"]
+    action = report["action"]
+    buf = f"tryaii designpartner -- stage: {stage}\n\n"
+
+    atype = action["type"]
+    if atype == "enrolled":
+        for entry in action.get("installed", []):
+            if entry["action"] == "written":
+                buf += f"-> {entry['path']}\n"
+            else:
+                buf += f"ok {entry['path']} (up to date)\n"
+        buf += "\n"
+    elif atype == "answers_saved":
+        buf += f"answers saved ({action['count']})\n"
+        for warning in action["warnings"]:
+            buf += f"  dropped: {warning['question']} (not applicable)\n"
+        buf += "\n"
+    elif atype == "answers_rejected":
+        buf += f"answers rejected: {len(action['problems'])} problem(s)\n"
+        for problem in action["problems"]:
+            buf += f"  - {problem['question']}: {problem['message']}\n"
+        buf += "\n"
+    elif atype == "consent_chosen":
+        buf += f"consent recorded: {action['tier']}\n\n"
+    elif atype == "submitted":
+        submission = report["submission"]
+        if submission["delivered"]:
+            buf += f"delivered to {submission['url']}\n\n"
+        else:
+            buf += (f"could not reach {submission['url']} — submission saved "
+                    f"locally at {submission['path']}\n\n")
+    elif atype == "reset":
+        buf += "enrollment state cleared\n"
+        for removed in action["removed"]:
+            buf += f"  removed {removed}\n"
+        buf += "\n"
+
+    if stage == "questionnaire" and "questionnaire" in report:
+        questionnaire = report["questionnaire"]
+        applicable = set(questionnaire["applicable"])
+        answers = questionnaire["answers"]
+        for section in questionnaire["sections"]:
+            ids = [q["id"] for q in section["questions"] if q["id"] in applicable]
+            answered = sum(1 for qid in ids if qid in answers)
+            buf += f"  {section['title']}: {answered}/{len(ids)} answered\n"
+        buf += "machine-readable catalog: tryaii designpartner --json\n"
+    elif stage in ("consent", "diagnose"):
+        consent = report["consent"]
+        if stage == "diagnose":
+            buf += (f"a diagnose run is required for tier '{consent['chosen']}' "
+                    "— run the tryaii-diagnose skill or 'tryaii diagnose "
+                    "check', then re-run designpartner\n")
+        else:
+            for tier in consent["tiers"]:
+                buf += f"  {tier['id']} — {tier['title']}\n"
+                buf += f"    {tier['copy']}\n"
+    elif stage == "confirm":
+        preview = report["preview"]
+        buf += f"tier: {preview['tier']}\n"
+        buf += "will send:\n"
+        for item in preview["includes"]:
+            buf += f"  - {item}\n"
+        buf += f"-> {preview['path']}\n"
+    elif stage == "submitted" and atype == "status":
+        submission = report["submission"]
+        if submission["delivered"]:
+            buf += f"delivered to {submission['url']} at {submission['submitted_at']}\n"
+        else:
+            buf += f"saved locally at {submission['path']} (not delivered)\n"
+
+    buf += f"\nnext: {report['next']['description']}\n"
+    if report["next"]["command"] is not None:
+        buf += f"  {report['next']['command']}\n"
+    return buf
+
+
+def cmd_designpartner(args):
+    """The resumable design-partner command (shared/designpartner/SPEC.md)."""
+    from tryaii import __version__
+    from tryaii.designpartner import advance
+    from tryaii.designpartner.state import STATE_FILE
+
+    action_flags = [args.answers is not None, args.consent is not None,
+                    args.confirm, args.reset]
+    if sum(action_flags) > 1:
+        print("error: pass at most one of --answers, --consent, --confirm, "
+              "--reset", file=sys.stderr)
+        sys.exit(2)
+
+    answers = None
+    if args.answers is not None:
+        if args.answers == "-":
+            raw = sys.stdin.read()
+        else:
+            path = Path(args.answers)
+            if not path.is_file():
+                raise FileNotFoundError(f"file not found: {args.answers}")
+            raw = path.read_text(encoding="utf-8-sig")
+        try:
+            answers = json.loads(raw)
+        except json.JSONDecodeError:
+            where = "on stdin" if args.answers == "-" else f"in '{args.answers}'"
+            print(f"error: invalid JSON {where}", file=sys.stderr)
+            sys.exit(2)
+        if not isinstance(answers, dict):
+            print("error: answers must be a JSON object of "
+                  '{"question_id": answer}', file=sys.stderr)
+            sys.exit(2)
+
+    # First run installs the agent playbook (skill + AGENTS.md block +
+    # gitignore) before the engine ever runs.
+    installed = None
+    if not (Path(args.out_dir) / STATE_FILE).is_file() and not args.reset:
+        data = json.loads(
+            (Path(_designpartner_data_path("skill.json"))).read_text(encoding="utf-8"))
+        installed = _install_skill_files(
+            Path("."), ".", data, "tryaii-designpartner",
+            _DP_AGENTS_BEGIN, _DP_AGENTS_END,
+            "# tryaii designpartner state (local)", args.no_gitignore)
+
+    now = args.now or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    stamp = args.stamp or time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+
+    try:
+        report = advance(
+            args.out_dir,
+            {"answers": answers, "consent": args.consent,
+             "confirm": args.confirm, "reset": args.reset},
+            {"now": now, "stamp": stamp, "version": __version__, "url": None},
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(2)
+
+    if installed is not None:
+        report["action"]["installed"] = installed
+
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001 -- best effort; never break output
+        pass
+    if args.json:
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+    else:
+        _write_paced(_designpartner_render(report))
+
+
+def _designpartner_data_path(name: str) -> Path:
+    from tryaii import designpartner as dp_pkg
+
+    return Path(dp_pkg.__file__).parent / "data" / name
 
 
 def cmd_diagnose(argv):
@@ -1701,6 +1943,21 @@ def cli():
         "--model", help="Raw-text mode: model name (requires --provider)")
     cachelint_parser.add_argument(
         "--json", action="store_true", help="Emit the machine-readable result")
+
+    # designpartner (single resumable command; no verbs)
+    dp_parser = subparsers.add_parser(
+        "designpartner", help="Enroll as a tryaii design partner")
+    dp_parser.add_argument("--answers", help="Answers JSON file, or '-' for stdin")
+    dp_parser.add_argument("--consent", help="Consent tier id")
+    dp_parser.add_argument("--confirm", action="store_true")
+    dp_parser.add_argument("--reset", action="store_true")
+    dp_parser.add_argument("--json", action="store_true")
+    dp_parser.add_argument("--out-dir", default=".tryaii/designpartner",
+                           dest="out_dir")
+    dp_parser.add_argument("--no-gitignore", action="store_true",
+                           dest="no_gitignore")
+    dp_parser.add_argument("--now")
+    dp_parser.add_argument("--stamp")
 
     # setup
     setup_parser = subparsers.add_parser("setup", help="Initialize centroids")
@@ -1808,6 +2065,7 @@ def cli():
         "route": cmd_route,
         "eval": cmd_eval,
         "cachelint": cmd_cachelint,
+        "designpartner": cmd_designpartner,
         "setup": cmd_setup,
         "models": cmd_models,
         "benchmarks": cmd_benchmarks,
