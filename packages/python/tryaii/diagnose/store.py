@@ -76,3 +76,10 @@ def previous_run_id(out_dir: Path, run_id: str) -> Optional[str]:
 def load_run_findings(out_dir: Path, run_id: str) -> dict:
     path = Path(out_dir) / run_id / "findings.json"
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def load_run_inventory(out_dir: Path, run_id: str):
+    """The verbatim inventory stored next to findings.json (raw prompts —
+    consumed by designpartner's full_partnership tier, with explicit consent)."""
+    path = Path(out_dir) / run_id / "inventory.json"
+    return json.loads(path.read_text(encoding="utf-8"))

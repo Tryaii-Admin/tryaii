@@ -1,0 +1,307 @@
+{
+  "suite": "validate",
+  "target": "tryaii.designpartner.catalog.validate_answers",
+  "cases": [
+    {
+      "name": "valid-full",
+      "description": "SPEC §3.2: a complete valid answer set — canonical answers in catalog order, no problems.",
+      "input": {
+        "answers_file": "corpus/answers-valid.json"
+      },
+      "expected": {
+        "answers": {
+          "name": "Dana Reyes",
+          "email": "dana@acme-robotics.io",
+          "company": "Acme Robotics",
+          "role": "Head of Platform",
+          "company_size": "11_50",
+          "providers": [
+            "openai",
+            "anthropic"
+          ],
+          "models_openai": "gpt-4o, gpt-5-mini",
+          "models_anthropic": "claude-sonnet-4-5",
+          "frameworks": [
+            "direct_sdk",
+            "openrouter"
+          ],
+          "calls_per_day": "10k_100k",
+          "monthly_spend": "1k_10k",
+          "deployment_stage": "production_customer_facing",
+          "model_choice_process": "Whatever the team picked when the feature shipped; nobody revisits it.",
+          "cache_effort": "aware_not_invested",
+          "biggest_pain": "Cost is growing faster than usage.",
+          "features_interest": [
+            "diagnose",
+            "cachelint",
+            "routing"
+          ],
+          "follow_up_call": true
+        },
+        "problems": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "invalid-kitchen-sink",
+      "description": "SPEC §3.2: ALL problems reported at once — bad email, unknown option (select + multi_select element), wrong types, unknown question — plus every missing required question.",
+      "input": {
+        "answers_file": "corpus/answers-invalid.json"
+      },
+      "expected": {
+        "answers": {
+          "name": "Dana Reyes"
+        },
+        "problems": [
+          {
+            "question": "email",
+            "code": "invalid_email",
+            "message": "'email' must look like an email address"
+          },
+          {
+            "question": "company_size",
+            "code": "unknown_option",
+            "message": "'company_size' contains a value that is not one of its option ids"
+          },
+          {
+            "question": "providers",
+            "code": "unknown_option",
+            "message": "'providers' contains a value that is not one of its option ids"
+          },
+          {
+            "question": "models_openai",
+            "code": "invalid_type",
+            "message": "'models_openai' has the wrong type for a text question"
+          },
+          {
+            "question": "frameworks",
+            "code": "invalid_type",
+            "message": "'frameworks' has the wrong type for a multi_select question"
+          },
+          {
+            "question": "calls_per_day",
+            "code": "missing",
+            "message": "'calls_per_day' is required"
+          },
+          {
+            "question": "monthly_spend",
+            "code": "missing",
+            "message": "'monthly_spend' is required"
+          },
+          {
+            "question": "deployment_stage",
+            "code": "missing",
+            "message": "'deployment_stage' is required"
+          },
+          {
+            "question": "model_choice_process",
+            "code": "missing",
+            "message": "'model_choice_process' is required"
+          },
+          {
+            "question": "cache_effort",
+            "code": "missing",
+            "message": "'cache_effort' is required"
+          },
+          {
+            "question": "biggest_pain",
+            "code": "missing",
+            "message": "'biggest_pain' is required"
+          },
+          {
+            "question": "features_interest",
+            "code": "missing",
+            "message": "'features_interest' is required"
+          },
+          {
+            "question": "follow_up_call",
+            "code": "invalid_type",
+            "message": "'follow_up_call' has the wrong type for a boolean question"
+          },
+          {
+            "question": "favorite_color",
+            "code": "unknown_question",
+            "message": "'favorite_color' is not in the questionnaire"
+          }
+        ],
+        "warnings": [
+          {
+            "question": "models_anthropic",
+            "code": "not_applicable",
+            "message": "'models_anthropic' does not apply to these answers — dropped"
+          }
+        ]
+      }
+    },
+    {
+      "name": "not-applicable-dropped",
+      "description": "SPEC §3.1: an answer for a condition-skipped question is dropped with a not_applicable warning, not an error.",
+      "input": {
+        "answers": {
+          "name": "Dana",
+          "email": "dana@example.com",
+          "providers": [
+            "openai"
+          ],
+          "models_openai": "gpt-4o",
+          "models_anthropic": "claude-sonnet-4-5",
+          "calls_per_day": "under_1k",
+          "monthly_spend": "under_100",
+          "deployment_stage": "exploring",
+          "model_choice_process": "defaults",
+          "cache_effort": "not_considered",
+          "biggest_pain": "latency",
+          "features_interest": [
+            "routing"
+          ],
+          "follow_up_call": false
+        }
+      },
+      "expected": {
+        "answers": {
+          "name": "Dana",
+          "email": "dana@example.com",
+          "providers": [
+            "openai"
+          ],
+          "models_openai": "gpt-4o",
+          "calls_per_day": "under_1k",
+          "monthly_spend": "under_100",
+          "deployment_stage": "exploring",
+          "model_choice_process": "defaults",
+          "cache_effort": "not_considered",
+          "biggest_pain": "latency",
+          "features_interest": [
+            "routing"
+          ],
+          "follow_up_call": false
+        },
+        "problems": [],
+        "warnings": [
+          {
+            "question": "models_anthropic",
+            "code": "not_applicable",
+            "message": "'models_anthropic' does not apply to these answers — dropped"
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty-values-are-missing",
+      "description": "SPEC §3: '' and [] count as absent — required questions answered that way report missing.",
+      "input": {
+        "answers": {
+          "name": "",
+          "email": "dana@example.com",
+          "providers": [],
+          "calls_per_day": "under_1k",
+          "monthly_spend": "under_100",
+          "deployment_stage": "exploring",
+          "model_choice_process": "defaults",
+          "cache_effort": "not_considered",
+          "biggest_pain": "latency",
+          "features_interest": [
+            "routing"
+          ],
+          "follow_up_call": false
+        }
+      },
+      "expected": {
+        "answers": {
+          "email": "dana@example.com",
+          "calls_per_day": "under_1k",
+          "monthly_spend": "under_100",
+          "deployment_stage": "exploring",
+          "model_choice_process": "defaults",
+          "cache_effort": "not_considered",
+          "biggest_pain": "latency",
+          "features_interest": [
+            "routing"
+          ],
+          "follow_up_call": false
+        },
+        "problems": [
+          {
+            "question": "name",
+            "code": "missing",
+            "message": "'name' is required"
+          },
+          {
+            "question": "providers",
+            "code": "missing",
+            "message": "'providers' is required"
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "email-edges",
+      "description": "SPEC §3.2 email rule: at least one @ with non-empty sides ('@x' and 'x@' fail; 'a@b' passes).",
+      "input": {
+        "answers": {
+          "name": "D",
+          "email": "@missing-local"
+        }
+      },
+      "expected": {
+        "answers": {
+          "name": "D"
+        },
+        "problems": [
+          {
+            "question": "email",
+            "code": "invalid_email",
+            "message": "'email' must look like an email address"
+          },
+          {
+            "question": "providers",
+            "code": "missing",
+            "message": "'providers' is required"
+          },
+          {
+            "question": "calls_per_day",
+            "code": "missing",
+            "message": "'calls_per_day' is required"
+          },
+          {
+            "question": "monthly_spend",
+            "code": "missing",
+            "message": "'monthly_spend' is required"
+          },
+          {
+            "question": "deployment_stage",
+            "code": "missing",
+            "message": "'deployment_stage' is required"
+          },
+          {
+            "question": "model_choice_process",
+            "code": "missing",
+            "message": "'model_choice_process' is required"
+          },
+          {
+            "question": "cache_effort",
+            "code": "missing",
+            "message": "'cache_effort' is required"
+          },
+          {
+            "question": "biggest_pain",
+            "code": "missing",
+            "message": "'biggest_pain' is required"
+          },
+          {
+            "question": "features_interest",
+            "code": "missing",
+            "message": "'features_interest' is required"
+          },
+          {
+            "question": "follow_up_call",
+            "code": "missing",
+            "message": "'follow_up_call' is required"
+          }
+        ],
+        "warnings": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,177 @@
+{
+  "suite": "catalog",
+  "target": "tryaii.designpartner.catalog.applicable_questions (+ required resolution)",
+  "cases": [
+    {
+      "name": "no-answers",
+      "description": "SPEC §3.1: with no answers, only unconditioned questions are applicable — every models_* question is gated.",
+      "input": {
+        "answers": {}
+      },
+      "expected": {
+        "applicable": [
+          "name",
+          "email",
+          "company",
+          "role",
+          "company_size",
+          "providers",
+          "frameworks",
+          "calls_per_day",
+          "monthly_spend",
+          "deployment_stage",
+          "model_choice_process",
+          "cache_effort",
+          "biggest_pain",
+          "features_interest",
+          "follow_up_call"
+        ],
+        "required": [
+          "name",
+          "email",
+          "providers",
+          "calls_per_day",
+          "monthly_spend",
+          "deployment_stage",
+          "model_choice_process",
+          "cache_effort",
+          "biggest_pain",
+          "features_interest",
+          "follow_up_call"
+        ]
+      }
+    },
+    {
+      "name": "contains-gates",
+      "description": "SPEC §3.1 contains: selecting openai + other unlocks exactly those two models_* questions, which are then required.",
+      "input": {
+        "answers": {
+          "providers": [
+            "openai",
+            "other"
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "name",
+          "email",
+          "company",
+          "role",
+          "company_size",
+          "providers",
+          "models_openai",
+          "models_other",
+          "frameworks",
+          "calls_per_day",
+          "monthly_spend",
+          "deployment_stage",
+          "model_choice_process",
+          "cache_effort",
+          "biggest_pain",
+          "features_interest",
+          "follow_up_call"
+        ],
+        "required": [
+          "name",
+          "email",
+          "providers",
+          "models_openai",
+          "models_other",
+          "calls_per_day",
+          "monthly_spend",
+          "deployment_stage",
+          "model_choice_process",
+          "cache_effort",
+          "biggest_pain",
+          "features_interest",
+          "follow_up_call"
+        ]
+      }
+    },
+    {
+      "name": "full-valid-answers",
+      "description": "The valid corpus answers unlock the openai + anthropic model questions.",
+      "input": {
+        "answers_file": "corpus/answers-valid.json"
+      },
+      "expected": {
+        "applicable": [
+          "name",
+          "email",
+          "company",
+          "role",
+          "company_size",
+          "providers",
+          "models_openai",
+          "models_anthropic",
+          "frameworks",
+          "calls_per_day",
+          "monthly_spend",
+          "deployment_stage",
+          "model_choice_process",
+          "cache_effort",
+          "biggest_pain",
+          "features_interest",
+          "follow_up_call"
+        ],
+        "required": [
+          "name",
+          "email",
+          "providers",
+          "models_openai",
+          "models_anthropic",
+          "calls_per_day",
+          "monthly_spend",
+          "deployment_stage",
+          "model_choice_process",
+          "cache_effort",
+          "biggest_pain",
+          "features_interest",
+          "follow_up_call"
+        ]
+      }
+    },
+    {
+      "name": "empty-multiselect-is-absent",
+      "description": "SPEC §3: [] counts as absent — an empty providers list unlocks nothing.",
+      "input": {
+        "answers": {
+          "providers": []
+        }
+      },
+      "expected": {
+        "applicable": [
+          "name",
+          "email",
+          "company",
+          "role",
+          "company_size",
+          "providers",
+          "frameworks",
+          "calls_per_day",
+          "monthly_spend",
+          "deployment_stage",
+          "model_choice_process",
+          "cache_effort",
+          "biggest_pain",
+          "features_interest",
+          "follow_up_call"
+        ],
+        "required": [
+          "name",
+          "email",
+          "providers",
+          "calls_per_day",
+          "monthly_spend",
+          "deployment_stage",
+          "model_choice_process",
+          "cache_effort",
+          "biggest_pain",
+          "features_interest",
+          "follow_up_call"
+        ]
+      }
+    }
+  ]
+}

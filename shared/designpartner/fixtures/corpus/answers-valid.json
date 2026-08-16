@@ -1,0 +1,19 @@
+{
+  "name": "Dana Reyes",
+  "email": "dana@acme-robotics.io",
+  "company": "Acme Robotics",
+  "role": "Head of Platform",
+  "company_size": "11_50",
+  "providers": ["openai", "anthropic"],
+  "models_openai": "gpt-4o, gpt-5-mini",
+  "models_anthropic": "claude-sonnet-4-5",
+  "frameworks": ["direct_sdk", "openrouter"],
+  "calls_per_day": "10k_100k",
+  "monthly_spend": "1k_10k",
+  "deployment_stage": "production_customer_facing",
+  "model_choice_process": "Whatever the team picked when the feature shipped; nobody revisits it.",
+  "cache_effort": "aware_not_invested",
+  "biggest_pain": "Cost is growing faster than usage.",
+  "features_interest": ["diagnose", "cachelint", "routing"],
+  "follow_up_call": true
+}
