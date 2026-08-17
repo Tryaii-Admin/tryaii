@@ -27,6 +27,8 @@ def pack_json(payload: dict) -> str:
 # ([(payload key, source file), ...], destinations)
 _PY_DIAGNOSE_DATA = ROOT / "packages" / "python" / "tryaii" / "diagnose" / "data"
 _NODE_DIAGNOSE_DATA = ROOT / "packages" / "node" / "src" / "diagnose" / "data"
+_PY_DP_DATA = ROOT / "packages" / "python" / "tryaii" / "designpartner" / "data"
+_NODE_DP_DATA = ROOT / "packages" / "node" / "src" / "designpartner" / "data"
 
 PACKS = [
     (
@@ -44,6 +46,17 @@ PACKS = [
         [
             _PY_DIAGNOSE_DATA / "skill.json",
             _NODE_DIAGNOSE_DATA / "skill.json",
+        ],
+    ),
+    (
+        [
+            ("skill_md", SHARED / "designpartner" / "skill" / "SKILL.md"),
+            ("agents_pointer_md",
+             SHARED / "designpartner" / "skill" / "agents-pointer.md"),
+        ],
+        [
+            _PY_DP_DATA / "skill.json",
+            _NODE_DP_DATA / "skill.json",
         ],
     ),
 ]
@@ -83,6 +96,13 @@ TARGETS = [
         [
             ROOT / "packages" / "python" / "tryaii" / "diagnose" / "data" / "costmodel.json",
             ROOT / "packages" / "node" / "src" / "diagnose" / "data" / "costmodel.json",
+        ],
+    ),
+    (
+        SHARED / "designpartner" / "questions.json",
+        [
+            _PY_DP_DATA / "questions.json",
+            _NODE_DP_DATA / "questions.json",
         ],
     ),
 ]

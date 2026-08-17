@@ -24,6 +24,10 @@
     "./diagnose": {
       "types": "./dist/diagnose/index.d.ts",
       "import": "./dist/diagnose/index.js"
+    },
+    "./designpartner": {
+      "types": "./dist/designpartner/index.d.ts",
+      "import": "./dist/designpartner/index.js"
     }
   },
   "files": [

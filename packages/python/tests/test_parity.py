@@ -147,6 +147,7 @@ COMMAND_HELP_CONSTANTS = {
     "eval": "HELP_EVAL",
     "cachelint": "HELP_CACHELINT",
     "diagnose": "HELP_DIAGNOSE",
+    "designpartner": "HELP_DESIGNPARTNER",
     "models": "HELP_MODELS",
     "benchmarks": "HELP_BENCHMARKS",
     "setup": "HELP_SETUP",
@@ -328,6 +329,62 @@ DIAGNOSE_PACKS = {
         ("agents_pointer_md", SHARED_DIAGNOSE / "skill" / "agents-pointer.md"),
     ],
 }
+
+# ---------------------------------------------------------------------------
+# designpartner shared data (questions.json + packed skill)
+# ---------------------------------------------------------------------------
+
+SHARED_DESIGNPARTNER = REPO_ROOT / "shared" / "designpartner"
+PY_DP_DATA = (
+    REPO_ROOT / "packages" / "python" / "tryaii" / "designpartner" / "data")
+NODE_DP_DATA = REPO_ROOT / "packages" / "node" / "src" / "designpartner" / "data"
+
+
+def test_designpartner_questions_identical_and_match_master():
+    """Both SDKs must ship byte-identical questionnaire catalogs equal to the
+    shared master — the catalog IS the questionnaire + the consent copy, so
+    drift means users see different questions or different consent terms
+    depending on the SDK language."""
+    master_path = SHARED_DESIGNPARTNER / "questions.json"
+    node_copy = NODE_DP_DATA / "questions.json"
+    if not master_path.exists() or not node_copy.exists():
+        pytest.skip("designpartner shared data not present (partial checkout)")
+
+    master = master_path.read_bytes()
+    stale = [
+        str(path.relative_to(REPO_ROOT))
+        for path in (PY_DP_DATA / "questions.json", node_copy)
+        if path.read_bytes() != master
+    ]
+    assert not stale, (
+        "Package copies out of sync with shared/designpartner/questions.json: "
+        + ", ".join(stale) + " -- run scripts/sync-shared.py"
+    )
+
+
+def test_designpartner_packed_skill_matches_shared_masters():
+    """The packed designpartner skill must equal a re-pack of its masters."""
+    parts = [
+        ("skill_md", SHARED_DESIGNPARTNER / "skill" / "SKILL.md"),
+        ("agents_pointer_md",
+         SHARED_DESIGNPARTNER / "skill" / "agents-pointer.md"),
+    ]
+    if not all(master.exists() for _key, master in parts):
+        pytest.skip("shared/designpartner not present (package-only checkout)")
+
+    expected = json.dumps(
+        {key: master.read_text(encoding="utf-8") for key, master in parts},
+        ensure_ascii=False, indent=2) + "\n"
+    stale = [
+        str(path.relative_to(REPO_ROOT))
+        for path in (PY_DP_DATA / "skill.json", NODE_DP_DATA / "skill.json")
+        if path.exists()
+        and path.read_text(encoding="utf-8") != expected
+    ]
+    assert not stale, (
+        "Packed designpartner skill.json out of sync with its shared "
+        "masters: " + ", ".join(stale) + " -- run scripts/sync-shared.py"
+    )
 
 
 @pytest.mark.parametrize("filename", sorted(DIAGNOSE_PACKS))

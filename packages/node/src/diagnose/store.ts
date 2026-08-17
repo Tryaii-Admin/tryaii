@@ -78,3 +78,11 @@ export function loadRunFindings(outDir: string, runId: string): Record<string, u
     unknown
   >;
 }
+
+/**
+ * The verbatim inventory stored next to findings.json (raw prompts —
+ * consumed by designpartner's full_partnership tier, with explicit consent).
+ */
+export function loadRunInventory(outDir: string, runId: string): unknown {
+  return JSON.parse(readFileSync(join(outDir, runId, 'inventory.json'), 'utf-8'));
+}

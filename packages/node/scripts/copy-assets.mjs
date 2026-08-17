@@ -16,6 +16,7 @@ const assetCopies = [
   ['src/centroids/data', 'dist/centroids/data'],
   ['src/cachelint/data', 'dist/cachelint/data'],
   ['src/diagnose/data', 'dist/diagnose/data'],
+  ['src/designpartner/data', 'dist/designpartner/data'],
 ];
 
 for (const [sourceRelativePath, targetRelativePath] of assetCopies) {

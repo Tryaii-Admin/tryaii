@@ -1,0 +1,462 @@
+{
+  "suite": "cli",
+  "target": "tryaii designpartner (argv-level, both CLIs; run in a fresh temp cwd)",
+  "cases": [
+    {
+      "name": "first-run",
+      "description": "First run: installs the skill files, enrolls, prints the questionnaire stage.",
+      "input": {
+        "argv": [
+          "designpartner",
+          "--now",
+          "2026-01-01T00:00:00Z",
+          "--stamp",
+          "s1"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "first-run.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "answers-invalid",
+      "description": "SPEC §3.2: every problem reported at once; exit 0 (the agent loops); answers not stored.",
+      "input": {
+        "copy_from_corpus": [
+          "answers-invalid.json"
+        ],
+        "pre_argv": [
+          [
+            "designpartner",
+            "--now",
+            "2026-01-01T00:00:00Z",
+            "--stamp",
+            "s1"
+          ]
+        ],
+        "argv": [
+          "designpartner",
+          "--answers",
+          "answers-invalid.json",
+          "--now",
+          "2026-01-01T00:01:00Z",
+          "--stamp",
+          "s1"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "answers-invalid.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "answers-ok",
+      "description": "Valid answers advance to the consent stage; the three tiers print with their verbatim copy.",
+      "input": {
+        "copy_from_corpus": [
+          "answers-valid.json"
+        ],
+        "pre_argv": [
+          [
+            "designpartner",
+            "--now",
+            "2026-01-01T00:00:00Z",
+            "--stamp",
+            "s1"
+          ]
+        ],
+        "argv": [
+          "designpartner",
+          "--answers",
+          "answers-valid.json",
+          "--now",
+          "2026-01-01T00:01:00Z",
+          "--stamp",
+          "s1"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "answers-ok.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "resume-consent",
+      "description": "SPEC §2: a bare run resumes exactly where the flow stopped (consent stage).",
+      "input": {
+        "copy_from_corpus": [
+          "answers-valid.json"
+        ],
+        "pre_argv": [
+          [
+            "designpartner",
+            "--now",
+            "2026-01-01T00:00:00Z",
+            "--stamp",
+            "s1"
+          ],
+          [
+            "designpartner",
+            "--answers",
+            "answers-valid.json",
+            "--now",
+            "2026-01-01T00:01:00Z",
+            "--stamp",
+            "s1"
+          ]
+        ],
+        "argv": [
+          "designpartner",
+          "--now",
+          "2026-01-01T00:02:00Z",
+          "--stamp",
+          "s1"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "resume-consent.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "consent-contact-only",
+      "description": "contact_only skips the diagnose gate: straight to confirm with the preview written.",
+      "input": {
+        "copy_from_corpus": [
+          "answers-valid.json"
+        ],
+        "pre_argv": [
+          [
+            "designpartner",
+            "--now",
+            "2026-01-01T00:00:00Z",
+            "--stamp",
+            "s1"
+          ],
+          [
+            "designpartner",
+            "--answers",
+            "answers-valid.json",
+            "--now",
+            "2026-01-01T00:01:00Z",
+            "--stamp",
+            "s1"
+          ]
+        ],
+        "argv": [
+          "designpartner",
+          "--consent",
+          "contact_only",
+          "--now",
+          "2026-01-01T00:02:00Z",
+          "--stamp",
+          "s1"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "consent-contact-only.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "consent-insight-no-run",
+      "description": "SPEC §2: an insight tier without a diagnose run lands in the diagnose stage.",
+      "input": {
+        "copy_from_corpus": [
+          "answers-valid.json"
+        ],
+        "pre_argv": [
+          [
+            "designpartner",
+            "--now",
+            "2026-01-01T00:00:00Z",
+            "--stamp",
+            "s1"
+          ],
+          [
+            "designpartner",
+            "--answers",
+            "answers-valid.json",
+            "--now",
+            "2026-01-01T00:01:00Z",
+            "--stamp",
+            "s1"
+          ]
+        ],
+        "argv": [
+          "designpartner",
+          "--consent",
+          "full_partnership",
+          "--now",
+          "2026-01-01T00:02:00Z",
+          "--stamp",
+          "s1"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "consent-insight-no-run.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "confirm-save-local",
+      "description": "SPEC §5: the endpoint is unreachable (instantly-refused URL via env) — submission saved locally, generic notice, exit 0. The parity driver byte-compares state/preview/submission across CLIs.",
+      "input": {
+        "copy_from_corpus": [
+          "answers-valid.json"
+        ],
+        "env": {
+          "TRYAII_DESIGNPARTNER_URL": "http://127.0.0.1:1/api"
+        },
+        "pre_argv": [
+          [
+            "designpartner",
+            "--now",
+            "2026-01-01T00:00:00Z",
+            "--stamp",
+            "s1"
+          ],
+          [
+            "designpartner",
+            "--answers",
+            "answers-valid.json",
+            "--now",
+            "2026-01-01T00:01:00Z",
+            "--stamp",
+            "s1"
+          ],
+          [
+            "designpartner",
+            "--consent",
+            "contact_only",
+            "--now",
+            "2026-01-01T00:02:00Z",
+            "--stamp",
+            "s1"
+          ]
+        ],
+        "argv": [
+          "designpartner",
+          "--confirm",
+          "--now",
+          "2026-01-01T00:03:00Z",
+          "--stamp",
+          "20260101T000300Z"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "confirm-save-local.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "resume-submitted",
+      "description": "A bare run after submission reports the submitted stage with the saved-locally record.",
+      "input": {
+        "copy_from_corpus": [
+          "answers-valid.json"
+        ],
+        "env": {
+          "TRYAII_DESIGNPARTNER_URL": "http://127.0.0.1:1/api"
+        },
+        "pre_argv": [
+          [
+            "designpartner",
+            "--now",
+            "2026-01-01T00:00:00Z",
+            "--stamp",
+            "s1"
+          ],
+          [
+            "designpartner",
+            "--answers",
+            "answers-valid.json",
+            "--now",
+            "2026-01-01T00:01:00Z",
+            "--stamp",
+            "s1"
+          ],
+          [
+            "designpartner",
+            "--consent",
+            "contact_only",
+            "--now",
+            "2026-01-01T00:02:00Z",
+            "--stamp",
+            "s1"
+          ],
+          [
+            "designpartner",
+            "--confirm",
+            "--now",
+            "2026-01-01T00:03:00Z",
+            "--stamp",
+            "20260101T000300Z"
+          ]
+        ],
+        "argv": [
+          "designpartner",
+          "--now",
+          "2026-01-01T00:04:00Z",
+          "--stamp",
+          "s2"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "resume-submitted.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "confirm-nothing",
+      "description": "SPEC §6: --confirm before there is anything to confirm is a usage error (exit 2).",
+      "input": {
+        "pre_argv": [
+          [
+            "designpartner",
+            "--now",
+            "2026-01-01T00:00:00Z",
+            "--stamp",
+            "s1"
+          ]
+        ],
+        "argv": [
+          "designpartner",
+          "--confirm",
+          "--now",
+          "2026-01-01T00:01:00Z",
+          "--stamp",
+          "s1"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "confirm-nothing.stdout.golden.txt",
+        "stderr": "error: nothing to confirm — run 'tryaii designpartner' to see the current stage\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "conflicting-flags",
+      "description": "SPEC §6: more than one action flag is a usage error (exit 2).",
+      "input": {
+        "copy_from_corpus": [
+          "answers-valid.json"
+        ],
+        "argv": [
+          "designpartner",
+          "--answers",
+          "answers-valid.json",
+          "--confirm",
+          "--now",
+          "2026-01-01T00:00:00Z",
+          "--stamp",
+          "s1"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "conflicting-flags.stdout.golden.txt",
+        "stderr": "error: pass at most one of --answers, --consent, --confirm, --reset\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "unknown-tier",
+      "description": "SPEC §6: an unknown consent tier is a usage error (exit 2) with the valid tiers listed.",
+      "input": {
+        "copy_from_corpus": [
+          "answers-valid.json"
+        ],
+        "pre_argv": [
+          [
+            "designpartner",
+            "--now",
+            "2026-01-01T00:00:00Z",
+            "--stamp",
+            "s1"
+          ],
+          [
+            "designpartner",
+            "--answers",
+            "answers-valid.json",
+            "--now",
+            "2026-01-01T00:01:00Z",
+            "--stamp",
+            "s1"
+          ]
+        ],
+        "argv": [
+          "designpartner",
+          "--consent",
+          "bogus",
+          "--now",
+          "2026-01-01T00:02:00Z",
+          "--stamp",
+          "s1"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "unknown-tier.stdout.golden.txt",
+        "stderr": "error: unknown consent tier: bogus. Valid tiers: contact_only, summary_insights, full_partnership\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "reset",
+      "description": "SPEC §2: --reset clears state.json + preview.json (submission records are kept).",
+      "input": {
+        "copy_from_corpus": [
+          "answers-valid.json"
+        ],
+        "pre_argv": [
+          [
+            "designpartner",
+            "--now",
+            "2026-01-01T00:00:00Z",
+            "--stamp",
+            "s1"
+          ],
+          [
+            "designpartner",
+            "--answers",
+            "answers-valid.json",
+            "--now",
+            "2026-01-01T00:01:00Z",
+            "--stamp",
+            "s1"
+          ],
+          [
+            "designpartner",
+            "--consent",
+            "contact_only",
+            "--now",
+            "2026-01-01T00:02:00Z",
+            "--stamp",
+            "s1"
+          ]
+        ],
+        "argv": [
+          "designpartner",
+          "--reset",
+          "--now",
+          "2026-01-01T00:03:00Z",
+          "--stamp",
+          "s1"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "reset.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    }
+  ]
+}

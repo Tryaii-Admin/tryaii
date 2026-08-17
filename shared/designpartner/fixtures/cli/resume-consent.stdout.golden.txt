@@ -1,0 +1,11 @@
+tryaii designpartner -- stage: consent
+
+  contact_only — Contact only
+    We will receive exactly what you typed into this questionnaire: your answers and your contact details. Nothing from your codebase, prompts, or diagnose runs is included. We will use your contact details only for the design-partner program.
+  summary_insights — Summary insights
+    In addition to your questionnaire answers and contact details, we will receive the redacted summary of your latest diagnose run: how many call sites you have, counts of check outcomes and cache verdicts, and the estimated monthly cost and savings totals. This summary contains NO code, NO file paths, NO prompts, and NO free-text from you beyond the questionnaire - it is the aggregate numbers only.
+  full_partnership — Full partnership
+    In addition to your questionnaire answers and contact details, we will receive the complete findings AND the prompt inventory of your latest diagnose run. In plain words: this includes your repository file paths and line numbers, the model names you use, and YOUR ACTUAL PROMPTS - their full text, verbatim, including anything embedded in them. Choose this tier only if you are comfortable sharing that prompt content with the tryaii team. It gives us the deepest picture and you the most tailored partnership.
+
+next: Show the user each consent tier's copy VERBATIM; they choose one explicitly.
+  tryaii designpartner --consent <tier_id>

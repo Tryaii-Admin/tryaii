@@ -13,6 +13,7 @@ from tryaii.diagnose.store import (
     latest_run_id,
     list_run_ids,
     load_run_findings,
+    load_run_inventory,
     previous_run_id,
     write_run,
 )
@@ -28,4 +29,5 @@ __all__ = [
     "previous_run_id",
     "list_run_ids",
     "load_run_findings",
+    "load_run_inventory",
 ]
