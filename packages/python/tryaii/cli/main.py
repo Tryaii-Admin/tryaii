@@ -491,7 +491,7 @@ Options:
   --stamp <id>          Override the submission filename stamp (testing seam)
 
 At most one of --answers/--consent/--confirm/--reset per invocation.
-The endpoint (https://designpartners.tryaii.com/api) can be overridden
+The endpoint (https://api.tryaii.com/v1/design-partners) can be overridden
 via TRYAII_DESIGNPARTNER_URL. If it cannot be reached, the submission
 stays saved locally and the command still succeeds.
 

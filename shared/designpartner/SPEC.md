@@ -170,7 +170,7 @@ next.
 
 ## §5 Transport
 
-- Default URL `https://designpartners.tryaii.com/api`; effective URL =
+- Default URL `https://api.tryaii.com/v1/design-partners`; effective URL =
   env `TRYAII_DESIGNPARTNER_URL` (non-empty) else the default. Read
   identically in both SDKs.
 - POST, body = the exact bytes of the saved `submission-<stamp>.json`,

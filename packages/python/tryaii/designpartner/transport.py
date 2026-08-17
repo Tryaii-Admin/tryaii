@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import urllib.request
 
-DEFAULT_URL = "https://designpartners.tryaii.com/api"
+DEFAULT_URL = "https://api.tryaii.com/v1/design-partners"
 TIMEOUT_SECONDS = 10.0
 
 

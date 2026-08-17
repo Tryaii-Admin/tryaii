@@ -28,7 +28,7 @@ anywhere.
 - **Submission**: versioned payload
   (`tryaii.designpartner.submission/1`), ALWAYS saved to
   `.tryaii/designpartner/submission-<stamp>.json` before any network
-  attempt; POST to `https://designpartners.tryaii.com/api` (override
+  attempt; POST to `https://api.tryaii.com/v1/design-partners` (override
   `TRYAII_DESIGNPARTNER_URL` — a new env convention) via stdlib urllib
   (Python; no new dependency) / native fetch (Node), 10s timeout, one
   attempt; any failure collapses to a deterministic "saved locally"

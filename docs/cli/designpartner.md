@@ -61,7 +61,7 @@ gone stale.
 - The submission (`tryaii.designpartner.submission/1`) is ALWAYS written to
   `.tryaii/designpartner/submission-<stamp>.json` **before** any network
   attempt.
-- POST to `https://designpartners.tryaii.com/api` (override:
+- POST to `https://api.tryaii.com/v1/design-partners` (override:
   `TRYAII_DESIGNPARTNER_URL`), stdlib HTTP on Python / native fetch on
   Node, 10s timeout, one attempt. If the endpoint cannot be reached, the
   command still succeeds: `could not reach <url> — submission saved

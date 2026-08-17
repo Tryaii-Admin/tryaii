@@ -7,7 +7,7 @@
  * SDKs.
  */
 
-export const DEFAULT_URL = 'https://designpartners.tryaii.com/api';
+export const DEFAULT_URL = 'https://api.tryaii.com/v1/design-partners';
 export const TIMEOUT_MS = 10000;
 
 /**
