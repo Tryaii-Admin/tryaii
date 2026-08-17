@@ -47,6 +47,7 @@ Thumbs.db
 # Local-only docs
 packages/python/CENTROIDS_AND_UPDATES.md
 /CACHELINT-RETRO.md
+/local-notes/
 
 # Local-only dev workspace (eval runner, datasets, scratch scripts).
 # Anchored with a leading slash to the repo root so it does NOT match the
@@ -75,3 +76,6 @@ Jira/
 # PM/Jira tooling (kept out of the product repo)
 .jira-config.json
 stories.json
+
+# tryaii designpartner state (local)
+/.tryaii/
