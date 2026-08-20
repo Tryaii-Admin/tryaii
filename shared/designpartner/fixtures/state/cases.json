@@ -1,0 +1,128 @@
+{
+  "suite": "state",
+  "target": "tryaii.designpartner.state.derive_stage",
+  "cases": [
+    {
+      "name": "no-answers",
+      "description": "SPEC §2: no answers -> questionnaire.",
+      "input": {
+        "state": {
+          "answers": null,
+          "consent": null,
+          "submission": null
+        },
+        "has_diagnose_run": false
+      },
+      "expected": {
+        "stage": "questionnaire"
+      }
+    },
+    {
+      "name": "answers-no-consent",
+      "description": "SPEC §2: answers present, no consent -> consent.",
+      "input": {
+        "state": {
+          "answers": {
+            "name": "D"
+          },
+          "consent": null,
+          "submission": null
+        },
+        "has_diagnose_run": false
+      },
+      "expected": {
+        "stage": "consent"
+      }
+    },
+    {
+      "name": "insight-tier-without-run",
+      "description": "SPEC §2: an insight tier with no diagnose run -> diagnose.",
+      "input": {
+        "state": {
+          "answers": {
+            "name": "D"
+          },
+          "consent": {
+            "tier": "full_partnership",
+            "chosen_at": "t",
+            "diagnose_run_id": null
+          },
+          "submission": null
+        },
+        "has_diagnose_run": false
+      },
+      "expected": {
+        "stage": "diagnose"
+      }
+    },
+    {
+      "name": "insight-tier-with-run",
+      "description": "SPEC §2: the same tier once a run exists -> confirm.",
+      "input": {
+        "state": {
+          "answers": {
+            "name": "D"
+          },
+          "consent": {
+            "tier": "summary_insights",
+            "chosen_at": "t",
+            "diagnose_run_id": "r1"
+          },
+          "submission": null
+        },
+        "has_diagnose_run": true
+      },
+      "expected": {
+        "stage": "confirm"
+      }
+    },
+    {
+      "name": "contact-only-skips-diagnose",
+      "description": "SPEC §2: contact_only never requires a run -> confirm.",
+      "input": {
+        "state": {
+          "answers": {
+            "name": "D"
+          },
+          "consent": {
+            "tier": "contact_only",
+            "chosen_at": "t",
+            "diagnose_run_id": null
+          },
+          "submission": null
+        },
+        "has_diagnose_run": false
+      },
+      "expected": {
+        "stage": "confirm"
+      }
+    },
+    {
+      "name": "submitted",
+      "description": "SPEC §2: a stored submission -> submitted.",
+      "input": {
+        "state": {
+          "answers": {
+            "name": "D"
+          },
+          "consent": {
+            "tier": "contact_only",
+            "chosen_at": "t",
+            "diagnose_run_id": null
+          },
+          "submission": {
+            "stamp": "s",
+            "submitted_at": "t",
+            "delivered": false,
+            "url": "u",
+            "path": "p"
+          }
+        },
+        "has_diagnose_run": false
+      },
+      "expected": {
+        "stage": "submitted"
+      }
+    }
+  ]
+}

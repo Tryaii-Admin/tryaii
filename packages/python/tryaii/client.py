@@ -37,6 +37,9 @@ class DREClient:
                     overridden per-request.
         embedding_model: Sentence-transformers model name for embeddings.
                          Defaults to "all-MiniLM-L6-v2".
+        cache_lint: "warn" enables the pre-flight prompt-cache lint +
+                    runtime verification (stderr warnings, fail-open).
+                    Default "off"; TRYAII_CACHE_LINT=warn also enables.
     """
 
     def __init__(
@@ -44,6 +47,7 @@ class DREClient:
         api_key: Optional[str] = None,
         priorities: Optional[Priorities] = None,
         embedding_model: Optional[str] = None,
+        cache_lint: Optional[str] = None,
     ):
         self._api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
         self._default_priorities = priorities
@@ -57,10 +61,12 @@ class DREClient:
         # Core router
         self._router = Router(config=config)
 
-        # OpenRouter integration for API calls
+        # OpenRouter integration for API calls (cache_lint="warn" enables the
+        # pre-flight prompt-cache lint + runtime verification, fail-open).
         self._openrouter = OpenRouterIntegration(
             router=self._router,
             api_key=self._api_key,
+            cache_lint=cache_lint,
         )
 
     @property

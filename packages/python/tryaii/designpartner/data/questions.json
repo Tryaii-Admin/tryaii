@@ -1,0 +1,181 @@
+{
+  "schema": "tryaii.designpartner.questions/1",
+  "about": "The tryaii design-partner questionnaire + consent tiers. The agent asks these conversationally (honoring ask_if) and shows each consent tier's copy VERBATIM. Answers are a flat {question_id: answer} object.",
+  "sections": [
+    {
+      "id": "about",
+      "title": "About you",
+      "questions": [
+        { "id": "name", "type": "text", "prompt": "What's your name?", "required": true },
+        { "id": "email", "type": "text", "format": "email", "prompt": "What email should we use to reach you about the program?", "required": true },
+        { "id": "company", "type": "text", "prompt": "What company or project is this for?", "required": false },
+        { "id": "role", "type": "text", "prompt": "What's your role there?", "required": false },
+        {
+          "id": "company_size",
+          "type": "select",
+          "prompt": "How big is the team?",
+          "required": false,
+          "options": [
+            { "id": "solo", "label": "Just me" },
+            { "id": "2_10", "label": "2-10 people" },
+            { "id": "11_50", "label": "11-50 people" },
+            { "id": "51_200", "label": "51-200 people" },
+            { "id": "over_200", "label": "More than 200 people" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai_usage",
+      "title": "How you use AI",
+      "questions": [
+        {
+          "id": "providers",
+          "type": "multi_select",
+          "prompt": "Which LLM providers do you use today?",
+          "required": true,
+          "options": [
+            { "id": "openai", "label": "OpenAI" },
+            { "id": "anthropic", "label": "Anthropic" },
+            { "id": "google", "label": "Google (Gemini)" },
+            { "id": "meta_llama", "label": "Meta (Llama)" },
+            { "id": "mistral", "label": "Mistral" },
+            { "id": "deepseek", "label": "DeepSeek" },
+            { "id": "xai", "label": "xAI (Grok)" },
+            { "id": "cohere", "label": "Cohere" },
+            { "id": "other", "label": "Other" }
+          ]
+        },
+        { "id": "models_openai", "type": "text", "prompt": "Which OpenAI models do you use most?", "required": true, "ask_if": { "question": "providers", "op": "contains", "value": "openai" } },
+        { "id": "models_anthropic", "type": "text", "prompt": "Which Anthropic models do you use most?", "required": true, "ask_if": { "question": "providers", "op": "contains", "value": "anthropic" } },
+        { "id": "models_google", "type": "text", "prompt": "Which Gemini models do you use most?", "required": true, "ask_if": { "question": "providers", "op": "contains", "value": "google" } },
+        { "id": "models_other", "type": "text", "prompt": "Which other providers/models do you use?", "required": true, "ask_if": { "question": "providers", "op": "contains", "value": "other" } },
+        {
+          "id": "frameworks",
+          "type": "multi_select",
+          "prompt": "Which frameworks or gateways sit between your code and the models?",
+          "required": false,
+          "options": [
+            { "id": "langchain", "label": "LangChain" },
+            { "id": "llamaindex", "label": "LlamaIndex" },
+            { "id": "vercel_ai", "label": "Vercel AI SDK" },
+            { "id": "litellm", "label": "LiteLLM" },
+            { "id": "openrouter", "label": "OpenRouter" },
+            { "id": "direct_sdk", "label": "Provider SDKs directly" },
+            { "id": "in_house", "label": "In-house layer" },
+            { "id": "other", "label": "Other" }
+          ]
+        },
+        {
+          "id": "calls_per_day",
+          "type": "select",
+          "prompt": "Roughly how many LLM calls per day across your systems?",
+          "required": true,
+          "options": [
+            { "id": "under_1k", "label": "Under 1,000" },
+            { "id": "1k_10k", "label": "1,000 - 10,000" },
+            { "id": "10k_100k", "label": "10,000 - 100,000" },
+            { "id": "100k_1m", "label": "100,000 - 1 million" },
+            { "id": "over_1m", "label": "Over 1 million" },
+            { "id": "unsure", "label": "Not sure" }
+          ]
+        },
+        {
+          "id": "monthly_spend",
+          "type": "select",
+          "prompt": "Roughly what do you spend on LLM APIs per month?",
+          "required": true,
+          "options": [
+            { "id": "under_100", "label": "Under $100" },
+            { "id": "100_1k", "label": "$100 - $1,000" },
+            { "id": "1k_10k", "label": "$1,000 - $10,000" },
+            { "id": "10k_100k", "label": "$10,000 - $100,000" },
+            { "id": "over_100k", "label": "Over $100,000" },
+            { "id": "unsure", "label": "Not sure" }
+          ]
+        },
+        {
+          "id": "deployment_stage",
+          "type": "select",
+          "prompt": "Where is your LLM usage today?",
+          "required": true,
+          "options": [
+            { "id": "exploring", "label": "Exploring / experimenting" },
+            { "id": "prototype", "label": "Working prototype" },
+            { "id": "production_internal", "label": "In production for internal users" },
+            { "id": "production_customer_facing", "label": "In production, customer-facing" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tryaii_fit",
+      "title": "Where tryaii fits",
+      "questions": [
+        { "id": "model_choice_process", "type": "text", "prompt": "How do you choose which model handles which task today?", "required": true },
+        {
+          "id": "cache_effort",
+          "type": "select",
+          "prompt": "How much effort have you put into making prompts cache-ready (stable prefixes, provider prompt caching)?",
+          "required": true,
+          "options": [
+            { "id": "not_considered", "label": "Haven't thought about it" },
+            { "id": "aware_not_invested", "label": "Aware of it, no time invested" },
+            { "id": "some_structuring", "label": "Some prompt structuring for caching" },
+            { "id": "heavily_optimized", "label": "Heavily optimized for cache hits" }
+          ]
+        },
+        { "id": "biggest_pain", "type": "text", "prompt": "What's your biggest LLM pain right now - cost, quality, latency, something else?", "required": true },
+        {
+          "id": "features_interest",
+          "type": "multi_select",
+          "prompt": "Which tryaii capabilities interest you most?",
+          "required": true,
+          "options": [
+            { "id": "diagnose", "label": "diagnose - codebase LLM audit" },
+            { "id": "cachelint", "label": "cachelint - prompt-cache analysis" },
+            { "id": "routing", "label": "routing - pick the best model per prompt" },
+            { "id": "budget", "label": "budget - dataset routing under a spend cap" },
+            { "id": "benchmarks", "label": "benchmark-driven model catalog" },
+            { "id": "dashboard", "label": "eval + diagnose reports" }
+          ]
+        },
+        { "id": "follow_up_call", "type": "boolean", "prompt": "Open to a short follow-up call with the tryaii team?", "required": true }
+      ]
+    }
+  ],
+  "consent_tiers": [
+    {
+      "id": "contact_only",
+      "title": "Contact only",
+      "requires_diagnose": false,
+      "includes": [
+        "your questionnaire answers",
+        "your contact details (name, email, company, role)"
+      ],
+      "copy": "We will receive exactly what you typed into this questionnaire: your answers and your contact details. Nothing from your codebase, prompts, or diagnose runs is included. We will use your contact details only for the design-partner program."
+    },
+    {
+      "id": "summary_insights",
+      "title": "Summary insights",
+      "requires_diagnose": true,
+      "includes": [
+        "your questionnaire answers and contact details",
+        "the redacted diagnose summary: check-status counts, cache-verdict counts, monthly cost/savings totals, and swap statistics"
+      ],
+      "copy": "In addition to your questionnaire answers and contact details, we will receive the redacted summary of your latest diagnose run: how many call sites you have, counts of check outcomes and cache verdicts, and the estimated monthly cost and savings totals. This summary contains NO code, NO file paths, NO prompts, and NO free-text from you beyond the questionnaire - it is the aggregate numbers only."
+    },
+    {
+      "id": "full_partnership",
+      "title": "Full partnership",
+      "requires_diagnose": true,
+      "includes": [
+        "your questionnaire answers and contact details",
+        "the redacted diagnose summary",
+        "the FULL findings of your latest diagnose run: file paths, line numbers, model names, verdicts, recommendations, and prompt excerpts",
+        "the diagnose inventory: your ACTUAL PROMPTS, verbatim, as your agent collected them"
+      ],
+      "copy": "In addition to your questionnaire answers and contact details, we will receive the complete findings AND the prompt inventory of your latest diagnose run. In plain words: this includes your repository file paths and line numbers, the model names you use, and YOUR ACTUAL PROMPTS - their full text, verbatim, including anything embedded in them. Choose this tier only if you are comfortable sharing that prompt content with the tryaii team. It gives us the deepest picture and you the most tailored partnership."
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+tryaii diagnose plan -- what diagnose can check
+
+Checks (recommended: run all):
+  - model_fit: Classifies each call site's prompt and ranks the full model catalog under the user's quality/cost/speed priorities. Shows where the currently used model ranks, what would fit better overall, and the best model within +-20% of the current model's price.
+  - cache_readiness: Pre-flight prompt-cache analysis (cachelint): will this prompt hit the provider's cache, what blocks it, how large is the stable prefix, and what to fix first.
+  - cost_exposure: Estimated cost per call and per month, potential cache savings, and a cheaper-model swap suggestion that keeps quality within tolerance.
+  - hygiene: Structural prompt review: dynamic values (timestamps, IDs, template slots) in the wrong place, dynamic content inside the system block, missing static structure.
+
+Interview -- ask the user:
+  - Which checks should I run? (recommended: all four)
+  - Should I look at the whole repo, specific paths, or only what changed on this branch?
+  - How much do you care about quality / cost / speed, each 1-5?
+  - Roughly how many LLM calls per day does this code make (overall, or per call site if you know)? I will not guess this.
+  - What is the main goal here - reduce prices? faster replies? better quality?
+
+Inventory (per site) -- required: file, line, prompt; optional: id, provider, model, calls_per_day, output_tokens, notes
+Machine-readable plan with the full schema and an example: tryaii diagnose plan --json
+
+Next:
+  tryaii diagnose check inventory.json --quality 3 --cost 4 --speed 2 --calls-per-day 1000 --goal "reduce prices"
+  tryaii diagnose report

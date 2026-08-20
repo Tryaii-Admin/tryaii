@@ -1,0 +1,154 @@
+==============================================================================
+ CACHELINT - prompt-cache pre-flight report
+   knowledge base: cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)
+==============================================================================
+
+ INPUT #0 -- Anthropic (Claude) / claude-fable-5
+------------------------------------------------------------------------------
+ Verdict   : CACHEABLE PREFIX (dynamic tail)
+             A stable prefix of ~1018 tok (>= 512 minimum) can cache; the
+             dynamic tail after it re-processes at full price each call (that
+             part is normal).
+ Tokens    : total ~1,037  (estimate(~3.5 chars/tok))
+             system=~1,024 messages[0]:user=~12
+ Threshold : 512 min (Fable 5 / Mythos 5 tier (lowest floor)) -> prompt meets the floor
+ SystemRpt : system ~1,024 tok | cached unit (tools+system) ~1,024 tok -> clears the floor alone | 1 finding(s) inside system
+ Findings  : 1
+   [HIGH] timestamp-datetime  @ system+3562  (98% into prompt)
+          "...ght when speed wins. Stamp: 2026-07-30T09:14:22Z.\n\nuser: First
+          question abou..."
+          -> A full datetime changes every call — everything after it can
+          never match byte-for-byte.
+ StablePfx : ~1,018 tok (98.2% of prompt), capped by timestamp-datetime at system+3562
+             fixing that first finding alone -> ~1,037 tok
+ Enablement: EXPLICIT
+             OPT-IN: nothing caches unless you mark a breakpoint with
+             "cache_control": {"type": "ephemeral"} (<= 4 breakpoints;
+             20-block lookback). Render order is tools -> system -> messages;
+             a byte change invalidates everything after it.
+ Recommendations:
+    1. [enablement] Add "cache_control": {"type": "ephemeral"} on the LAST
+    static block (end of system prompt or last stable message). For >5-min
+    gaps use {"type": "ephemeral", "ttl": "1h"} (2x write premium).
+    2. [fix:timestamp-datetime] at system+3562 (98% in): Remove it, round it
+    to a coarse bucket (day/hour), or move it into the final user message
+    (after the cached prefix).
+    3. [impact] Fixing the FIRST finding alone extends the stable prefix from
+    ~1018 to ~1037 tok.
+    4. [verify] After deploying, assert usage.cache_read_input_tokens (writes:
+    usage.cache_creation_input_tokens) > 0 in responses. 0 across
+    identical-prefix requests = a silent invalidator is still present.
+    5. [ttl] 5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'
+    6. [batch] STACKS with the Batch API 50%: cache read in a batch = 0.1x *
+    0.5x = ~95% off
+ Intel     :
+      TTL: 5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'
+      Read discount: 90% (0.1x base input)
+      Write cost: write premium: 1.25x (5-min TTL) / 2x (1-hour TTL); no
+      storage fee
+      Verify via: usage.cache_read_input_tokens (writes:
+      usage.cache_creation_input_tokens)
+      ! Below the model's minimum the marked prefix SILENTLY won't cache
+      (cache_creation_input_tokens: 0, no error).
+      ! Model switch = cold cache (model-scoped). Toggling extended thinking
+      invalidates system+messages (tools survive).
+      ! Serialize tool JSON deterministically (sorted keys, frozen order) —
+      non-deterministic serialization is a classic silent invalidator.
+      ! Concurrency: entry readable only after the first response begins
+      streaming — warm one, then fan out.
+      ! Pre-warm with a max_tokens: 0 request to skip cold-write latency on
+      the first real request.
+      ! On Opus 5 / Opus 4.8 / Fable 5 / Mythos 5: append {"role": "system",
+      ...} to messages for mid-conversation instructions instead of editing
+      the top-level system prompt — preserves the cached prefix.
+      ! No prompt_cache_key equivalent — routing affinity cannot be steered;
+      identical prefixes are the only lever.
+  (warning) Token counts are estimates (estimate(~3.5 chars/tok)). for exact
+  counts use POST /v1/messages/count_tokens (never tiktoken for Claude)
+
+ INPUT #1 -- Anthropic (Claude) / claude-fable-5
+------------------------------------------------------------------------------
+ Verdict   : CACHEABLE PREFIX (dynamic tail)
+             A stable prefix of ~1018 tok (>= 512 minimum) can cache; the
+             dynamic tail after it re-processes at full price each call (that
+             part is normal).
+ Tokens    : total ~1,037  (estimate(~3.5 chars/tok))
+             system=~1,024 messages[0]:user=~12
+ Threshold : 512 min (Fable 5 / Mythos 5 tier (lowest floor)) -> prompt meets the floor
+ SystemRpt : system ~1,024 tok | cached unit (tools+system) ~1,024 tok -> clears the floor alone | 1 finding(s) inside system
+ Findings  : 1
+   [HIGH] timestamp-datetime  @ system+3562  (98% into prompt)
+          "...ght when speed wins. Stamp: 2026-07-30T09:15:37Z.\n\nuser: First
+          question abou..."
+          -> A full datetime changes every call — everything after it can
+          never match byte-for-byte.
+ StablePfx : ~1,018 tok (98.2% of prompt), capped by timestamp-datetime at system+3562
+             fixing that first finding alone -> ~1,037 tok
+ Enablement: EXPLICIT
+             OPT-IN: nothing caches unless you mark a breakpoint with
+             "cache_control": {"type": "ephemeral"} (<= 4 breakpoints;
+             20-block lookback). Render order is tools -> system -> messages;
+             a byte change invalidates everything after it.
+ Recommendations:
+    1. [enablement] Add "cache_control": {"type": "ephemeral"} on the LAST
+    static block (end of system prompt or last stable message). For >5-min
+    gaps use {"type": "ephemeral", "ttl": "1h"} (2x write premium).
+    2. [fix:timestamp-datetime] at system+3562 (98% in): Remove it, round it
+    to a coarse bucket (day/hour), or move it into the final user message
+    (after the cached prefix).
+    3. [impact] Fixing the FIRST finding alone extends the stable prefix from
+    ~1018 to ~1037 tok.
+    4. [verify] After deploying, assert usage.cache_read_input_tokens (writes:
+    usage.cache_creation_input_tokens) > 0 in responses. 0 across
+    identical-prefix requests = a silent invalidator is still present.
+    5. [ttl] 5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'
+    6. [batch] STACKS with the Batch API 50%: cache read in a batch = 0.1x *
+    0.5x = ~95% off
+ Intel     :
+      TTL: 5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'
+      Read discount: 90% (0.1x base input)
+      Write cost: write premium: 1.25x (5-min TTL) / 2x (1-hour TTL); no
+      storage fee
+      Verify via: usage.cache_read_input_tokens (writes:
+      usage.cache_creation_input_tokens)
+      ! Below the model's minimum the marked prefix SILENTLY won't cache
+      (cache_creation_input_tokens: 0, no error).
+      ! Model switch = cold cache (model-scoped). Toggling extended thinking
+      invalidates system+messages (tools survive).
+      ! Serialize tool JSON deterministically (sorted keys, frozen order) —
+      non-deterministic serialization is a classic silent invalidator.
+      ! Concurrency: entry readable only after the first response begins
+      streaming — warm one, then fan out.
+      ! Pre-warm with a max_tokens: 0 request to skip cold-write latency on
+      the first real request.
+      ! On Opus 5 / Opus 4.8 / Fable 5 / Mythos 5: append {"role": "system",
+      ...} to messages for mid-conversation instructions instead of editing
+      the top-level system prompt — preserves the cached prefix.
+      ! No prompt_cache_key equivalent — routing affinity cannot be steered;
+      identical prefixes are the only lever.
+  (warning) Token counts are estimates (estimate(~3.5 chars/tok)). for exact
+  counts use POST /v1/messages/count_tokens (never tiktoken for Claude)
+
+ SEQUENCE -- Anthropic (Claude) / claude-fable-5 (2 request(s): #0, #1)
+------------------------------------------------------------------------------
+ Shared prefix across all: ~1,022 tok -> clears the floor (512)
+ #0 -> #1  PARTIAL  relation=diverged  common prefix ~1,022 tok (cached ~1,022)
+      diverged at system+3577 (char 3577)
+      likely cause: timestamp-datetime value changed
+      prev: " when speed wins. Stamp: 2026-07-30T09:14:22Z.\n\nuser: First
+      question about routing to Oslo."
+      curr: " when speed wins. Stamp: 2026-07-30T09:15:37Z.\n\nuser: First
+      question about routing to Oslo."
+      note: Divergence inside the SYSTEM section — invalidates system +
+      messages (tools may survive on Anthropic).
+      note: Only the ~1022-tok common prefix gets cache credit; everything
+      after the divergence re-processes at full price.
+      note: Explicit-enablement provider: the hit requires a cache breakpoint
+      placed at/inside the common prefix on BOTH requests.
+ Summary: 2 requests; 1/1 consecutive transitions expected to get cache
+ credit. Shared prefix across all requests: ~1022 tok, which clears the
+ activation threshold (512).
+
+==============================================================================
+ Caveat: Thresholds/prices are time-sensitive; verify against live provider
+ docs.

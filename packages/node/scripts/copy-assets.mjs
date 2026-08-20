@@ -14,6 +14,9 @@ const packageDir = dirname(scriptDir);
 const assetCopies = [
   ['src/registry/presets', 'dist/registry/presets'],
   ['src/centroids/data', 'dist/centroids/data'],
+  ['src/cachelint/data', 'dist/cachelint/data'],
+  ['src/diagnose/data', 'dist/diagnose/data'],
+  ['src/designpartner/data', 'dist/designpartner/data'],
 ];
 
 for (const [sourceRelativePath, targetRelativePath] of assetCopies) {

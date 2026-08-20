@@ -1,0 +1,197 @@
+{
+  "suite": "cost",
+  "target": "tryaii.diagnose.cost.run_cost",
+  "cases": [
+    {
+      "name": "full-path",
+      "description": "SPEC §2.4: tokenizer tokens from the cache check, traffic -> monthly, cacheable verdict + factor + pricing -> cache_savings_usd, classification -> swap.",
+      "input": {
+        "cache_ctx": {
+          "verdict_code": "CACHEABLE",
+          "stable_tokens": 1500,
+          "total_tokens": 1600,
+          "provider_key": "openai",
+          "upstream": null
+        },
+        "resolved_model_id": "gpt-4o",
+        "declared_model": "gpt-4o",
+        "output_tokens": 400,
+        "calls_per_day": 2000,
+        "classification": {
+          "benchmark_similarities": {
+            "HumanEval": 0.78,
+            "SWE-bench": 0.62,
+            "LiveBench": 0.41,
+            "MMLU": 0.3
+          }
+        },
+        "priorities": {
+          "quality": 3,
+          "cost": 4,
+          "speed": 2
+        }
+      },
+      "expected": {
+        "status": "finding",
+        "reason": null,
+        "input_tokens": 1600,
+        "output_tokens": 400,
+        "token_method": "tokenizer",
+        "cost_per_call_usd": 0.008,
+        "monthly": {
+          "status": "ok",
+          "calls_per_day": 2000,
+          "cost_usd": 480,
+          "cache_savings_usd": 112.5
+        },
+        "swap": {
+          "model_id": "gpt-5-nano",
+          "cost_per_call_usd": 0.0002,
+          "monthly_savings_usd": 468
+        }
+      }
+    },
+    {
+      "name": "chars4-no-traffic",
+      "description": "SPEC §2.4: no cache context -> chars/4 estimate; no traffic -> monthly itemized as insufficient; no ranking -> swap null -> ok.",
+      "input": {
+        "canonical_text": "user: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "resolved_model_id": "claude-sonnet-4-5-20250929",
+        "declared_model": "claude-sonnet-4-5-20250929",
+        "output_tokens": 500
+      },
+      "expected": {
+        "status": "ok",
+        "reason": null,
+        "input_tokens": 25,
+        "output_tokens": 500,
+        "token_method": "chars/4",
+        "cost_per_call_usd": 0.0076,
+        "monthly": {
+          "status": "insufficient_data",
+          "reason": "no traffic estimate"
+        },
+        "swap": null
+      }
+    },
+    {
+      "name": "openrouter-upstream-savings",
+      "description": "SPEC §2.4: openrouter has no flat factor — the detected upstream's factor applies (anthropic 0.9).",
+      "input": {
+        "cache_ctx": {
+          "verdict_code": "CACHEABLE_WITH_ACTION",
+          "stable_tokens": 2048,
+          "total_tokens": 2200,
+          "provider_key": "openrouter",
+          "upstream": "anthropic"
+        },
+        "resolved_model_id": "claude-sonnet-4-5-20250929",
+        "declared_model": "anthropic/claude-sonnet-4.5",
+        "output_tokens": 300,
+        "calls_per_day": 500
+      },
+      "expected": {
+        "status": "ok",
+        "reason": null,
+        "input_tokens": 2200,
+        "output_tokens": 300,
+        "token_method": "tokenizer",
+        "cost_per_call_usd": 0.0111,
+        "monthly": {
+          "status": "ok",
+          "calls_per_day": 500,
+          "cost_usd": 166.5,
+          "cache_savings_usd": 82.944
+        },
+        "swap": null
+      }
+    },
+    {
+      "name": "below-threshold-no-savings",
+      "description": "SPEC §2.4: a non-cacheable-family verdict never produces cache_savings_usd; monthly cost still computes.",
+      "input": {
+        "cache_ctx": {
+          "verdict_code": "BELOW_THRESHOLD",
+          "stable_tokens": 180,
+          "total_tokens": 180,
+          "provider_key": "openai",
+          "upstream": null
+        },
+        "resolved_model_id": "gpt-4o-mini",
+        "declared_model": "gpt-4o-mini",
+        "output_tokens": 200,
+        "calls_per_day": 100
+      },
+      "expected": {
+        "status": "ok",
+        "reason": null,
+        "input_tokens": 180,
+        "output_tokens": 200,
+        "token_method": "tokenizer",
+        "cost_per_call_usd": 0.0001,
+        "monthly": {
+          "status": "ok",
+          "calls_per_day": 100,
+          "cost_usd": 0.3
+        },
+        "swap": null
+      }
+    },
+    {
+      "name": "unknown-model",
+      "description": "SPEC §2.4: unresolved model -> insufficient_data; the token estimate is still itemized.",
+      "input": {
+        "canonical_text": "user: hello there",
+        "declared_model": "claude-9-mega",
+        "output_tokens": 500
+      },
+      "expected": {
+        "status": "insufficient_data",
+        "reason": "unknown model 'claude-9-mega'",
+        "input_tokens": 5,
+        "output_tokens": 500,
+        "token_method": "chars/4",
+        "cost_per_call_usd": null,
+        "monthly": null,
+        "swap": null
+      }
+    },
+    {
+      "name": "no-model",
+      "description": "SPEC §2.4: no model declared -> insufficient_data.",
+      "input": {
+        "canonical_text": "user: hello there",
+        "output_tokens": 500
+      },
+      "expected": {
+        "status": "insufficient_data",
+        "reason": "no model declared",
+        "input_tokens": 5,
+        "output_tokens": 500,
+        "token_method": "chars/4",
+        "cost_per_call_usd": null,
+        "monthly": null,
+        "swap": null
+      }
+    },
+    {
+      "name": "no-prompt",
+      "description": "SPEC §2.4: nothing to count -> insufficient_data with the no-prompt reason.",
+      "input": {
+        "resolved_model_id": "gpt-4o",
+        "declared_model": "gpt-4o",
+        "output_tokens": 500
+      },
+      "expected": {
+        "status": "insufficient_data",
+        "reason": "no prompt",
+        "input_tokens": null,
+        "output_tokens": 500,
+        "token_method": null,
+        "cost_per_call_usd": null,
+        "monthly": null,
+        "swap": null
+      }
+    }
+  ]
+}

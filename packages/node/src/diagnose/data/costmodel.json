@@ -1,0 +1,14 @@
+{
+  "meta": {
+    "note": "Conservative lower-bound cached-read discount factors, derived from the prose read_discount fields in shared/cachelint/providers.json. Used ONLY by the diagnose cost-exposure check's cache-savings estimate, which is itself documented as an upper bound. Keys are cachelint provider_keys. null = no flat factor (openrouter inherits its detected upstream's factor)."
+  },
+  "read_discount_factors": {
+    "openai": 0.5,
+    "anthropic": 0.9,
+    "gemini": 0.75,
+    "xai": 0.75,
+    "openrouter": null,
+    "bedrock": 0.5,
+    "vertex": 0.75
+  }
+}

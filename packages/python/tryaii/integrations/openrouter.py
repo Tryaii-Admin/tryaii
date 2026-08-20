@@ -39,6 +39,28 @@ from tryaii.classifiers.base import MAX_PROMPT_LENGTH
 
 logger = logging.getLogger("tryaii.integrations.openrouter")
 
+
+def _build_cache_lint_hook(cache_lint: Optional[str]):
+    """Resolve the cache_lint mode and build the hook (or None when off).
+
+    Precedence: explicit constructor value > TRYAII_CACHE_LINT env var > off.
+    An invalid EXPLICIT value raises (constructor-time developer error); env
+    garbage and hook-construction failures are fail-open (lint must never
+    break API usage). Mirrored in async_client.py.
+    """
+    if cache_lint is not None and cache_lint not in ("off", "warn"):
+        raise ValueError('cache_lint must be "off" or "warn"')
+    mode = cache_lint or os.environ.get("TRYAII_CACHE_LINT", "")
+    if mode.strip().lower() != "warn":
+        return None
+    try:
+        from tryaii.cachelint.hook import CacheLintHook
+
+        return CacheLintHook()
+    except Exception:  # noqa: BLE001 -- fail-open even at construction
+        logger.debug("cachelint hook unavailable", exc_info=True)
+        return None
+
 # Mapping from our model IDs to OpenRouter model slugs
 MODEL_ID_TO_OPENROUTER: dict[str, str] = {
     # OpenAI
@@ -124,11 +146,13 @@ class OpenRouterIntegration:
         router,  # tryaii.Router instance (avoid circular import)
         api_key: Optional[str] = None,
         app_name: str = "tryaii",
+        cache_lint: Optional[str] = None,
     ):
         self._router = router
         self._api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
         self._app_name = app_name
         self._client = None
+        self._cache_lint = _build_cache_lint_hook(cache_lint)
 
     def _ensure_client(self):
         """Lazy-initialize httpx client."""
@@ -304,6 +328,10 @@ class OpenRouterIntegration:
             messages.append({"role": "system", "content": system_message})
         messages.append({"role": "user", "content": prompt})
 
+        # Pre-flight cache lint on the ACTUAL outgoing messages (fail-open).
+        lint_key = self._cache_lint.preflight(openrouter_model, messages) \
+            if self._cache_lint else None
+
         # Make API call
         payload: dict = {
             "model": openrouter_model,
@@ -338,6 +366,10 @@ class OpenRouterIntegration:
             raise ValueError(f"OpenRouter API error: {msg}")
         content = choices[0].get("message", {}).get("content", "")
         usage = data.get("usage", {})
+
+        # Predicted-vs-actual cache verification (fail-open, warns at most once).
+        if self._cache_lint:
+            self._cache_lint.verify(lint_key, usage)
 
         logger.info("OpenRouter chat completed model=%s openrouter_model=%s tokens=%s",
                      model_id, openrouter_model, usage.get("total_tokens", "?"))
@@ -395,6 +427,10 @@ class OpenRouterIntegration:
             messages.append({"role": "system", "content": system_message})
         messages.append({"role": "user", "content": prompt})
 
+        # Pre-flight cache lint on the ACTUAL outgoing messages (fail-open).
+        lint_key = self._cache_lint.preflight(openrouter_model, messages) \
+            if self._cache_lint else None
+
         payload: dict = {
             "model": openrouter_model,
             "messages": messages,
@@ -411,6 +447,7 @@ class OpenRouterIntegration:
         # has been yielded a mid-stream failure must re-raise -- replaying the
         # request would duplicate already-emitted content.
         yielded_any = False
+        last_usage: Optional[dict] = None
         last_exc: Exception | None = None
         for attempt in range(self._MAX_RETRIES + 1):
             try:
@@ -430,6 +467,11 @@ class OpenRouterIntegration:
                                     err_msg = err_msg.get("message", str(err_msg))
                                 logger.error("Stream error from API: %s", err_msg)
                                 raise ValueError(f"OpenRouter stream error: {err_msg}")
+                            # Capture usage BEFORE the delta read: the final
+                            # usage chunk often has empty choices, which would
+                            # hit the IndexError continue below.
+                            if isinstance(chunk.get("usage"), dict) and chunk["usage"]:
+                                last_usage = chunk["usage"]
                             delta = chunk["choices"][0].get("delta", {})
                             content = delta.get("content", "")
                             if content:
@@ -437,6 +479,10 @@ class OpenRouterIntegration:
                                 yield content
                         except (json.JSONDecodeError, KeyError, IndexError):
                             continue
+                    # Best-effort cache verification (usage only present when the
+                    # caller enabled usage accounting upstream).
+                    if self._cache_lint:
+                        self._cache_lint.verify(lint_key, last_usage)
                     return  # Stream completed successfully; exit retry loop
             except (httpx.TransportError, httpx.HTTPStatusError) as exc:
                 last_exc = exc

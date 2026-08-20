@@ -8,6 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isImplausibleBenchmarkScore } from '../scoring/benchmarks.js';
 import type { LatencyTier, ModelData, ModelsJson } from '../types.js';
 
 export class ModelPricing {
@@ -66,16 +67,20 @@ export class ModelInfo {
   }
 
   static fromDict(d: ModelData): ModelInfo {
+    // Pricing with a missing component is unknown, not free: coercing null
+    // to 0 would hand the model a perfect cost score.
     let pricing: ModelPricing | null = null;
-    if (d.pricing) {
-      pricing = new ModelPricing(d.pricing.input_per_1k ?? 0, d.pricing.output_per_1k ?? 0);
+    if (d.pricing && d.pricing.input_per_1k != null && d.pricing.output_per_1k != null) {
+      pricing = new ModelPricing(d.pricing.input_per_1k, d.pricing.output_per_1k);
     }
 
-    // Filter out null benchmark scores
+    // Drop null and implausible (corrupt) benchmark values such as
+    // below-random-chance multiple-choice scores -- keeping them would both
+    // crater the model and poison the registry-wide imputation medians.
     const benchmarkScores: Record<string, number> = {};
     if (d.benchmark_scores) {
       for (const [k, v] of Object.entries(d.benchmark_scores)) {
-        if (v != null) benchmarkScores[k] = v;
+        if (v != null && !isImplausibleBenchmarkScore(k, v)) benchmarkScores[k] = v;
       }
     }
 

@@ -1,0 +1,182 @@
+{
+  "suite": "cli",
+  "target": "tryaii cachelint (subprocess, cwd=fixtures dir)",
+  "cases": [
+    {
+      "name": "cli-report-single",
+      "description": "text report with findings still exits 0 (warn-only)",
+      "input": {
+        "argv": [
+          "cachelint",
+          "corpus/late-dynamic.json"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "cli-report-single.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "cli-json-flag",
+      "description": "--json emits the full result, byte-identical across SDKs",
+      "input": {
+        "argv": [
+          "cachelint",
+          "corpus/anthropic-small.json",
+          "--json"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "cli-json-flag.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "cli-stdin-dash",
+      "description": "'-' reads the envelope from stdin",
+      "input": {
+        "argv": [
+          "cachelint",
+          "-"
+        ],
+        "stdin_file": "corpus/anthropic-small.json"
+      },
+      "expected": {
+        "stdout_golden": "cli-stdin-dash.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "cli-sequence-report",
+      "description": "multi-item file renders the sequence page",
+      "input": {
+        "argv": [
+          "cachelint",
+          "corpus/seq-ttl-cases.json"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "cli-sequence-report.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "cli-missing-arg",
+      "description": "no input operand -> usage error exit 2",
+      "input": {
+        "argv": [
+          "cachelint"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "cli-missing-arg.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 2
+      },
+      "stderr_parser_specific": true
+    },
+    {
+      "name": "cli-bad-json",
+      "description": "parser-neutral message: invalid JSON in '<path>' -> exit 2",
+      "input": {
+        "argv": [
+          "cachelint",
+          "corpus/bad-json.json.broken"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "cli-bad-json.stdout.golden.txt",
+        "stderr": "error: invalid JSON in 'corpus/bad-json.json.broken'\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "cli-file-not-found",
+      "description": "missing file -> runtime error exit 1",
+      "input": {
+        "argv": [
+          "cachelint",
+          "corpus/nope.json"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "cli-file-not-found.stdout.golden.txt",
+        "stderr": "error: file not found: corpus/nope.json\n",
+        "exit_code": 1
+      }
+    },
+    {
+      "name": "cli-unknown-provider",
+      "description": "engine ValueError surfaces as usage error exit 2",
+      "input": {
+        "argv": [
+          "cachelint",
+          "corpus/unknown-provider.json"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "cli-unknown-provider.stdout.golden.txt",
+        "stderr": "error: Unknown provider 'azure'. Known: anthropic, bedrock, gemini, openai, openrouter, vertex, xai\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "cli-raw-stdin-provider-model",
+      "description": "raw-text mode: stdin is ONE raw prompt string",
+      "input": {
+        "argv": [
+          "cachelint",
+          "-",
+          "--provider",
+          "anthropic",
+          "--model",
+          "claude-fable-5"
+        ],
+        "stdin_file": "corpus/raw-prompt.txt"
+      },
+      "expected": {
+        "stdout_golden": "cli-raw-stdin-provider-model.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "cli-raw-provider-only",
+      "description": "raw-text mode without --model -> provider default threshold + standard warning",
+      "input": {
+        "argv": [
+          "cachelint",
+          "corpus/raw-prompt.txt",
+          "--provider",
+          "openai"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "cli-raw-provider-only.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "cli-model-without-provider",
+      "description": "--model without --provider -> usage error exit 2",
+      "input": {
+        "argv": [
+          "cachelint",
+          "corpus/anthropic-small.json",
+          "--model",
+          "claude-fable-5"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "cli-model-without-provider.stdout.golden.txt",
+        "stderr": "error: --model requires --provider (raw-text mode)\n",
+        "exit_code": 2
+      }
+    }
+  ]
+}

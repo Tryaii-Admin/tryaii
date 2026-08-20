@@ -1,0 +1,9 @@
+tryaii designpartner -- stage: questionnaire
+
+enrollment state cleared
+  removed .tryaii/designpartner/state.json
+  removed .tryaii/designpartner/preview.json
+
+
+next: Start over from the beginning.
+  tryaii designpartner

@@ -1,0 +1,555 @@
+{
+  "suite": "modelfit",
+  "target": "tryaii.diagnose.modelfit.run_model_fit",
+  "cases": [
+    {
+      "name": "strong-fit",
+      "description": "SPEC §2.2: current model in the top 3 -> ok with the strong-fit summary; raw dimension scores only, never final_score.",
+      "input": {
+        "classification": {
+          "benchmark_similarities": {
+            "HumanEval": 0.78,
+            "SWE-bench": 0.62,
+            "LiveBench": 0.41,
+            "MMLU": 0.3
+          },
+          "broad_category": "coding",
+          "subcategory": "code-generation",
+          "confidence": 0.87
+        },
+        "resolved_model_id": "claude-fable-5",
+        "declared_model": "claude-fable-5",
+        "priorities": {
+          "quality": 5,
+          "cost": 1,
+          "speed": 1
+        }
+      },
+      "expected": {
+        "status": "ok",
+        "reason": null,
+        "summary": "claude-fable-5 is a strong fit (rank 2 of 39)",
+        "classification": {
+          "broad_category": "coding",
+          "subcategory": "code-generation",
+          "confidence": 0.87
+        },
+        "current_rank": 2,
+        "catalog_size": 39,
+        "current": {
+          "model_id": "claude-fable-5",
+          "quality_score": 0.9407,
+          "cost_score": 0.7,
+          "speed_score": 0.6
+        },
+        "recommended": {
+          "model_id": "gpt-5.5",
+          "quality_score": 0.9447,
+          "cost_score": 0.825,
+          "speed_score": 0.6,
+          "top_benchmarks": [
+            [
+              "HumanEval",
+              0.9925
+            ],
+            [
+              "SWE-bench",
+              0.9487
+            ],
+            [
+              "LiveBench",
+              0.8462
+            ],
+            [
+              "MMLU",
+              0.9464
+            ]
+          ],
+          "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (95%)] | Cost efficiency: 0.83 | Speed: 0.60 (medium)"
+        },
+        "recommended_same_price": {
+          "model_id": "claude-fable-5",
+          "rank": 2,
+          "quality_score": 0.9407,
+          "cost_score": 0.7,
+          "speed_score": 0.6,
+          "is_current": true
+        },
+        "top": [
+          {
+            "rank": 1,
+            "model_id": "gpt-5.5",
+            "quality_score": 0.9447,
+            "cost_score": 0.825,
+            "speed_score": 0.6,
+            "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (95%)] | Cost efficiency: 0.83 | Speed: 0.60 (medium)"
+          },
+          {
+            "rank": 2,
+            "model_id": "claude-fable-5",
+            "quality_score": 0.9407,
+            "cost_score": 0.7,
+            "speed_score": 0.6,
+            "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (97%)] | Cost efficiency: 0.70 | Speed: 0.60 (medium)"
+          },
+          {
+            "rank": 3,
+            "model_id": "gpt-5.4",
+            "quality_score": 0.9275,
+            "cost_score": 0.9125,
+            "speed_score": 0.6,
+            "reasoning": "Quality: 0.93 on [HumanEval (99%), SWE-bench (93%)] | Cost efficiency: 0.91 | Speed: 0.60 (medium)"
+          },
+          {
+            "rank": 4,
+            "model_id": "claude-opus-4-8",
+            "quality_score": 0.9227,
+            "cost_score": 0.85,
+            "speed_score": 0.6,
+            "reasoning": "Quality: 0.92 on [HumanEval (97%), SWE-bench (96%)] | Cost efficiency: 0.85 | Speed: 0.60 (medium)"
+          },
+          {
+            "rank": 5,
+            "model_id": "gpt-5.2",
+            "quality_score": 0.9095,
+            "cost_score": 0.9213,
+            "speed_score": 0.6,
+            "reasoning": "Quality: 0.91 on [HumanEval (97%), SWE-bench (92%)] | Cost efficiency: 0.92 | Speed: 0.60 (medium)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "consider",
+      "description": "SPEC §2.2: rank 4-10 -> finding with the consider summary.",
+      "input": {
+        "classification": {
+          "benchmark_similarities": {
+            "HumanEval": 0.78,
+            "SWE-bench": 0.62,
+            "LiveBench": 0.41,
+            "MMLU": 0.3
+          },
+          "broad_category": "coding",
+          "subcategory": "code-generation",
+          "confidence": 0.87
+        },
+        "resolved_model_id": "claude-opus-4-5-20251101",
+        "declared_model": "claude-opus-4-5-20251101",
+        "priorities": {
+          "quality": 5,
+          "cost": 1,
+          "speed": 1
+        }
+      },
+      "expected": {
+        "status": "finding",
+        "reason": null,
+        "summary": "consider gpt-5.5 (current claude-opus-4-5-20251101 ranks 7 of 39)",
+        "classification": {
+          "broad_category": "coding",
+          "subcategory": "code-generation",
+          "confidence": 0.87
+        },
+        "current_rank": 7,
+        "catalog_size": 39,
+        "current": {
+          "model_id": "claude-opus-4-5-20251101",
+          "quality_score": 0.8912,
+          "cost_score": 0,
+          "speed_score": 0.3
+        },
+        "recommended": {
+          "model_id": "gpt-5.5",
+          "quality_score": 0.9447,
+          "cost_score": 0.825,
+          "speed_score": 0.6,
+          "top_benchmarks": [
+            [
+              "HumanEval",
+              0.9925
+            ],
+            [
+              "SWE-bench",
+              0.9487
+            ],
+            [
+              "LiveBench",
+              0.8462
+            ],
+            [
+              "MMLU",
+              0.9464
+            ]
+          ],
+          "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (95%)] | Cost efficiency: 0.83 | Speed: 0.60 (medium)"
+        },
+        "recommended_same_price": {
+          "model_id": "claude-opus-4-5-20251101",
+          "rank": 7,
+          "quality_score": 0.8912,
+          "cost_score": 0,
+          "speed_score": 0.3,
+          "is_current": true
+        },
+        "top": [
+          {
+            "rank": 1,
+            "model_id": "gpt-5.5",
+            "quality_score": 0.9447,
+            "cost_score": 0.825,
+            "speed_score": 0.6,
+            "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (95%)] | Cost efficiency: 0.83 | Speed: 0.60 (medium)"
+          },
+          {
+            "rank": 2,
+            "model_id": "claude-fable-5",
+            "quality_score": 0.9407,
+            "cost_score": 0.7,
+            "speed_score": 0.6,
+            "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (97%)] | Cost efficiency: 0.70 | Speed: 0.60 (medium)"
+          },
+          {
+            "rank": 3,
+            "model_id": "gpt-5.4",
+            "quality_score": 0.9275,
+            "cost_score": 0.9125,
+            "speed_score": 0.6,
+            "reasoning": "Quality: 0.93 on [HumanEval (99%), SWE-bench (93%)] | Cost efficiency: 0.91 | Speed: 0.60 (medium)"
+          },
+          {
+            "rank": 4,
+            "model_id": "claude-opus-4-8",
+            "quality_score": 0.9227,
+            "cost_score": 0.85,
+            "speed_score": 0.6,
+            "reasoning": "Quality: 0.92 on [HumanEval (97%), SWE-bench (96%)] | Cost efficiency: 0.85 | Speed: 0.60 (medium)"
+          },
+          {
+            "rank": 5,
+            "model_id": "gpt-5.2",
+            "quality_score": 0.9095,
+            "cost_score": 0.9213,
+            "speed_score": 0.6,
+            "reasoning": "Quality: 0.91 on [HumanEval (97%), SWE-bench (92%)] | Cost efficiency: 0.92 | Speed: 0.60 (medium)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "mismatch",
+      "description": "SPEC §2.2: rank > 10 -> finding with the poor-fit summary naming the best model.",
+      "input": {
+        "classification": {
+          "benchmark_similarities": {
+            "HumanEval": 0.78,
+            "SWE-bench": 0.62,
+            "LiveBench": 0.41,
+            "MMLU": 0.3
+          },
+          "broad_category": "coding",
+          "subcategory": "code-generation",
+          "confidence": 0.87
+        },
+        "resolved_model_id": "gpt-4o",
+        "declared_model": "gpt-4o",
+        "priorities": {
+          "quality": 5,
+          "cost": 1,
+          "speed": 1
+        }
+      },
+      "expected": {
+        "status": "finding",
+        "reason": null,
+        "summary": "gpt-4o is a poor fit for this prompt (rank 27 of 39) — best: gpt-5.5",
+        "classification": {
+          "broad_category": "coding",
+          "subcategory": "code-generation",
+          "confidence": 0.87
+        },
+        "current_rank": 27,
+        "catalog_size": 39,
+        "current": {
+          "model_id": "gpt-4o",
+          "quality_score": 0.6807,
+          "cost_score": 0.9375,
+          "speed_score": 0.6
+        },
+        "recommended": {
+          "model_id": "gpt-5.5",
+          "quality_score": 0.9447,
+          "cost_score": 0.825,
+          "speed_score": 0.6,
+          "top_benchmarks": [
+            [
+              "HumanEval",
+              0.9925
+            ],
+            [
+              "SWE-bench",
+              0.9487
+            ],
+            [
+              "LiveBench",
+              0.8462
+            ],
+            [
+              "MMLU",
+              0.9464
+            ]
+          ],
+          "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (95%)] | Cost efficiency: 0.83 | Speed: 0.60 (medium)"
+        },
+        "recommended_same_price": {
+          "model_id": "gpt-5",
+          "rank": 8,
+          "quality_score": 0.8825,
+          "cost_score": 0.9437,
+          "speed_score": 0.6,
+          "is_current": false
+        },
+        "top": [
+          {
+            "rank": 1,
+            "model_id": "gpt-5.5",
+            "quality_score": 0.9447,
+            "cost_score": 0.825,
+            "speed_score": 0.6,
+            "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (95%)] | Cost efficiency: 0.83 | Speed: 0.60 (medium)"
+          },
+          {
+            "rank": 2,
+            "model_id": "claude-fable-5",
+            "quality_score": 0.9407,
+            "cost_score": 0.7,
+            "speed_score": 0.6,
+            "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (97%)] | Cost efficiency: 0.70 | Speed: 0.60 (medium)"
+          },
+          {
+            "rank": 3,
+            "model_id": "gpt-5.4",
+            "quality_score": 0.9275,
+            "cost_score": 0.9125,
+            "speed_score": 0.6,
+            "reasoning": "Quality: 0.93 on [HumanEval (99%), SWE-bench (93%)] | Cost efficiency: 0.91 | Speed: 0.60 (medium)"
+          },
+          {
+            "rank": 4,
+            "model_id": "claude-opus-4-8",
+            "quality_score": 0.9227,
+            "cost_score": 0.85,
+            "speed_score": 0.6,
+            "reasoning": "Quality: 0.92 on [HumanEval (97%), SWE-bench (96%)] | Cost efficiency: 0.85 | Speed: 0.60 (medium)"
+          },
+          {
+            "rank": 5,
+            "model_id": "gpt-5.2",
+            "quality_score": 0.9095,
+            "cost_score": 0.9213,
+            "speed_score": 0.6,
+            "reasoning": "Quality: 0.91 on [HumanEval (97%), SWE-bench (92%)] | Cost efficiency: 0.92 | Speed: 0.60 (medium)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown-current",
+      "description": "SPEC §2.2: unresolved current model -> insufficient_data with the unknown-model reason; the recommendation payload is still full.",
+      "input": {
+        "classification": {
+          "benchmark_similarities": {
+            "HumanEval": 0.78,
+            "SWE-bench": 0.62,
+            "LiveBench": 0.41,
+            "MMLU": 0.3
+          },
+          "broad_category": "coding",
+          "subcategory": "code-generation",
+          "confidence": 0.87
+        },
+        "resolved_model_id": null,
+        "declared_model": "claude-9-mega",
+        "priorities": {
+          "quality": 3,
+          "cost": 3,
+          "speed": 3
+        }
+      },
+      "expected": {
+        "status": "insufficient_data",
+        "reason": "unknown model 'claude-9-mega'",
+        "summary": "recommended: claude-haiku-4-5-20251001 (no current model to compare)",
+        "classification": {
+          "broad_category": "coding",
+          "subcategory": "code-generation",
+          "confidence": 0.87
+        },
+        "current_rank": null,
+        "catalog_size": 39,
+        "current": null,
+        "recommended": {
+          "model_id": "claude-haiku-4-5-20251001",
+          "quality_score": 0.7321,
+          "cost_score": 0.97,
+          "speed_score": 1,
+          "top_benchmarks": [
+            [
+              "HumanEval",
+              0.8701
+            ],
+            [
+              "SWE-bench",
+              0.8372
+            ],
+            [
+              "LiveBench",
+              0.5146
+            ],
+            [
+              "MMLU",
+              0.4536
+            ]
+          ],
+          "reasoning": "Quality: 0.73 on [HumanEval (87%), SWE-bench (84%)] | Cost efficiency: 0.97 | Speed: 1.00 (very fast)"
+        },
+        "recommended_same_price": null,
+        "top": [
+          {
+            "rank": 1,
+            "model_id": "claude-haiku-4-5-20251001",
+            "quality_score": 0.7321,
+            "cost_score": 0.97,
+            "speed_score": 1,
+            "reasoning": "Quality: 0.73 on [HumanEval (87%), SWE-bench (84%)] | Cost efficiency: 0.97 | Speed: 1.00 (very fast)"
+          },
+          {
+            "rank": 2,
+            "model_id": "gemini-3-flash-preview",
+            "quality_score": 0.8115,
+            "cost_score": 0.996,
+            "speed_score": 0.8,
+            "reasoning": "Quality: 0.81 on [HumanEval (87%), SWE-bench (90%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+          },
+          {
+            "rank": 3,
+            "model_id": "gpt-5.4-nano",
+            "quality_score": 0.6752,
+            "cost_score": 0.9928,
+            "speed_score": 1,
+            "reasoning": "Quality: 0.68 on [HumanEval (81%), SWE-bench (67%)] | Cost efficiency: 0.99 | Speed: 1.00 (very fast)"
+          },
+          {
+            "rank": 4,
+            "model_id": "gpt-5-mini",
+            "quality_score": 0.8025,
+            "cost_score": 0.9888,
+            "speed_score": 0.8,
+            "reasoning": "Quality: 0.80 on [HumanEval (87%), SWE-bench (81%)] | imputed: 1/4 | Cost efficiency: 0.99 | Speed: 0.80 (fast)"
+          },
+          {
+            "rank": 5,
+            "model_id": "gpt-5-nano",
+            "quality_score": 0.6611,
+            "cost_score": 0.9978,
+            "speed_score": 1,
+            "reasoning": "Quality: 0.66 on [HumanEval (75%), SWE-bench (60%)] | imputed: 1/4 | Cost efficiency: 1.00 | Speed: 1.00 (very fast)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "no-model-declared",
+      "description": "SPEC §2.2: no model declared -> insufficient_data; recommendation still emitted (default balanced priorities).",
+      "input": {
+        "classification": {
+          "benchmark_similarities": {
+            "Chatbot Arena (LMSys)": 0.7,
+            "MT-Bench": 0.65,
+            "MMLU": 0.4
+          },
+          "broad_category": "conversation",
+          "subcategory": "chat",
+          "confidence": 0.74
+        }
+      },
+      "expected": {
+        "status": "insufficient_data",
+        "reason": "no model declared",
+        "summary": "recommended: gemini-3-flash-preview (no current model to compare)",
+        "classification": {
+          "broad_category": "conversation",
+          "subcategory": "chat",
+          "confidence": 0.74
+        },
+        "current_rank": null,
+        "catalog_size": 39,
+        "current": null,
+        "recommended": {
+          "model_id": "gemini-3-flash-preview",
+          "quality_score": 0.7951,
+          "cost_score": 0.996,
+          "speed_score": 0.8,
+          "top_benchmarks": [
+            [
+              "Chatbot Arena (LMSys)",
+              0.75
+            ],
+            [
+              "MT-Bench",
+              0.8
+            ],
+            [
+              "MMLU",
+              0.8661
+            ]
+          ],
+          "reasoning": "Quality: 0.80 on [Chatbot Arena (LMSys) (75%), MT-Bench (80%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+        },
+        "recommended_same_price": null,
+        "top": [
+          {
+            "rank": 1,
+            "model_id": "gemini-3-flash-preview",
+            "quality_score": 0.7951,
+            "cost_score": 0.996,
+            "speed_score": 0.8,
+            "reasoning": "Quality: 0.80 on [Chatbot Arena (LMSys) (75%), MT-Bench (80%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+          },
+          {
+            "rank": 2,
+            "model_id": "gemini-3.5-flash",
+            "quality_score": 0.8155,
+            "cost_score": 0.9475,
+            "speed_score": 0.8,
+            "reasoning": "Quality: 0.82 on [Chatbot Arena (LMSys) (77%), MT-Bench (83%)] | Cost efficiency: 0.95 | Speed: 0.80 (fast)"
+          },
+          {
+            "rank": 3,
+            "model_id": "grok-4-1-fast-reasoning-latest",
+            "quality_score": 0.7816,
+            "cost_score": 0.9965,
+            "speed_score": 0.8,
+            "reasoning": "Quality: 0.78 on [Chatbot Arena (LMSys) (70%), MT-Bench (75%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+          },
+          {
+            "rank": 4,
+            "model_id": "gpt-5.4",
+            "quality_score": 0.9263,
+            "cost_score": 0.9125,
+            "speed_score": 0.6,
+            "reasoning": "Quality: 0.93 on [Chatbot Arena (LMSys) (89%), MT-Bench (96%)] | Cost efficiency: 0.91 | Speed: 0.60 (medium)"
+          },
+          {
+            "rank": 5,
+            "model_id": "grok-4.3",
+            "quality_score": 0.8775,
+            "cost_score": 0.9812,
+            "speed_score": 0.6,
+            "reasoning": "Quality: 0.88 on [Chatbot Arena (LMSys) (86%), MT-Bench (85%)] | Cost efficiency: 0.98 | Speed: 0.60 (medium)"
+          }
+        ]
+      }
+    }
+  ]
+}

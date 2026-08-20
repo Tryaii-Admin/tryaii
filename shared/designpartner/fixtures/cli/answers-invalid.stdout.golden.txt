@@ -1,0 +1,25 @@
+tryaii designpartner -- stage: questionnaire
+
+answers rejected: 14 problem(s)
+  - email: 'email' must look like an email address
+  - company_size: 'company_size' contains a value that is not one of its option ids
+  - providers: 'providers' contains a value that is not one of its option ids
+  - models_openai: 'models_openai' has the wrong type for a text question
+  - frameworks: 'frameworks' has the wrong type for a multi_select question
+  - calls_per_day: 'calls_per_day' is required
+  - monthly_spend: 'monthly_spend' is required
+  - deployment_stage: 'deployment_stage' is required
+  - model_choice_process: 'model_choice_process' is required
+  - cache_effort: 'cache_effort' is required
+  - biggest_pain: 'biggest_pain' is required
+  - features_interest: 'features_interest' is required
+  - follow_up_call: 'follow_up_call' has the wrong type for a boolean question
+  - favorite_color: 'favorite_color' is not in the questionnaire
+
+  About you: 0/5 answered
+  How you use AI: 0/5 answered
+  Where tryaii fits: 0/5 answered
+machine-readable catalog: tryaii designpartner --json
+
+next: Interview the user from the questionnaire block (honor ask_if; every answer comes from the user), then save their answers.
+  tryaii designpartner --answers answers.json

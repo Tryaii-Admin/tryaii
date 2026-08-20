@@ -120,4 +120,10 @@ export interface DREClientOptions {
 
   /** Base URL for OpenRouter API. */
   baseUrl?: string;
+  /**
+   * 'warn' enables the pre-flight prompt-cache lint + runtime
+   * verification (stderr warnings, fail-open). Default 'off';
+   * TRYAII_CACHE_LINT=warn also enables.
+   */
+  cacheLint?: 'off' | 'warn';
 }

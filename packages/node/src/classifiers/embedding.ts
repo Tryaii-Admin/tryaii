@@ -18,22 +18,20 @@ import { cosineSimilarity } from '../utils/cosine.js';
 import { vectorMean, vectorNormalize } from '../utils/math.js';
 import { BaseEmbeddingProvider } from '../embeddings/base.js';
 import { CentroidLoader, benchmarkFingerprint } from '../centroids/loader.js';
+import { STANDARD_BENCHMARKS } from '../benchmarks/standard.js';
 
-/** Benchmark -> broad category mapping for display purposes. */
-export const BENCHMARK_CATEGORIES: Record<string, [string, string]> = {
-  'MMLU': ['EDUCATIONAL', 'ACADEMIC_INSTRUCTION'],
-  'HellaSwag': ['CONVERSATIONAL', 'PERSONAL_ADVICE'],
-  'HumanEval': ['TECHNICAL', 'CODE_TECHNICAL'],
-  'SWE-bench': ['TECHNICAL', 'CODE_TECHNICAL'],
-  'TruthfulQA': ['CONVERSATIONAL', 'PERSONAL_ADVICE'],
-  'ARC': ['EDUCATIONAL', 'ACADEMIC_INSTRUCTION'],
-  'GSM8K': ['TECHNICAL', 'MATHEMATICAL_SCIENTIFIC'],
-  'DROP': ['TECHNICAL', 'MATHEMATICAL_SCIENTIFIC'],
-  'SuperGLUE': ['BUSINESS', 'PROFESSIONAL_COMMUNICATION'],
-  'Chatbot Arena (LMSys)': ['CONVERSATIONAL', 'PERSONAL_ADVICE'],
-  'MT-Bench': ['CREATIVE', 'WRITING_LITERARY'],
-  'LiveBench': ['TECHNICAL', 'CODE_TECHNICAL'],
-};
+/**
+ * Benchmark -> [broadCategory, subcategory] mapping for display purposes.
+ *
+ * Derived from the standard benchmark definitions so the classifier's category
+ * labels can never drift from the benchmark taxonomy (or its names). The
+ * subcategory is the benchmark's primary (first) subcategory.
+ */
+export const BENCHMARK_CATEGORIES: Record<string, [string, string]> = Object.fromEntries(
+  STANDARD_BENCHMARKS.map(
+    (b): [string, [string, string]] => [b.name, [b.broadCategory, b.subcategories[0] ?? 'GENERAL']],
+  ),
+);
 
 /**
  * Logistic steepness for intrinsic difficulty. Only affects the spread of the

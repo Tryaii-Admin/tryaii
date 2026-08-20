@@ -4,6 +4,7 @@ TryAii CLI.
 Commands (kept in parity with the Node SDK's `tryaii`):
     tryaii route "your prompt here"     -- Route a prompt and show recommendations
     tryaii eval prompts.json             -- Route a JSON prompt dataset
+    tryaii cachelint input.json          -- Pre-flight prompt-cache analysis
     tryaii setup                         -- Pre-generate centroids for faster first use
     tryaii models                        -- List available models
     tryaii benchmarks                    -- List available benchmarks
@@ -40,6 +41,9 @@ Usage:
 Commands:
   route <prompt>        Route a prompt to the best model and show recommendations
   eval <input.json>     Route a JSON dataset; writes results.jsonl, summary.json, index.html
+  cachelint <input.json>  Analyze prompt-cache readiness before sending (--json, --provider)
+  diagnose <verb>       Agent-driven codebase diagnostics: plan, check (see 'tryaii help diagnose')
+  designpartner         Enroll as a tryaii design partner (one resumable command)
   models                List available models (--provider <name>, --json)
   benchmarks            List available benchmarks (--json)
   setup                 Download the embedding model and warm centroids (--model <name>)
@@ -59,13 +63,6 @@ Eval-only options:
   --difficulty-source <s>  Gauge task complexity: 'intrinsic' (default), 'capability', or 'blend'
   --difficulty-gamma <n>   How hard to shift budget toward complex prompts (default 1; 0 disables)
 
-Daemon (faster repeated routing):
-  route and eval auto-start a background daemon that keeps the embedding model
-  warm, so repeated calls skip the multi-second model load. The first call is
-  slow; the rest are near-instant.
-  --no-daemon           Route in-process for this call; do not use or start a daemon
-  TRYAII_NO_DAEMON=1    Disable the daemon globally (always route in-process)
-  TRYAII_DAEMON_IDLE=<s>  Shut the daemon down after this many idle seconds (default 900)
 
 Global flags:
   --no-banner           Disable the startup banner (also honored via TRYAII_NO_BANNER)
@@ -78,6 +75,7 @@ Examples:
   tryaii eval examples/prompts.json --output results/run --quality=5 --cost=1 --speed=1
   tryaii eval examples/prompts.json --max-price=0.10 --output-tokens=2000 --budget-mode=fit-output
   tryaii eval examples/prompts.json --max-price=0.50 --difficulty-source=intrinsic --difficulty-gamma=2
+  tryaii cachelint request.json --json
 """
 
 # Per-command help. Each string must stay byte-identical to the matching
@@ -98,11 +96,15 @@ Options:
   --cost <1-5>          Cost priority (default 3; out-of-range clamped)
   --speed <1-5>         Speed priority (default 3; out-of-range clamped)
   --top-k <n>           Number of recommendations shown (default 5)
+  --no-daemon           Route in-process for this call; do not use or start a daemon
 
 Notes:
   Text output only -- there is no --json for route (use 'eval' or the SDK
   for machine-readable output). Scores are relative per call; do not
   compare them across prompts.
+  A background daemon keeps the embedding model warm, so only the first
+  call pays the multi-second model load. TRYAII_NO_DAEMON=1 disables it
+  globally; TRYAII_DAEMON_IDLE=<s> tunes its idle shutdown (default 900).
 
 Examples:
   tryaii route "Write a Python function to merge sorted arrays"
@@ -143,6 +145,12 @@ Options:
   --budget-mode <mode>  'strict' (default) or 'fit-output'
   --difficulty-source <s>  'intrinsic' (default), 'capability', or 'blend'
   --difficulty-gamma <n>   Shift budget toward harder prompts (default 1; 0 disables)
+  --no-daemon           Route in-process for this call; do not use or start a daemon
+
+Notes:
+  A background daemon keeps the embedding model warm, so only the first
+  call pays the multi-second model load. TRYAII_NO_DAEMON=1 disables it
+  globally; TRYAII_DAEMON_IDLE=<s> tunes its idle shutdown (default 900).
 
 Examples:
   tryaii eval examples/prompts.json --output results/run --quality=5 --cost=1 --speed=1
@@ -245,6 +253,261 @@ Exit codes:
 Docs: docs/cli/regenerate.md
 """
 
+HELP_CACHELINT = """tryaii cachelint -- Pre-flight prompt-cache analysis
+
+Usage:
+  tryaii cachelint <input.json | -> [options]
+
+Analyze prompts BEFORE they are sent: 18 dynamic-content detectors, per-model
+token floors for 7 providers, stable-prefix computation, and predicted
+HIT/PARTIAL/MISS across request sequences. Runs locally -- nothing is called.
+
+Arguments:
+  <input.json>          Request JSON: an object with "prompt" and "llm"
+                        ({"provider": ..., "name": ...}), a list of those, or
+                        {"inputs": [...]}. Use '-' to read from stdin.
+
+Options:
+  --provider <name>     Raw-text mode: treat the ENTIRE input as one prompt
+                        string for this provider (openai, anthropic, gemini,
+                        xai, openrouter, bedrock, vertex -- aliases accepted)
+  --model <name>        Model name for raw-text mode (requires --provider;
+                        omit to use the provider's conservative default floor)
+  --json                Emit the full machine-readable result instead of the
+                        text report
+
+Notes:
+  cachelint warns, it never blocks: findings do not change the exit code.
+  Exact OpenAI/xAI token counts use the o200k tokenizer -- install the extra
+  on Python ('pip install tryaii[cachelint]'); the Node SDK bundles it.
+  Thresholds/prices are time-sensitive; verify against live provider docs.
+
+Examples:
+  tryaii cachelint request.json
+  tryaii cachelint requests.json --json
+  cat prompt.txt | tryaii cachelint - --provider anthropic --model claude-fable-5
+
+Exit codes:
+  0 analysis completed (findings included), 1 runtime failure, 2 usage error
+  or invalid input.
+
+Docs: docs/cli/cachelint.md
+"""
+
+HELP_DIAGNOSE = """tryaii diagnose -- Analyze a codebase's LLM call sites
+
+Usage:
+  tryaii diagnose <verb> [options]
+
+diagnose is agent-first: your coding agent interviews you, finds the LLM
+call sites in the codebase, and writes an inventory JSON; tryaii runs
+deterministic checks over it and stores each run under .tryaii/diagnose/.
+Insight-only -- it never edits code and never sends anything anywhere.
+
+Verbs:
+  init                  Install the agent playbook into this repo (skill + AGENTS.md)
+  plan                  Print the check catalog + interview for the agent (--json)
+  check <inventory>     Run the checks over an agent-written inventory JSON
+  report                Render a run's findings to a self-contained index.html
+
+The four checks: model_fit (is each call site's model the right one for its
+prompt under your priorities), cache_readiness (will the prompt hit the
+provider's cache), cost_exposure (per-call/monthly cost, cache savings,
+cheaper-swap suggestion), hygiene (prompt structure and dynamic-value
+placement).
+
+Examples:
+  tryaii diagnose init
+  tryaii diagnose plan --json
+  tryaii diagnose check inventory.json --quality 3 --cost 4 --speed 2
+  tryaii diagnose report
+
+Exit codes:
+  0 checks completed (findings included), 1 runtime failure, 2 usage error.
+
+Docs: docs/cli/diagnose/README.md
+"""
+
+HELP_DIAGNOSE_INIT = """tryaii diagnose init -- Install the agent playbook into a repo
+
+Usage:
+  tryaii diagnose init [options]
+
+Writes the pieces your coding agent needs to run diagnose end to end:
+
+  .claude/skills/tryaii-diagnose/SKILL.md   the playbook (interview ->
+                                            discovery -> inventory ->
+                                            check -> report)
+  AGENTS.md                                 a short pointer block (added
+                                            between tryaii-diagnose
+                                            markers; created if missing)
+  .gitignore                                an anchored /.tryaii/ entry so
+                                            run data stays untracked
+
+Idempotent: files already up to date are left alone (the AGENTS.md block
+is replaced in place on upgrades). Everything outside the marker block is
+never touched.
+
+Options:
+  --dir <path>          Target repo root (default: current directory)
+  --no-gitignore        Do not touch .gitignore
+
+Examples:
+  tryaii diagnose init
+  tryaii diagnose init --dir ../my-app --no-gitignore
+
+Exit codes:
+  0 success, 1 runtime failure, 2 usage error.
+
+Docs: docs/cli/diagnose/init.md
+"""
+
+HELP_DIAGNOSE_PLAN = """tryaii diagnose plan -- The check catalog + interview for the agent
+
+Usage:
+  tryaii diagnose plan [--json]
+
+Prints what diagnose can check, the interview questions the agent should
+ask the user (checks, scope, priorities, traffic, goal), and the inventory
+shape the agent must produce. --json emits the machine-readable plan
+(schema tryaii.diagnose.plan/1) including a complete inventory example --
+agents should consume that.
+
+Options:
+  --json                Emit the machine-readable plan verbatim
+
+Examples:
+  tryaii diagnose plan
+  tryaii diagnose plan --json
+
+Exit codes:
+  0 success, 2 usage error.
+
+Docs: docs/cli/diagnose/plan.md
+"""
+
+HELP_DIAGNOSE_CHECK = """tryaii diagnose check -- Run the checks over an inventory JSON
+
+Usage:
+  tryaii diagnose check <inventory.json | -> [options]
+
+Reads an agent-written inventory of LLM call sites (see 'diagnose plan
+--json' for the shape), runs the selected checks, and writes the run to
+<out-dir>/<run-id>/ (inventory.json, findings.json, meta.json) plus a
+'latest' pointer. Sites with missing data degrade honestly per check
+('insufficient data' with a reason) -- nothing is guessed.
+
+Requires 'tryaii setup' once beforehand when live classification is needed
+(any site without a precomputed _classification).
+
+Arguments:
+  <inventory.json>      Inventory file, or '-' for stdin
+
+Options:
+  --quality <1-5>       Quality priority (default 3)
+  --cost <1-5>          Cost priority (default 3)
+  --speed <1-5>         Speed priority (default 3)
+  --checks <list>       Comma-separated subset of model_fit, cache_readiness,
+                        cost_exposure, hygiene (default: all)
+  --calls-per-day <n>   Default traffic assumption for sites without one
+  --output-tokens <n>   Default output tokens per call (default 500)
+  --goal <text>         The user's stated goal (echoed into the findings)
+  --out-dir <dir>       Run store directory (default .tryaii/diagnose)
+  --run-id <id>         Override the run id (default: UTC timestamp)
+  --now <iso8601>       Override the generated_at timestamp
+  --json                Print the findings JSON to stdout instead of the summary
+  --no-daemon           Classify in-process; do not use or start a daemon
+
+Notes:
+  diagnose warns, it never blocks: findings do not change the exit code.
+  Cost figures are estimates; cache savings are an upper bound.
+
+Examples:
+  tryaii diagnose check inventory.json --quality 3 --cost 4 --speed 2
+  tryaii diagnose check inventory.json --calls-per-day 1000 --goal "reduce prices"
+  cat inventory.json | tryaii diagnose check - --json
+
+Exit codes:
+  0 checks completed (findings included), 1 runtime failure, 2 usage error
+  or invalid input.
+
+Docs: docs/cli/diagnose/check.md
+"""
+
+HELP_DIAGNOSE_REPORT = """tryaii diagnose report -- Render a run to a self-contained HTML page
+
+Usage:
+  tryaii diagnose report [options]
+
+Renders <out-dir>/<run-id>/findings.json into index.html next to it: check
+chips per site (green = healthy), monthly cost/savings tiles, expandable
+detail per check, and -- when a previous run exists -- a delta band
+("since <run>: N improved..."). A pure function of the stored findings;
+the page is self-contained and everything stays local.
+
+Options:
+  --run <id>            Run to render (default: the 'latest' pointer)
+  --out-dir <dir>       Run store directory (default .tryaii/diagnose)
+  --out <file>          Write the HTML somewhere else instead
+
+Examples:
+  tryaii diagnose report
+  tryaii diagnose report --run 20260814T101530Z
+
+Exit codes:
+  0 success, 1 no runs found / runtime failure, 2 usage error.
+
+Docs: docs/cli/diagnose/report.md
+"""
+
+HELP_DESIGNPARTNER = """tryaii designpartner -- Enroll as a tryaii design partner
+
+Usage:
+  tryaii designpartner [options]
+
+ONE resumable command -- no verbs. Every run reads the enrollment state
+(.tryaii/designpartner/), ingests whatever you pass, advances, and prints
+the current stage plus exactly what to do next (--json for agents). The
+flow: questionnaire -> diagnose run (required for insight tiers) ->
+consent -> confirm -> submitted. Your coding agent drives it via the
+tryaii-designpartner skill, installed automatically on the first run.
+
+Nothing is EVER sent without an explicit --confirm, and every submission
+is written to .tryaii/designpartner/ before any network attempt. Three
+consent tiers decide what is shared: contact_only (questionnaire answers
+only), summary_insights (adds the redacted diagnose summary -- no code,
+no paths, no prompts), full_partnership (adds the full findings AND your
+raw prompts -- stated verbatim in its consent copy).
+
+Options:
+  --answers <file|->    Validate + save questionnaire answers (JSON object)
+  --consent <tier>      Choose a consent tier; writes preview.json
+  --confirm             Send the previewed submission (saved locally first)
+  --reset               Clear the enrollment state (submissions are kept)
+  --json                Print the machine-readable status report
+  --out-dir <dir>       State directory (default .tryaii/designpartner)
+  --no-gitignore        First run: do not touch .gitignore
+  --now <iso8601>       Override timestamps (testing seam)
+  --stamp <id>          Override the submission filename stamp (testing seam)
+
+At most one of --answers/--consent/--confirm/--reset per invocation.
+The endpoint (https://api.tryaii.com/v1/design-partners) can be overridden
+via TRYAII_DESIGNPARTNER_URL. If it cannot be reached, the submission
+stays saved locally and the command still succeeds.
+
+Examples:
+  tryaii designpartner
+  tryaii designpartner --answers answers.json
+  tryaii designpartner --consent summary_insights
+  tryaii designpartner --confirm
+
+Exit codes:
+  0 stage reported (including rejected answers), 1 runtime failure,
+  2 usage error.
+
+Docs: docs/cli/designpartner.md
+"""
+
 HELP_HELP = """tryaii help -- Show help for tryaii or a specific command
 
 Usage:
@@ -256,7 +519,8 @@ detailed help for that command. The flags -h/--help after any command do
 the same thing.
 
 Topics:
-  route, eval, models, benchmarks, setup, regenerate, help
+  route, eval, cachelint, diagnose, designpartner, models, benchmarks, setup,
+  regenerate, help
 
 Examples:
   tryaii help
@@ -273,11 +537,23 @@ Docs: docs/cli/README.md
 COMMAND_HELP = {
     "route": HELP_ROUTE,
     "eval": HELP_EVAL,
+    "cachelint": HELP_CACHELINT,
+    "diagnose": HELP_DIAGNOSE,
+    "designpartner": HELP_DESIGNPARTNER,
     "models": HELP_MODELS,
     "benchmarks": HELP_BENCHMARKS,
     "setup": HELP_SETUP,
     "regenerate": HELP_REGENERATE,
     "help": HELP_HELP,
+}
+
+# Per-verb help for the diagnose command. Mirrors DIAGNOSE_VERB_HELP in the
+# Node CLI (same parity guard as COMMAND_HELP).
+DIAGNOSE_VERB_HELP = {
+    "init": HELP_DIAGNOSE_INIT,
+    "plan": HELP_DIAGNOSE_PLAN,
+    "check": HELP_DIAGNOSE_CHECK,
+    "report": HELP_DIAGNOSE_REPORT,
 }
 
 # Per-line delay (seconds) when revealing human-readable output interactively.
@@ -928,6 +1204,17 @@ def cmd_setup(args):
     loader = CentroidLoader(config=config, embedding_provider=provider)
     centroids = loader.get_centroids()
 
+    # Marker consumed by `diagnose check` (its setup gate): live classification
+    # is only allowed once setup has completed at least once on this machine.
+    marker = {
+        "embedding_model": config.embedding_model,
+        "centroid_count": len(centroids),
+        "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    Path(config.data_dir).mkdir(parents=True, exist_ok=True)
+    (Path(config.data_dir) / "setup.json").write_text(
+        json.dumps(marker, indent=2) + "\n", encoding="utf-8")
+
     print(f"Setup complete! {len(centroids)} benchmark centroids ready.")
 
 
@@ -1005,6 +1292,586 @@ def cmd_regenerate(args):
     print(f"Done! Generated {len(centroids)} centroids at {config.centroid_file}")
 
 
+def cmd_cachelint(args):
+    """Pre-flight prompt-cache analysis (see shared/cachelint/SPEC.md §4)."""
+    if args.model and not args.provider:
+        print("error: --model requires --provider (raw-text mode)", file=sys.stderr)
+        sys.exit(2)
+
+    if args.input == "-":
+        raw = sys.stdin.read()
+    else:
+        path = Path(args.input)
+        if not path.is_file():
+            raise FileNotFoundError(f"file not found: {args.input}")
+        # utf-8-sig strips a BOM; text mode normalizes \r\n (Node CLI mirrors both).
+        raw = path.read_text(encoding="utf-8-sig")
+
+    from tryaii.cachelint import analyze, render_report
+
+    if args.provider:
+        # Raw-text mode: the ENTIRE input is one prompt string, never parsed as JSON.
+        data = {"prompt": raw,
+                "llm": {"provider": args.provider, "name": args.model or ""}}
+    else:
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            # Parser-neutral message (SPEC.md delta n): json and JSON.parse differ.
+            where = "on stdin" if args.input == "-" else f"in '{args.input}'"
+            print(f"error: invalid JSON {where}", file=sys.stderr)
+            sys.exit(2)
+
+    try:
+        result = analyze(data)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(2)
+
+    # The report contains em-dashes; Windows consoles may not default to UTF-8.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001 -- best effort; never break the report
+        pass
+
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        _write_paced(render_report(result) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# diagnose (see shared/diagnose/SPEC.md)
+# ---------------------------------------------------------------------------
+
+def _diagnose_data_path(name: str) -> Path:
+    from tryaii import diagnose as diagnose_pkg
+
+    return Path(diagnose_pkg.__file__).parent / "data" / name
+
+
+def _diagnose_plan(argv):
+    parser = argparse.ArgumentParser(prog="tryaii diagnose plan", add_help=False)
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+
+    raw = _diagnose_data_path("plan.json").read_text(encoding="utf-8")
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001 -- best effort; never break output
+        pass
+    if args.json:
+        # Verbatim bytes of the bundled plan -- parity by construction.
+        sys.stdout.write(raw)
+        return
+
+    plan = json.loads(raw)
+    buf = "tryaii diagnose plan -- what diagnose can check\n\n"
+    buf += "Checks (recommended: run all):\n"
+    for check in plan["checks"]:
+        buf += f"  - {check['id']}: {check['what']}\n"
+    buf += "\nInterview -- ask the user:\n"
+    for question in plan["interview"]:
+        buf += f"  - {question['ask']}\n"
+    inv = plan["inventory"]
+    buf += ("\nInventory (per site) -- required: "
+            + ", ".join(inv["required_per_site"])
+            + "; optional: " + ", ".join(inv["optional_per_site"]) + "\n")
+    buf += ("Machine-readable plan with the full schema and an example: "
+            "tryaii diagnose plan --json\n")
+    buf += "\nNext:\n"
+    buf += f"  {plan['commands']['check']}\n"
+    buf += f"  {plan['commands']['report']}\n"
+    _write_paced(buf)
+
+
+def _diagnose_read_inventory(input_arg: str):
+    """Read + parse the inventory argument ('-' = stdin). Mirrors cachelint."""
+    if input_arg == "-":
+        raw = sys.stdin.read()
+    else:
+        path = Path(input_arg)
+        if not path.is_file():
+            raise FileNotFoundError(f"file not found: {input_arg}")
+        raw = path.read_text(encoding="utf-8-sig")
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        # Parser-neutral message: json and JSON.parse phrase errors differently.
+        where = "on stdin" if input_arg == "-" else f"in '{input_arg}'"
+        print(f"error: invalid JSON {where}", file=sys.stderr)
+        sys.exit(2)
+
+
+def _diagnose_money(value) -> str:
+    return f"${value:.2f}"
+
+
+def _diagnose_summary_text(findings: dict, out_dir_display: str) -> str:
+    """Human summary of a check run -- byte-identical across both CLIs."""
+    summary = findings["summary"]
+    skipped = len(findings["inventory"]["skipped"])
+    skipped_note = f", {skipped} skipped" if skipped else ""
+    buf = f"diagnose: {summary['site_count']} site(s) analyzed{skipped_note}\n\n"
+    for check, counts in summary["check_status_counts"].items():
+        buf += (f"  {check:<16} {counts['ok']} ok | {counts['finding']} finding | "
+                f"{counts['insufficient_data']} insufficient | "
+                f"{counts['skipped']} skipped\n")
+    totals = summary["totals"]
+    if totals["sites_with_traffic_data"] > 0:
+        buf += (f"\nmonthly estimates ({totals['sites_with_traffic_data']} "
+                "site(s) with traffic data):\n")
+        if totals["est_monthly_cost_usd"] is not None:
+            buf += f"  est. cost           {_diagnose_money(totals['est_monthly_cost_usd'])}\n"
+        if totals["est_monthly_cache_savings_usd"] is not None:
+            buf += ("  cache savings (max) "
+                    f"{_diagnose_money(totals['est_monthly_cache_savings_usd'])}\n")
+        if totals["est_monthly_swap_savings_usd"] is not None:
+            buf += f"  swap savings        {_diagnose_money(totals['est_monthly_swap_savings_usd'])}\n"
+    else:
+        buf += ("\nmonthly estimates: no traffic data "
+                "(pass --calls-per-day or per-site calls_per_day)\n")
+    run_id = findings["run_id"]
+    buf += "\n"
+    for name in ("inventory.json", "findings.json", "meta.json"):
+        buf += f"-> {out_dir_display}/{run_id}/{name}\n"
+    return buf
+
+
+def _diagnose_check(argv):
+    parser = argparse.ArgumentParser(prog="tryaii diagnose check", add_help=False)
+    parser.add_argument("input")
+    parser.add_argument("--quality", type=int, default=3)
+    parser.add_argument("--cost", type=int, default=3)
+    parser.add_argument("--speed", type=int, default=3)
+    parser.add_argument("--checks")
+    parser.add_argument("--calls-per-day", type=float, dest="calls_per_day")
+    parser.add_argument("--output-tokens", type=int, dest="output_tokens")
+    parser.add_argument("--goal")
+    parser.add_argument("--out-dir", default=".tryaii/diagnose", dest="out_dir")
+    parser.add_argument("--run-id", dest="run_id")
+    parser.add_argument("--now")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--no-daemon", action="store_true", dest="no_daemon")
+    args = parser.parse_args(argv)
+
+    from tryaii import __version__
+    from tryaii.diagnose import DEFAULT_CHECKS, analyze_inventory, write_run
+
+    checks = None
+    if args.checks is not None:
+        checks = [c.strip() for c in args.checks.split(",") if c.strip()]
+        bad = [c for c in checks if c not in DEFAULT_CHECKS]
+        if bad:
+            print(f"error: unknown check '{bad[0]}'. Valid checks: "
+                  + ", ".join(DEFAULT_CHECKS), file=sys.stderr)
+            sys.exit(2)
+        if not checks:
+            print("error: --checks selected nothing. Valid checks: "
+                  + ", ".join(DEFAULT_CHECKS), file=sys.stderr)
+            sys.exit(2)
+
+    data = _diagnose_read_inventory(args.input)
+
+    # Live classification is needed only when model_fit is selected and at
+    # least one prompt-bearing site lacks the _classification seam.
+    from tryaii.diagnose.intake import normalize_inventory
+
+    norm = normalize_inventory(data)  # raises ValueError -> exit 1 below
+    needs_routing = (
+        (checks is None or "model_fit" in checks)
+        and any(site["prompt"] is not None and site["classification"] is None
+                for site in norm["sites"])
+    )
+
+    classify_fn = None
+    if needs_routing:
+        from tryaii.config import TryaiiDreConfig
+
+        config = TryaiiDreConfig()
+        if not (Path(config.data_dir) / "setup.json").is_file():
+            print("error: diagnose requires setup: run 'tryaii setup' first "
+                  "(downloads the embedding model and warms centroids)",
+                  file=sys.stderr)
+            sys.exit(1)
+
+        from tryaii import Priorities
+        from tryaii.classifiers.base import MAX_PROMPT_LENGTH
+
+        priorities_obj = Priorities(
+            quality=args.quality, cost=args.cost, speed=args.speed)
+        route_fn, _source = _acquire_route_fn(config, args.no_daemon)
+
+        def classify_fn(canonical):
+            result = route_fn(canonical[:MAX_PROMPT_LENGTH], priorities_obj, 1)
+            c = result.classification
+            if c is None:
+                return None
+            return {
+                "benchmark_similarities": dict(c.benchmark_scores),
+                "broad_category": c.broad_category,
+                "subcategory": c.subcategory,
+                "confidence": c.confidence,
+            }
+
+    run_id = args.run_id or time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    now = args.now or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+    findings = analyze_inventory(
+        data,
+        {
+            "run_id": run_id,
+            "now": now,
+            "version": __version__,
+            "priorities": {"quality": args.quality, "cost": args.cost,
+                           "speed": args.speed},
+            "goal": args.goal,
+            "checks": checks,
+            "calls_per_day": args.calls_per_day,
+            "output_tokens": args.output_tokens,
+        },
+        classify_fn=classify_fn,
+    )
+
+    write_run(Path(args.out_dir), data, findings)
+
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001 -- best effort; never break output
+        pass
+    if args.json:
+        print(json.dumps(findings, indent=2, ensure_ascii=False))
+    else:
+        out_dir_display = args.out_dir.replace("\\", "/")
+        _write_paced(_diagnose_summary_text(findings, out_dir_display))
+
+
+_AGENTS_BEGIN = "<!-- tryaii-diagnose:begin -->"
+_AGENTS_END = "<!-- tryaii-diagnose:end -->"
+_GITIGNORE_LINE = "/.tryaii/"
+
+
+def _write_if_changed(path: Path, content: str) -> str:
+    """Write `content` if the file differs; returns 'written' or
+    'up_to_date'. All init writes are LF-normalized (both CLIs read+write
+    LF for parity)."""
+    if path.is_file() and path.read_text(encoding="utf-8") == content:
+        return "up_to_date"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(content)
+    return "written"
+
+
+def _install_skill_files(base: Path, base_display: str, skill_data: dict,
+                         skill_subdir: str, agents_begin: str, agents_end: str,
+                         gitignore_comment: str, no_gitignore: bool) -> list:
+    """Install a skill + AGENTS.md marker block + anchored gitignore entry.
+
+    Shared by `diagnose init` and the designpartner first run (each with
+    its own markers; both blocks coexist in AGENTS.md). Returns
+    [{"path": display, "action": "written"|"up_to_date"}] in write order.
+    """
+    def display(rel: str) -> str:
+        return rel if base_display == "." else f"{base_display}/{rel}"
+
+    results = []
+
+    # 1. The skill (a tryaii-owned file: always safe to overwrite).
+    skill_rel = f".claude/skills/{skill_subdir}/SKILL.md"
+    action = _write_if_changed(
+        base / ".claude" / "skills" / skill_subdir / "SKILL.md",
+        skill_data["skill_md"])
+    results.append({"path": display(skill_rel), "action": action})
+
+    # 2. AGENTS.md pointer block (replace between markers / append / create;
+    #    everything outside the markers is never touched).
+    block = skill_data["agents_pointer_md"].strip()
+    agents_path = base / "AGENTS.md"
+    if agents_path.is_file():
+        text = agents_path.read_text(encoding="utf-8")
+        if agents_begin in text and agents_end in text:
+            start = text.index(agents_begin)
+            end = text.index(agents_end) + len(agents_end)
+            content = text[:start] + block + text[end:]
+        else:
+            content = text.rstrip("\n") + "\n\n" + block + "\n"
+    else:
+        content = block + "\n"
+    action = _write_if_changed(agents_path, content)
+    results.append({"path": display("AGENTS.md"), "action": action})
+
+    # 3. Anchored gitignore entry (the 0.2.0 wheel incident is why this is
+    #    anchored: an unanchored pattern can eat package directories).
+    if not no_gitignore:
+        gi_path = base / ".gitignore"
+        if gi_path.is_file():
+            text = gi_path.read_text(encoding="utf-8")
+            if _GITIGNORE_LINE in text.splitlines():
+                content = text
+            else:
+                content = (text.rstrip("\n") + "\n\n" + gitignore_comment + "\n"
+                           + _GITIGNORE_LINE + "\n")
+        else:
+            content = gitignore_comment + "\n" + _GITIGNORE_LINE + "\n"
+        action = _write_if_changed(gi_path, content)
+        results.append({"path": display(".gitignore"), "action": action})
+
+    return results
+
+
+def _print_install_results(results: list) -> None:
+    for entry in results:
+        if entry["action"] == "written":
+            print(f"-> {entry['path']}")
+        else:
+            print(f"ok {entry['path']} (up to date)")
+
+
+def _diagnose_init(argv):
+    parser = argparse.ArgumentParser(prog="tryaii diagnose init", add_help=False)
+    parser.add_argument("--dir", default=".", dest="dir")
+    parser.add_argument("--no-gitignore", action="store_true", dest="no_gitignore")
+    args = parser.parse_args(argv)
+
+    data = json.loads(_diagnose_data_path("skill.json").read_text(encoding="utf-8"))
+    _print_install_results(_install_skill_files(
+        Path(args.dir), args.dir.replace("\\", "/"), data, "tryaii-diagnose",
+        _AGENTS_BEGIN, _AGENTS_END, "# tryaii diagnose runs (local)",
+        args.no_gitignore))
+
+
+def _diagnose_report(argv):
+    parser = argparse.ArgumentParser(prog="tryaii diagnose report", add_help=False)
+    parser.add_argument("--run")
+    parser.add_argument("--out-dir", default=".tryaii/diagnose", dest="out_dir")
+    parser.add_argument("--out")
+    args = parser.parse_args(argv)
+
+    from tryaii.diagnose import (
+        latest_run_id,
+        load_run_findings,
+        previous_run_id,
+        render_report_html,
+    )
+
+    out_dir = Path(args.out_dir)
+    run_id = args.run or latest_run_id(out_dir)
+    if run_id is None:
+        print(f"error: no diagnose runs found in '{args.out_dir}' "
+              "(run 'tryaii diagnose check' first)", file=sys.stderr)
+        sys.exit(1)
+    try:
+        findings = load_run_findings(out_dir, run_id)
+    except FileNotFoundError:
+        print(f"error: run '{run_id}' not found in '{args.out_dir}'",
+              file=sys.stderr)
+        sys.exit(1)
+    prev_id = previous_run_id(out_dir, run_id)
+    previous = load_run_findings(out_dir, prev_id) if prev_id is not None else None
+
+    html = render_report_html(findings, previous)
+    out_dir_display = args.out_dir.replace("\\", "/")
+    if args.out:
+        out_path = Path(args.out)
+        display = args.out.replace("\\", "/")
+    else:
+        out_path = out_dir / run_id / "index.html"
+        display = f"{out_dir_display}/{run_id}/index.html"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(html)
+    print(f"-> {display}")
+
+
+# ---------------------------------------------------------------------------
+# designpartner (see shared/designpartner/SPEC.md)
+# ---------------------------------------------------------------------------
+
+_DP_AGENTS_BEGIN = "<!-- tryaii-designpartner:begin -->"
+_DP_AGENTS_END = "<!-- tryaii-designpartner:end -->"
+
+
+def _designpartner_render(report: dict) -> str:
+    """Human rendering of the status report -- byte-identical across CLIs."""
+    stage = report["stage"]
+    action = report["action"]
+    buf = f"tryaii designpartner -- stage: {stage}\n\n"
+
+    atype = action["type"]
+    if atype == "enrolled":
+        for entry in action.get("installed", []):
+            if entry["action"] == "written":
+                buf += f"-> {entry['path']}\n"
+            else:
+                buf += f"ok {entry['path']} (up to date)\n"
+        buf += "\n"
+    elif atype == "answers_saved":
+        buf += f"answers saved ({action['count']})\n"
+        for warning in action["warnings"]:
+            buf += f"  dropped: {warning['question']} (not applicable)\n"
+        buf += "\n"
+    elif atype == "answers_rejected":
+        buf += f"answers rejected: {len(action['problems'])} problem(s)\n"
+        for problem in action["problems"]:
+            buf += f"  - {problem['question']}: {problem['message']}\n"
+        buf += "\n"
+    elif atype == "consent_chosen":
+        buf += f"consent recorded: {action['tier']}\n\n"
+    elif atype == "submitted":
+        submission = report["submission"]
+        if submission["delivered"]:
+            buf += f"delivered to {submission['url']}\n\n"
+        else:
+            buf += (f"could not reach {submission['url']} — submission saved "
+                    f"locally at {submission['path']}\n\n")
+    elif atype == "reset":
+        buf += "enrollment state cleared\n"
+        for removed in action["removed"]:
+            buf += f"  removed {removed}\n"
+        buf += "\n"
+
+    if stage == "questionnaire" and "questionnaire" in report:
+        questionnaire = report["questionnaire"]
+        applicable = set(questionnaire["applicable"])
+        answers = questionnaire["answers"]
+        for section in questionnaire["sections"]:
+            ids = [q["id"] for q in section["questions"] if q["id"] in applicable]
+            answered = sum(1 for qid in ids if qid in answers)
+            buf += f"  {section['title']}: {answered}/{len(ids)} answered\n"
+        buf += "machine-readable catalog: tryaii designpartner --json\n"
+    elif stage in ("consent", "diagnose"):
+        consent = report["consent"]
+        if stage == "diagnose":
+            buf += (f"a diagnose run is required for tier '{consent['chosen']}' "
+                    "— run the tryaii-diagnose skill or 'tryaii diagnose "
+                    "check', then re-run designpartner\n")
+        else:
+            for tier in consent["tiers"]:
+                buf += f"  {tier['id']} — {tier['title']}\n"
+                buf += f"    {tier['copy']}\n"
+    elif stage == "confirm":
+        preview = report["preview"]
+        buf += f"tier: {preview['tier']}\n"
+        buf += "will send:\n"
+        for item in preview["includes"]:
+            buf += f"  - {item}\n"
+        buf += f"-> {preview['path']}\n"
+    elif stage == "submitted" and atype == "status":
+        submission = report["submission"]
+        if submission["delivered"]:
+            buf += f"delivered to {submission['url']} at {submission['submitted_at']}\n"
+        else:
+            buf += f"saved locally at {submission['path']} (not delivered)\n"
+
+    buf += f"\nnext: {report['next']['description']}\n"
+    if report["next"]["command"] is not None:
+        buf += f"  {report['next']['command']}\n"
+    return buf
+
+
+def cmd_designpartner(args):
+    """The resumable design-partner command (shared/designpartner/SPEC.md)."""
+    from tryaii import __version__
+    from tryaii.designpartner import advance
+    from tryaii.designpartner.state import STATE_FILE
+
+    action_flags = [args.answers is not None, args.consent is not None,
+                    args.confirm, args.reset]
+    if sum(action_flags) > 1:
+        print("error: pass at most one of --answers, --consent, --confirm, "
+              "--reset", file=sys.stderr)
+        sys.exit(2)
+
+    answers = None
+    if args.answers is not None:
+        if args.answers == "-":
+            raw = sys.stdin.read()
+        else:
+            path = Path(args.answers)
+            if not path.is_file():
+                raise FileNotFoundError(f"file not found: {args.answers}")
+            raw = path.read_text(encoding="utf-8-sig")
+        try:
+            answers = json.loads(raw)
+        except json.JSONDecodeError:
+            where = "on stdin" if args.answers == "-" else f"in '{args.answers}'"
+            print(f"error: invalid JSON {where}", file=sys.stderr)
+            sys.exit(2)
+        if not isinstance(answers, dict):
+            print("error: answers must be a JSON object of "
+                  '{"question_id": answer}', file=sys.stderr)
+            sys.exit(2)
+
+    # First run installs the agent playbook (skill + AGENTS.md block +
+    # gitignore) before the engine ever runs.
+    installed = None
+    if not (Path(args.out_dir) / STATE_FILE).is_file() and not args.reset:
+        data = json.loads(
+            (Path(_designpartner_data_path("skill.json"))).read_text(encoding="utf-8"))
+        installed = _install_skill_files(
+            Path("."), ".", data, "tryaii-designpartner",
+            _DP_AGENTS_BEGIN, _DP_AGENTS_END,
+            "# tryaii designpartner state (local)", args.no_gitignore)
+
+    now = args.now or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    stamp = args.stamp or time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+
+    try:
+        report = advance(
+            args.out_dir,
+            {"answers": answers, "consent": args.consent,
+             "confirm": args.confirm, "reset": args.reset},
+            {"now": now, "stamp": stamp, "version": __version__, "url": None},
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(2)
+
+    if installed is not None:
+        report["action"]["installed"] = installed
+
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001 -- best effort; never break output
+        pass
+    if args.json:
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+    else:
+        _write_paced(_designpartner_render(report))
+
+
+def _designpartner_data_path(name: str) -> Path:
+    from tryaii import designpartner as dp_pkg
+
+    return Path(dp_pkg.__file__).parent / "data" / name
+
+
+def cmd_diagnose(argv):
+    """Verb dispatcher for `tryaii diagnose` (verb-peeling; no argparse
+    sub-subparsers exist in this CLI -- mirrors cmdDiagnose in cli.ts)."""
+    verbs = {"init": _diagnose_init, "plan": _diagnose_plan,
+             "check": _diagnose_check, "report": _diagnose_report}
+    verb = argv[0] if argv else None
+    if verb is None:
+        print('error: missing diagnose verb. Run "tryaii help diagnose".',
+              file=sys.stderr)
+        sys.exit(2)
+    handler = verbs.get(verb)
+    if handler is None:
+        print(f'error: unknown diagnose verb: {verb}. Run "tryaii help diagnose".',
+              file=sys.stderr)
+        sys.exit(2)
+    try:
+        handler(argv[1:])
+    except SystemExit:
+        raise
+    except Exception as exc:
+        # Same clean one-line contract as the handlers dispatch below.
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
 def cli():
     """Main CLI entry point."""
     # -v/--verbose, --no-banner, -V/--version and -h/--help are handled before
@@ -1065,6 +1932,32 @@ def cli():
     eval_parser.add_argument(
         "--no-daemon", action="store_true", help="Route in-process; do not use or start a daemon"
     )
+
+    # cachelint
+    cachelint_parser = subparsers.add_parser(
+        "cachelint", help="Pre-flight prompt-cache analysis")
+    cachelint_parser.add_argument("input", help="Request JSON file, or '-' for stdin")
+    cachelint_parser.add_argument(
+        "--provider", help="Raw-text mode: provider for the raw prompt input")
+    cachelint_parser.add_argument(
+        "--model", help="Raw-text mode: model name (requires --provider)")
+    cachelint_parser.add_argument(
+        "--json", action="store_true", help="Emit the machine-readable result")
+
+    # designpartner (single resumable command; no verbs)
+    dp_parser = subparsers.add_parser(
+        "designpartner", help="Enroll as a tryaii design partner")
+    dp_parser.add_argument("--answers", help="Answers JSON file, or '-' for stdin")
+    dp_parser.add_argument("--consent", help="Consent tier id")
+    dp_parser.add_argument("--confirm", action="store_true")
+    dp_parser.add_argument("--reset", action="store_true")
+    dp_parser.add_argument("--json", action="store_true")
+    dp_parser.add_argument("--out-dir", default=".tryaii/designpartner",
+                           dest="out_dir")
+    dp_parser.add_argument("--no-gitignore", action="store_true",
+                           dest="no_gitignore")
+    dp_parser.add_argument("--now")
+    dp_parser.add_argument("--stamp")
 
     # setup
     setup_parser = subparsers.add_parser("setup", help="Initialize centroids")
@@ -1150,8 +2043,20 @@ def cli():
         return
 
     if wants_help:
+        if command == "diagnose":
+            # `tryaii diagnose <verb> --help` gets the verb page.
+            verbs = [a for a in filtered[1:] if not a.startswith("-")]
+            verb_help = DIAGNOSE_VERB_HELP.get(verbs[0]) if verbs else None
+            _write_paced(verb_help or COMMAND_HELP["diagnose"])
+            return
         # Unknown command + --help still gets the global overview.
         _write_paced(COMMAND_HELP.get(command, HELP))
+        return
+
+    if command == "diagnose":
+        # Verb-peeling dispatch (like the `help <topic>` handling above);
+        # diagnose is not registered with argparse at all.
+        cmd_diagnose(filtered[1:])
         return
 
     args = parser.parse_args(filtered)
@@ -1159,6 +2064,8 @@ def cli():
     handlers = {
         "route": cmd_route,
         "eval": cmd_eval,
+        "cachelint": cmd_cachelint,
+        "designpartner": cmd_designpartner,
         "setup": cmd_setup,
         "models": cmd_models,
         "benchmarks": cmd_benchmarks,

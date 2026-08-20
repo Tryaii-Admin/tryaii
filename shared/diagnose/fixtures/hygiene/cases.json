@@ -1,0 +1,173 @@
+{
+  "suite": "hygiene",
+  "target": "tryaii.diagnose.hygiene.run_hygiene",
+  "cases": [
+    {
+      "name": "clean-structured",
+      "description": "SPEC §2.5: static system + messages, no detector hits -> ok, no advisories.",
+      "input": {
+        "prompt": {
+          "system": "You are a concise assistant for the ACME internal wiki. Answer from the provided context only.",
+          "messages": [
+            {
+              "role": "user",
+              "content": "What is our vacation policy?"
+            },
+            {
+              "role": "user",
+              "content": "And how do I request one?"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "status": "ok",
+        "reason": null,
+        "findings_count": 0,
+        "blocking_count": 0,
+        "findings_in_system": 0,
+        "findings": [],
+        "advisories": []
+      }
+    },
+    {
+      "name": "no-system-advisory",
+      "description": "SPEC §2.5: structured prompt with 2+ messages and no system/tools block -> the no-system advisory.",
+      "input": {
+        "prompt": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "You are a translator. Translate to French."
+            },
+            {
+              "role": "user",
+              "content": "Good morning, friends."
+            }
+          ]
+        }
+      },
+      "expected": {
+        "status": "ok",
+        "reason": null,
+        "findings_count": 0,
+        "blocking_count": 0,
+        "findings_in_system": 0,
+        "findings": [],
+        "advisories": [
+          "No system block: shared static instructions in a system block form the classic cacheable unit."
+        ]
+      }
+    },
+    {
+      "name": "dynamic-in-system",
+      "description": "SPEC §2.5: a timestamp inside the system block -> finding + the findings_in_system advisory.",
+      "input": {
+        "prompt": {
+          "system": "You are a scheduling assistant. The current time is 2026-08-14T10:22:33Z. Be brief.",
+          "messages": [
+            {
+              "role": "user",
+              "content": "When is my next meeting?"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "status": "finding",
+        "reason": null,
+        "findings_count": 2,
+        "blocking_count": 2,
+        "findings_in_system": 2,
+        "findings": [
+          {
+            "kind": "date-phrase",
+            "severity": "medium",
+            "section": "system",
+            "section_offset": 32,
+            "pct_into_prompt": 27.8,
+            "excerpt": "...are a scheduling assistant. The current time is 2026-08-14T10:22:33Z. Be...",
+            "why": "Phrase signaling an injected 'current date/time' — the value next to it changes every day or every call.",
+            "hint": "Inject 'today' only in the final user message, or round to the day and accept a daily cold write."
+          },
+          {
+            "kind": "timestamp-datetime",
+            "severity": "high",
+            "section": "system",
+            "section_offset": 52,
+            "pct_into_prompt": 45.2,
+            "excerpt": "...istant. The current time is 2026-08-14T10:22:33Z. Be brief.\\n\\nuser: When is m...",
+            "why": "A full datetime changes every call — everything after it can never match byte-for-byte.",
+            "hint": "Remove it, round it to a coarse bucket (day/hour), or move it into the final user message (after the cached prefix)."
+          }
+        ],
+        "advisories": [
+          "2 dynamic value(s) inside the system block — the system block should be fully static."
+        ]
+      }
+    },
+    {
+      "name": "template-slots-string",
+      "description": "SPEC §2.5: template slots and an injected date in a string prompt -> blocking findings with per-kind hints.",
+      "input": {
+        "prompt": "Summarize ticket {ticket_id} for user {user_name}. Today is 2026-01-02."
+      },
+      "expected": {
+        "status": "finding",
+        "reason": null,
+        "findings_count": 3,
+        "blocking_count": 3,
+        "findings_in_system": 0,
+        "findings": [
+          {
+            "kind": "template-braces",
+            "severity": "medium",
+            "section": "messages[0]:user",
+            "section_offset": 23,
+            "pct_into_prompt": 29.9,
+            "excerpt": "user: Summarize ticket {ticket_id} for user {user_name}. Today...",
+            "why": "Python .format()/f-string style placeholder — a per-call value will land here. (If this is literal JSON/code content, ignore.)",
+            "hint": "Template slot: keep per-call slots at the tail; slots filled with the SAME value every call are harmless."
+          },
+          {
+            "kind": "template-braces",
+            "severity": "medium",
+            "section": "messages[0]:user",
+            "section_offset": 44,
+            "pct_into_prompt": 57.1,
+            "excerpt": "...ticket {ticket_id} for user {user_name}. Today is 2026-01-02.",
+            "why": "Python .format()/f-string style placeholder — a per-call value will land here. (If this is literal JSON/code content, ignore.)",
+            "hint": "Template slot: keep per-call slots at the tail; slots filled with the SAME value every call are harmless."
+          },
+          {
+            "kind": "date-iso",
+            "severity": "medium",
+            "section": "messages[0]:user",
+            "section_offset": 66,
+            "pct_into_prompt": 85.7,
+            "excerpt": "... user {user_name}. Today is 2026-01-02.",
+            "why": "ISO date — if injected as 'today', it breaks the cache at every day boundary. (A static historical date is fine — ignore if so.)",
+            "hint": "If this is an injected 'today', move it to the tail; if it's static content, ignore this finding."
+          }
+        ],
+        "advisories": []
+      }
+    },
+    {
+      "name": "clean-string",
+      "description": "SPEC §2.5: a plain static string -> ok; string prompts never get the no-system advisory.",
+      "input": {
+        "prompt": "Explain how tides work."
+      },
+      "expected": {
+        "status": "ok",
+        "reason": null,
+        "findings_count": 0,
+        "blocking_count": 0,
+        "findings_in_system": 0,
+        "findings": [],
+        "advisories": []
+      }
+    }
+  ]
+}

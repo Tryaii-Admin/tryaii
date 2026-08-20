@@ -1,0 +1,8 @@
+tryaii designpartner -- stage: diagnose
+
+consent recorded: full_partnership
+
+a diagnose run is required for tier 'full_partnership' — run the tryaii-diagnose skill or 'tryaii diagnose check', then re-run designpartner
+
+next: The chosen tier requires a diagnose run. Follow the tryaii-diagnose skill (or run 'tryaii diagnose check'), then re-run designpartner.
+  tryaii designpartner

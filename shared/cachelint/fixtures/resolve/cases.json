@@ -1,0 +1,631 @@
+{
+  "suite": "resolve",
+  "target": "providers.resolve",
+  "cases": [
+    {
+      "name": "res-anthropic-opus-4-8",
+      "description": "Opus 4.8 tier -> 1024",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-opus-4-8"
+      },
+      "expected": {
+        "provider_key": "anthropic",
+        "min_tokens": 1024,
+        "tier_note": "Opus 4.8 tier",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-anthropic-opus-4-7",
+      "description": "Opus 4.7 tier -> 2048",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-opus-4-7"
+      },
+      "expected": {
+        "provider_key": "anthropic",
+        "min_tokens": 2048,
+        "tier_note": "Opus 4.7 tier",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-anthropic-opus-4-5-dot",
+      "description": "dot normalization -> Opus 4.5/4.6 tier 4096",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-opus-4.5"
+      },
+      "expected": {
+        "provider_key": "anthropic",
+        "min_tokens": 4096,
+        "tier_note": "Opus 4.5/4.6 tier",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-anthropic-opus-4-1",
+      "description": "Opus 4.1 tier -> 1024",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-opus-4-1"
+      },
+      "expected": {
+        "provider_key": "anthropic",
+        "min_tokens": 1024,
+        "tier_note": "Opus 4.1 tier",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-anthropic-opus-5",
+      "description": "Opus 5 tier -> 512 (halved)",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-opus-5"
+      },
+      "expected": {
+        "provider_key": "anthropic",
+        "min_tokens": 512,
+        "tier_note": "Opus 5 tier (halved from Opus 4.8)",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-anthropic-haiku-4-5",
+      "description": "Haiku 4.5 tier -> 4096",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5"
+      },
+      "expected": {
+        "provider_key": "anthropic",
+        "min_tokens": 4096,
+        "tier_note": "Haiku 4.5 tier",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-anthropic-haiku-3-5",
+      "description": "Haiku 3.5 tier -> 2048",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-haiku-3-5"
+      },
+      "expected": {
+        "provider_key": "anthropic",
+        "min_tokens": 2048,
+        "tier_note": "Haiku 3.5 tier",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-anthropic-mythos-preview",
+      "description": "Mythos Preview tier -> 2048 (ordered before fable|mythos)",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-mythos-preview"
+      },
+      "expected": {
+        "provider_key": "anthropic",
+        "min_tokens": 2048,
+        "tier_note": "Mythos Preview tier",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-anthropic-fable-5",
+      "description": "Fable 5 / Mythos 5 tier -> 512",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-fable-5"
+      },
+      "expected": {
+        "provider_key": "anthropic",
+        "min_tokens": 512,
+        "tier_note": "Fable 5 / Mythos 5 tier (lowest floor)",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-anthropic-sonnet",
+      "description": "Sonnet tier (all versions) -> 1024",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-6"
+      },
+      "expected": {
+        "provider_key": "anthropic",
+        "min_tokens": 1024,
+        "tier_note": "Sonnet tier (all versions)",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-anthropic-unknown",
+      "description": "unknown Claude model -> conservative 4096 + fix-n warning",
+      "input": {
+        "provider": "anthropic",
+        "model": "claude-future-9"
+      },
+      "expected": {
+        "provider_key": "anthropic",
+        "min_tokens": 4096,
+        "tier_note": "unknown Claude model — assuming the most conservative tier (4,096)",
+        "warnings": [
+          "Model 'claude-future-9' not recognized for Anthropic (Claude) — using the fallback threshold (4096)."
+        ],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-openai-any",
+      "description": "uniform 1024, increment 128",
+      "input": {
+        "provider": "openai",
+        "model": "gpt-5.2"
+      },
+      "expected": {
+        "provider_key": "openai",
+        "min_tokens": 1024,
+        "tier_note": "uniform for all OpenAI models (+128-token steps)",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-openai-empty-model",
+      "description": "empty model: rule regex fails on empty string -> default 1024 + warning (frozen prototype edge)",
+      "input": {
+        "provider": "openai",
+        "model": ""
+      },
+      "expected": {
+        "provider_key": "openai",
+        "min_tokens": 1024,
+        "tier_note": "uniform 1,024 minimum",
+        "warnings": [
+          "Model '' not recognized for OpenAI — using the fallback threshold (1024)."
+        ],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-bedrock-fable-drift",
+      "description": "Fable on Bedrock -> 1024 (cross-platform drift vs 512 direct)",
+      "input": {
+        "provider": "bedrock",
+        "model": "anthropic.claude-fable-5"
+      },
+      "expected": {
+        "provider_key": "bedrock",
+        "min_tokens": 1024,
+        "tier_note": "Fable/Mythos on Bedrock: assuming 1,024 conservatively (512 direct — Anthropic docs dropped the explicit Bedrock override as of 2026-08 and defer to AWS's Bedrock docs; AWS side unverified)",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-bedrock-claude-4-5",
+      "description": "Claude 4.5/4.6-era tier on Bedrock -> 4096",
+      "input": {
+        "provider": "bedrock",
+        "model": "anthropic.claude-opus-4-5"
+      },
+      "expected": {
+        "provider_key": "bedrock",
+        "min_tokens": 4096,
+        "tier_note": "Claude 4.5/4.6-era tier on Bedrock",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-bedrock-claude-generic",
+      "description": "Claude on Bedrock general tier -> 1024",
+      "input": {
+        "provider": "bedrock",
+        "model": "anthropic.claude-3-5-sonnet"
+      },
+      "expected": {
+        "provider_key": "bedrock",
+        "min_tokens": 1024,
+        "tier_note": "Claude on Bedrock (general tier)",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-bedrock-gpt-5-6",
+      "description": "GPT-5.6 on Bedrock -> 1024",
+      "input": {
+        "provider": "bedrock",
+        "model": "openai.gpt-5.6"
+      },
+      "expected": {
+        "provider_key": "bedrock",
+        "min_tokens": 1024,
+        "tier_note": "GPT-5.6 on Bedrock",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-bedrock-nova",
+      "description": "Amazon Nova: automatic, threshold unpublished -> null",
+      "input": {
+        "provider": "bedrock",
+        "model": "amazon.nova-pro"
+      },
+      "expected": {
+        "provider_key": "bedrock",
+        "min_tokens": null,
+        "tier_note": "Amazon Nova: automatic caching, threshold unpublished",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-bedrock-unknown",
+      "description": "unknown Bedrock model -> 4096 + warning",
+      "input": {
+        "provider": "bedrock",
+        "model": "mistral.mistral-large"
+      },
+      "expected": {
+        "provider_key": "bedrock",
+        "min_tokens": 4096,
+        "tier_note": "unknown Bedrock model — assuming the conservative 4,096",
+        "warnings": [
+          "Model 'mistral.mistral-large' not recognized for AWS Bedrock — using the fallback threshold (4096)."
+        ],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-gemini-2-5",
+      "description": "Gemini 2.5 family -> 2048",
+      "input": {
+        "provider": "gemini",
+        "model": "gemini-2.5-flash"
+      },
+      "expected": {
+        "provider_key": "gemini",
+        "min_tokens": 2048,
+        "tier_note": "Gemini 2.5 family (implicit caching)",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-gemini-3",
+      "description": "Gemini 3.x family -> 4096",
+      "input": {
+        "provider": "gemini",
+        "model": "gemini-3-pro"
+      },
+      "expected": {
+        "provider_key": "gemini",
+        "min_tokens": 4096,
+        "tier_note": "Gemini 3.x family (implicit caching)",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-gemini-2-0",
+      "description": "Gemini 2.0: discount tier, implicit threshold unpublished -> null",
+      "input": {
+        "provider": "gemini",
+        "model": "gemini-2.0-flash"
+      },
+      "expected": {
+        "provider_key": "gemini",
+        "min_tokens": null,
+        "tier_note": "Gemini 2.0: 75% discount tier; implicit threshold unpublished",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-gemini-unknown",
+      "description": "unknown Gemini model -> 4096 + warning",
+      "input": {
+        "provider": "gemini",
+        "model": "gemini-1.5-pro"
+      },
+      "expected": {
+        "provider_key": "gemini",
+        "min_tokens": 4096,
+        "tier_note": "unknown Gemini model — assuming the conservative 4,096 (3.x tier)",
+        "warnings": [
+          "Model 'gemini-1.5-pro' not recognized for Google Gemini (Developer API) — using the fallback threshold (4096)."
+        ],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-vertex-claude-fable",
+      "description": "Claude-on-Vertex uses Anthropic tiers -> 512, upstream anthropic",
+      "input": {
+        "provider": "vertex",
+        "model": "claude-fable-5"
+      },
+      "expected": {
+        "provider_key": "vertex",
+        "min_tokens": 512,
+        "tier_note": "Claude-on-Vertex (Anthropic tiers): Fable 5 / Mythos 5 tier (lowest floor)",
+        "warnings": [],
+        "upstream": "anthropic"
+      }
+    },
+    {
+      "name": "res-vertex-claude-unknown",
+      "description": "unknown Claude-on-Vertex -> conservative 4096, upstream anthropic",
+      "input": {
+        "provider": "vertex",
+        "model": "claude-nextgen"
+      },
+      "expected": {
+        "provider_key": "vertex",
+        "min_tokens": 4096,
+        "tier_note": "Claude-on-Vertex, unknown model — conservative 4,096",
+        "warnings": [],
+        "upstream": "anthropic"
+      }
+    },
+    {
+      "name": "res-vertex-gemini-2-5",
+      "description": "fix h: gemini-2.5 gets its own Vertex 2.5 tier note -> 2048",
+      "input": {
+        "provider": "vertex",
+        "model": "gemini-2.5-pro"
+      },
+      "expected": {
+        "provider_key": "vertex",
+        "min_tokens": 2048,
+        "tier_note": "Vertex Gemini 2.5 family",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-vertex-gemini-2-0",
+      "description": "Vertex Gemini 2.x family -> 2048",
+      "input": {
+        "provider": "vertex",
+        "model": "gemini-2.0-flash"
+      },
+      "expected": {
+        "provider_key": "vertex",
+        "min_tokens": 2048,
+        "tier_note": "Vertex Gemini 2.x family",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-vertex-gemini-3",
+      "description": "Vertex Gemini 3.x family -> 4096",
+      "input": {
+        "provider": "vertex",
+        "model": "gemini-3-pro"
+      },
+      "expected": {
+        "provider_key": "vertex",
+        "min_tokens": 4096,
+        "tier_note": "Vertex Gemini 3.x family",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-vertex-preview",
+      "description": "Vertex preview models -> 6144",
+      "input": {
+        "provider": "vertex",
+        "model": "some-preview-model"
+      },
+      "expected": {
+        "provider_key": "vertex",
+        "min_tokens": 6144,
+        "tier_note": "Vertex Gemini preview (implicit)",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-xai-grok-4",
+      "description": "xAI publishes no threshold -> null, NO warning (empty rule set)",
+      "input": {
+        "provider": "xai",
+        "model": "grok-4"
+      },
+      "expected": {
+        "provider_key": "xai",
+        "min_tokens": null,
+        "tier_note": "NO published activation threshold (least-documented big provider)",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-or-claude",
+      "description": "OpenRouter -> anthropic upstream, Fable tier 512 + pin-provider warning",
+      "input": {
+        "provider": "openrouter",
+        "model": "anthropic/claude-fable-5"
+      },
+      "expected": {
+        "provider_key": "openrouter",
+        "min_tokens": 512,
+        "tier_note": "inherited from Anthropic upstream: Fable 5 / Mythos 5 tier (lowest floor)",
+        "warnings": [
+          "Threshold assumes routing to the DIRECT Anthropic API; if OpenRouter routes to a Bedrock host the floor may differ. Pin the provider."
+        ],
+        "upstream": "anthropic"
+      }
+    },
+    {
+      "name": "res-or-claude-unknown",
+      "description": "OpenRouter anthropic upstream, unknown model -> conservative 4096",
+      "input": {
+        "provider": "openrouter",
+        "model": "anthropic/claude-nova-x"
+      },
+      "expected": {
+        "provider_key": "openrouter",
+        "min_tokens": 4096,
+        "tier_note": "inherited from Anthropic upstream (unknown model — conservative 4,096)",
+        "warnings": [
+          "Threshold assumes routing to the DIRECT Anthropic API; if OpenRouter routes to a Bedrock host the floor may differ. Pin the provider."
+        ],
+        "upstream": "anthropic"
+      }
+    },
+    {
+      "name": "res-or-gpt",
+      "description": "OpenRouter -> openai upstream, uniform 1024",
+      "input": {
+        "provider": "openrouter",
+        "model": "openai/gpt-5.2"
+      },
+      "expected": {
+        "provider_key": "openrouter",
+        "min_tokens": 1024,
+        "tier_note": "inherited from OpenAI upstream (uniform 1,024)",
+        "warnings": [],
+        "upstream": "openai"
+      }
+    },
+    {
+      "name": "res-or-o3",
+      "description": "bare o3 matches the o[134] upstream rule -> openai 1024",
+      "input": {
+        "provider": "openrouter",
+        "model": "o3"
+      },
+      "expected": {
+        "provider_key": "openrouter",
+        "min_tokens": 1024,
+        "tier_note": "inherited from OpenAI upstream (uniform 1,024)",
+        "warnings": [],
+        "upstream": "openai"
+      }
+    },
+    {
+      "name": "res-or-gemini-2-5",
+      "description": "OpenRouter -> gemini upstream 2048",
+      "input": {
+        "provider": "openrouter",
+        "model": "google/gemini-2.5-pro"
+      },
+      "expected": {
+        "provider_key": "openrouter",
+        "min_tokens": 2048,
+        "tier_note": "inherited from Gemini upstream: Gemini 2.5 family (implicit caching)",
+        "warnings": [],
+        "upstream": "gemini"
+      }
+    },
+    {
+      "name": "res-or-grok",
+      "description": "OpenRouter -> xai upstream, null threshold",
+      "input": {
+        "provider": "openrouter",
+        "model": "x-ai/grok-4"
+      },
+      "expected": {
+        "provider_key": "openrouter",
+        "min_tokens": null,
+        "tier_note": "inherited from xAI upstream (no published threshold)",
+        "warnings": [],
+        "upstream": "xai"
+      }
+    },
+    {
+      "name": "res-or-unknown-upstream",
+      "description": "undetectable upstream -> null + warning",
+      "input": {
+        "provider": "openrouter",
+        "model": "deepseek/deepseek-v3"
+      },
+      "expected": {
+        "provider_key": "openrouter",
+        "min_tokens": null,
+        "tier_note": "could not detect upstream provider from model name",
+        "warnings": [
+          "Unknown upstream — threshold/enablement rules could not be inherited."
+        ],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-alias-claude",
+      "description": "provider alias Claude -> anthropic key",
+      "input": {
+        "provider": "Claude",
+        "model": "claude-sonnet-4-6"
+      },
+      "expected": {
+        "provider_key": "anthropic",
+        "min_tokens": 1024,
+        "tier_note": "Sonnet tier (all versions)",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-alias-aws",
+      "description": "provider alias aws -> bedrock key",
+      "input": {
+        "provider": "aws",
+        "model": "anthropic.claude-fable-5"
+      },
+      "expected": {
+        "provider_key": "bedrock",
+        "min_tokens": 1024,
+        "tier_note": "Fable/Mythos on Bedrock: assuming 1,024 conservatively (512 direct — Anthropic docs dropped the explicit Bedrock override as of 2026-08 and defer to AWS's Bedrock docs; AWS side unverified)",
+        "warnings": [],
+        "upstream": null
+      }
+    },
+    {
+      "name": "res-norm-spaces-dots",
+      "description": "provider+model normalization: spaces and dots -> hyphens; vertex claude branch",
+      "input": {
+        "provider": "Google Vertex",
+        "model": "Claude Opus 4.8"
+      },
+      "expected": {
+        "provider_key": "vertex",
+        "min_tokens": 1024,
+        "tier_note": "Claude-on-Vertex (Anthropic tiers): Opus 4.8 tier",
+        "warnings": [],
+        "upstream": "anthropic"
+      }
+    },
+    {
+      "name": "res-unknown-provider",
+      "description": "unknown provider -> fix-n error message",
+      "input": {
+        "provider": "azure",
+        "model": "gpt-4"
+      },
+      "expected": {
+        "error": "Unknown provider 'azure'. Known: anthropic, bedrock, gemini, openai, openrouter, vertex, xai"
+      }
+    }
+  ]
+}

@@ -1,0 +1,218 @@
+{
+  "version": "2026-07",
+  "meta": {
+    "knowledge_base": "cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)",
+    "caveat": "Thresholds/prices are time-sensitive; verify against live provider docs."
+  },
+  "aliases": {
+    "openai": "openai", "oai": "openai", "gpt": "openai",
+    "anthropic": "anthropic", "claude": "anthropic",
+    "gemini": "gemini", "google": "gemini", "google-gemini": "gemini", "google-ai": "gemini",
+    "xai": "xai", "x-ai": "xai", "grok": "xai",
+    "openrouter": "openrouter", "open-router": "openrouter",
+    "bedrock": "bedrock", "aws": "bedrock", "aws-bedrock": "bedrock", "amazon-bedrock": "bedrock",
+    "vertex": "vertex", "vertex-ai": "vertex", "google-vertex": "vertex", "gcp-vertex": "vertex"
+  },
+  "rule_sets": {
+    "anthropic": [
+      {"pattern": "opus-4-?8", "min_tokens": 1024, "note": "Opus 4.8 tier"},
+      {"pattern": "opus-4-?7", "min_tokens": 2048, "note": "Opus 4.7 tier"},
+      {"pattern": "opus-4-?[56]", "min_tokens": 4096, "note": "Opus 4.5/4.6 tier"},
+      {"pattern": "opus-4-?1", "min_tokens": 1024, "note": "Opus 4.1 tier"},
+      {"pattern": "opus-5", "min_tokens": 512, "note": "Opus 5 tier (halved from Opus 4.8)"},
+      {"pattern": "haiku-4-?5", "min_tokens": 4096, "note": "Haiku 4.5 tier"},
+      {"pattern": "haiku-3-?5", "min_tokens": 2048, "note": "Haiku 3.5 tier"},
+      {"pattern": "mythos-preview", "min_tokens": 2048, "note": "Mythos Preview tier"},
+      {"pattern": "fable|mythos", "min_tokens": 512, "note": "Fable 5 / Mythos 5 tier (lowest floor)"},
+      {"pattern": "sonnet", "min_tokens": 1024, "note": "Sonnet tier (all versions)"},
+      {"pattern": "opus", "min_tokens": 1024, "note": "Opus 4.x generic"}
+    ],
+    "bedrock": [
+      {"pattern": "fable|mythos", "min_tokens": 1024, "note": "Fable/Mythos on Bedrock: assuming 1,024 conservatively (512 direct — Anthropic docs dropped the explicit Bedrock override as of 2026-08 and defer to AWS's Bedrock docs; AWS side unverified)"},
+      {"pattern": "opus-4-?[56]|haiku-4-?5", "min_tokens": 4096, "note": "Claude 4.5/4.6-era tier on Bedrock"},
+      {"pattern": "claude|sonnet|opus|haiku", "min_tokens": 1024, "note": "Claude on Bedrock (general tier)"},
+      {"pattern": "gpt-5-?6", "min_tokens": 1024, "note": "GPT-5.6 on Bedrock"},
+      {"pattern": "gpt", "min_tokens": 1024, "note": "OpenAI-on-Bedrock (assumed 1,024 — verify)"},
+      {"pattern": "nova", "min_tokens": null, "note": "Amazon Nova: automatic caching, threshold unpublished"}
+    ],
+    "gemini": [
+      {"pattern": "2-?5", "min_tokens": 2048, "note": "Gemini 2.5 family (implicit caching)"},
+      {"pattern": "gemini-3|(^|-)3-", "min_tokens": 4096, "note": "Gemini 3.x family (implicit caching)"},
+      {"pattern": "2-?0", "min_tokens": null, "note": "Gemini 2.0: 75% discount tier; implicit threshold unpublished"}
+    ],
+    "vertex": [
+      {"pattern": "2-?5", "min_tokens": 2048, "note": "Vertex Gemini 2.5 family"},
+      {"pattern": "2-?0|gemini-2($|-)", "min_tokens": 2048, "note": "Vertex Gemini 2.x family"},
+      {"pattern": "gemini-3|(^|-)3-", "min_tokens": 4096, "note": "Vertex Gemini 3.x family"},
+      {"pattern": "preview", "min_tokens": 6144, "note": "Vertex Gemini preview (implicit)"}
+    ],
+    "openai": [
+      {"pattern": ".", "min_tokens": 1024, "note": "uniform for all OpenAI models (+128-token steps)"}
+    ]
+  },
+  "providers": {
+    "openai": {
+      "display": "OpenAI",
+      "enablement": "automatic",
+      "enablement_detail": "Caching is on by default for prompts >= 1,024 tokens — no request changes needed. Reuse the exact prefix; cached amounts grow in 128-token steps.",
+      "action": null,
+      "rule_set": "openai",
+      "default_min_tokens": 1024,
+      "default_min_note": "uniform 1,024 minimum",
+      "increment_tokens": 128,
+      "ttl_summary": "5-10 min sliding; up to 24h extended retention (non-ZDR default since May 2026)",
+      "ttl_seconds": 300,
+      "read_discount": "per-model 50% -> 98.75% (90% on GPT-5.x) — NOT a flat 50%",
+      "write_cost": "free through GPT-5.5; ~1.25x input on GPT-5.6+ (single-use large prompts pay the premium for nothing)",
+      "verify_field": "usage.prompt_tokens_details.cached_tokens",
+      "routing": "prompt_cache_key — same string per prefix-group; keep <= ~15 RPM per key",
+      "batch_note": "batch x caching stacking is UNDOCUMENTED (open question in the research)",
+      "gotchas": [
+        "A cache entry becomes readable only after the writing request completes — N simultaneous cold requests all pay full price. Warm one, then fan out.",
+        "Discount is per-model; verify against the live pricing page before quoting numbers.",
+        "Org-level cache scope."
+      ],
+      "sources": ["providers/openai.md"]
+    },
+    "anthropic": {
+      "display": "Anthropic (Claude)",
+      "enablement": "explicit",
+      "enablement_detail": "OPT-IN: nothing caches unless you mark a breakpoint with \"cache_control\": {\"type\": \"ephemeral\"} (<= 4 breakpoints; 20-block lookback). Render order is tools -> system -> messages; a byte change invalidates everything after it.",
+      "action": "Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium).",
+      "rule_set": "anthropic",
+      "default_min_tokens": 4096,
+      "default_min_note": "unknown Claude model — assuming the most conservative tier (4,096)",
+      "increment_tokens": null,
+      "ttl_summary": "5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'",
+      "ttl_seconds": 300,
+      "read_discount": "90% (0.1x base input)",
+      "write_cost": "write premium: 1.25x (5-min TTL) / 2x (1-hour TTL); no storage fee",
+      "verify_field": "usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens)",
+      "routing": null,
+      "batch_note": "STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off",
+      "gotchas": [
+        "Below the model's minimum the marked prefix SILENTLY won't cache (cache_creation_input_tokens: 0, no error).",
+        "Model switch = cold cache (model-scoped). Toggling extended thinking invalidates system+messages (tools survive).",
+        "Serialize tool JSON deterministically (sorted keys, frozen order) — non-deterministic serialization is a classic silent invalidator.",
+        "Concurrency: entry readable only after the first response begins streaming — warm one, then fan out.",
+        "Pre-warm with a max_tokens: 0 request to skip cold-write latency on the first real request.",
+        "On Opus 5 / Opus 4.8 / Fable 5 / Mythos 5: append {\"role\": \"system\", ...} to messages for mid-conversation instructions instead of editing the top-level system prompt — preserves the cached prefix.",
+        "No prompt_cache_key equivalent — routing affinity cannot be steered; identical prefixes are the only lever."
+      ],
+      "sources": ["providers/anthropic.md", "claude-api reference (post-research updates)"]
+    },
+    "gemini": {
+      "display": "Google Gemini (Developer API)",
+      "enablement": "hybrid",
+      "enablement_detail": "Implicit caching is automatic on 2.5+ (put common content at the prompt start, send similar-prefix requests close in time). Explicit CachedContent API for guaranteed reuse (you pay storage per token-hour).",
+      "action": "Implicit: nothing required — just structure static-first. Explicit: create a CachedContent object and reference its name (only worth it with real reuse: storage $4.50/M-tok-hr Pro, $1.00 Flash).",
+      "rule_set": "gemini",
+      "default_min_tokens": 4096,
+      "default_min_note": "unknown Gemini model — assuming the conservative 4,096 (3.x tier)",
+      "increment_tokens": null,
+      "ttl_summary": "implicit: lifetime not user-set (unpublished); explicit: ttl/expireTime (default unpublished on the Developer API; 60 min on Vertex)",
+      "ttl_seconds": null,
+      "read_discount": "90% (2.5+) / 75% (2.0)",
+      "write_cost": "NO write premium. Implicit = no storage either (the only pure-upside caching in the study). Explicit adds storage per 1M-tok-hr.",
+      "verify_field": "usage.total_cached_tokens / cachedContentTokenCount",
+      "routing": null,
+      "batch_note": "50% batch discount exists; stacking with caching is UNDOCUMENTED",
+      "gotchas": [
+        "Per project / API key cache scope.",
+        "Thinking-token caching is undocumented.",
+        "Implicit cache lifetime is unpublished — don't rely on long gaps."
+      ],
+      "sources": ["providers/gemini.md"]
+    },
+    "xai": {
+      "display": "xAI (Grok)",
+      "enablement": "automatic",
+      "enablement_detail": "Automatic, but the cache is PER-SERVER — routing matters more than anything else. Set the x-grok-conv-id header (or prompt_cache_key on the Responses API) so consecutive requests land on the same server.",
+      "action": "Always set x-grok-conv-id (same value per conversation). Append-only: never edit earlier messages.",
+      "rule_set": null,
+      "default_min_tokens": null,
+      "default_min_note": "NO published activation threshold (least-documented big provider)",
+      "increment_tokens": null,
+      "ttl_summary": "NO guaranteed TTL — entries may be evicted at any time (biggest reliability caveat in the study)",
+      "ttl_seconds": null,
+      "read_discount": "~75-85% (provisional — verify against live pricing)",
+      "write_cost": "no write premium; no storage",
+      "verify_field": "cached_tokens (OpenAI-compatible usage field)",
+      "routing": "x-grok-conv-id header (per-server routing) / prompt_cache_key on Responses API",
+      "batch_note": "20% batch discount exists; stacking with caching is UNDOCUMENTED",
+      "gotchas": [
+        "Don't rely on gaps between requests — no TTL guarantee at all.",
+        "Editing an earlier message breaks the append-only prefix."
+      ],
+      "sources": ["providers/xai.md"]
+    },
+    "openrouter": {
+      "display": "OpenRouter (gateway)",
+      "enablement": "pass-through",
+      "enablement_detail": "Caching inherits from the upstream provider: automatic for OpenAI/Grok/DeepSeek/Groq/Gemini-2.5, cache_control for Anthropic/Gemini-explicit/Qwen. OpenRouter also has its own opt-in response cache (~80-300ms).",
+      "action": "Match the upstream's rule (for Claude models: forward \"cache_control\" breakpoints — OpenRouter passes them through). PIN the provider routing — switching upstream = cold cache. Use BYOK for privacy.",
+      "rule_set": null,
+      "default_min_tokens": null,
+      "default_min_note": "inherited from upstream (and from which HOST serves the request)",
+      "increment_tokens": null,
+      "ttl_summary": "inherited from upstream",
+      "ttl_seconds": null,
+      "read_discount": "inherited (e.g. 0.1x for Anthropic upstream)",
+      "write_cost": "passes through the upstream write premium",
+      "verify_field": "cached_tokens / cache_write_tokens / cache_discount",
+      "routing": "provider pinning (order/allow lists) — switching providers = cold cache",
+      "batch_note": "inherits upstream; stacking UNDOCUMENTED",
+      "gotchas": [
+        "SECURITY: the 2026 CacheProbe audit found cross-account prompt-cache leakage in OpenRouter's default shared-credential mode (Groq 100%, Fireworks p=4e-15). Mitigation: BYOK. Whether this was fixed post-mid-2026 is an open question.",
+        "The effective threshold depends on which upstream HOST serves the request (e.g. Claude direct vs Claude-on-Bedrock have different floors) — pin the provider.",
+        "Watch the cache_discount response field to verify savings."
+      ],
+      "sources": ["providers/openrouter.md"]
+    },
+    "bedrock": {
+      "display": "AWS Bedrock",
+      "enablement": "explicit",
+      "enablement_detail": "Explicit cachePoint blocks (Converse API) for Claude and GPT-5.6; automatic for Nova and GPT-5.5-and-older. Order tools -> system -> messages.",
+      "action": "Insert {\"cachePoint\": {\"type\": \"default\"}} after the static content (system prompt / tool config) in the Converse API request.",
+      "rule_set": "bedrock",
+      "default_min_tokens": 4096,
+      "default_min_note": "unknown Bedrock model — assuming the conservative 4,096",
+      "increment_tokens": null,
+      "ttl_summary": "5 min (reset on hit) / 1h on Opus-Sonnet-Haiku 4.5 / 30 min GPT-5.6",
+      "ttl_seconds": 300,
+      "read_discount": "reduced per-model (GPT-5.6: 90%)",
+      "write_cost": "may carry a premium (GPT-5.6: 1.25x; GPT-5.5-: free; Claude: mirrors Anthropic)",
+      "verify_field": "usage.cacheReadInputTokens / cacheWriteInputTokens (Converse)",
+      "routing": null,
+      "batch_note": "does NOT stack with batch — caching is on-demand-throughput only (one of only two definitive batch answers in the study)",
+      "gotchas": [
+        "Cross-platform drift: the same Claude model can need a HIGHER minimum on Bedrock than on the direct Anthropic API.",
+        "Cache hits don't count against rate limits (nice perk).",
+        "Per AWS account/region scope (cache-specific isolation undocumented)."
+      ],
+      "sources": ["providers/bedrock.md"]
+    },
+    "vertex": {
+      "display": "Google Vertex AI",
+      "enablement": "hybrid",
+      "enablement_detail": "Hosts TWO vendors with different cost models: Gemini (implicit auto + explicit CachedContent, 60-min default TTL) and Claude (cache_control breakpoints, 5m->1h).",
+      "action": "Gemini: implicit is on by default; explicit CachedContent for guaranteed reuse. Claude-on-Vertex: add \"cache_control\" breakpoints exactly as on the direct API.",
+      "rule_set": "vertex",
+      "default_min_tokens": 4096,
+      "default_min_note": "unknown Vertex model — assuming the conservative 4,096",
+      "increment_tokens": null,
+      "ttl_summary": "Gemini explicit: 60 min default; Claude: 5 min (free refresh) -> 1h opt-in",
+      "ttl_seconds": 300,
+      "read_discount": "Gemini 90%/75%; Claude 90%",
+      "write_cost": "Gemini: std input + storage on explicit (no premium); Claude: +25% / +100% write",
+      "verify_field": "cachedContentTokenCount (Gemini) / cache_read_input_tokens (Claude)",
+      "routing": null,
+      "batch_note": "stacking UNDOCUMENTED",
+      "gotchas": [
+        "Per GCP project/region isolation; NO cross-project sharing.",
+        "Claude-on-Vertex has a per-project opt-out."
+      ],
+      "sources": ["providers/vertex.md"]
+    }
+  }
+}

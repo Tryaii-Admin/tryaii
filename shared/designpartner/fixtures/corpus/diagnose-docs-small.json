@@ -1,0 +1,36 @@
+{
+  "run_id": "20260101T000000Z",
+  "summary": {
+    "schema": "tryaii.diagnose.summary/1",
+    "run_id": "20260101T000000Z",
+    "generated_at": "2026-01-01T00:00:00Z",
+    "site_count": 1,
+    "goal_present": true,
+    "priorities": { "quality": 3, "cost": 4, "speed": 2 },
+    "check_status_counts": {
+      "model_fit": { "ok": 0, "finding": 1, "insufficient_data": 0, "skipped": 0 },
+      "cache_readiness": { "ok": 0, "finding": 1, "insufficient_data": 0, "skipped": 0 },
+      "cost_exposure": { "ok": 1, "finding": 0, "insufficient_data": 0, "skipped": 0 },
+      "hygiene": { "ok": 1, "finding": 0, "insufficient_data": 0, "skipped": 0 }
+    },
+    "cache_verdict_counts": { "BELOW_THRESHOLD": 1 },
+    "totals": {
+      "est_monthly_cost_usd": 12.5,
+      "est_monthly_cache_savings_usd": null,
+      "est_monthly_swap_savings_usd": null,
+      "sites_with_traffic_data": 1
+    },
+    "swap_stats": { "sites_with_cheaper_swap": 0, "median_current_rank": 8 }
+  },
+  "findings": {
+    "version": 1,
+    "run_id": "20260101T000000Z",
+    "note": "stand-in findings document for payload fixtures — the payload embeds diagnose docs verbatim, so a compact stable stand-in exercises the same path as a real one"
+  },
+  "inventory": {
+    "version": 1,
+    "sites": [
+      { "id": "demo", "file": "app.py", "line": 1, "prompt": "Say hello to {name}." }
+    ]
+  }
+}

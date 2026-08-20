@@ -1,5 +1,198 @@
 # Changelog
 
+## Unreleased
+
+### designpartner — design-partner enrollment (both SDKs)
+
+New `tryaii designpartner` command — ONE resumable command (no verbs)
+that enrolls a user in tryaii's design-partner program, driven by their
+coding agent via a new `tryaii-designpartner` skill (installed
+automatically on the first run). Every invocation reads the state
+(`.tryaii/designpartner/`), ingests any flags, advances, and prints the
+stage + exactly what to do next (`--json` for agents); the flow resumes
+anywhere.
+
+- **Questionnaire as data** (`shared/designpartner/questions.json`): three
+  sections (About you / How you use AI / Where tryaii fits) of typed
+  questions with explicit `ask_if` conditional gating (per-provider model
+  questions appear only for selected providers). Validation reports ALL
+  problems at once and never blocks (exit 0; the agent loops).
+- **Three consent tiers, shown verbatim**: `contact_only` (answers only),
+  `summary_insights` (+ the redacted diagnose summary — no code, paths,
+  or prompts), `full_partnership` (+ the FULL findings and the raw-prompt
+  inventory of the latest diagnose run — its consent copy states the
+  prompt/path disclosure in plain words). Insight tiers require a
+  diagnose run; `--consent` writes `preview.json` (exactly what will be
+  sent) and `--confirm` — the only sending invocation — rejects a stale
+  preview.
+- **Submission**: versioned payload
+  (`tryaii.designpartner.submission/1`), ALWAYS saved to
+  `.tryaii/designpartner/submission-<stamp>.json` before any network
+  attempt; POST to `https://api.tryaii.com/v1/design-partners` (override
+  `TRYAII_DESIGNPARTNER_URL` — a new env convention) via stdlib urllib
+  (Python; no new dependency) / native fetch (Node), 10s timeout, one
+  attempt; any failure collapses to a deterministic "saved locally"
+  notice with exit 0.
+- **Cross-SDK parity, enforced**: `shared/designpartner/SPEC.md`
+  contract, five fixture suites frozen from the Python reference
+  (`scripts/gen-designpartner-fixtures.py --check`), Node conformance
+  with key-order pinning, and a cross-CLI suite that byte-compares
+  stdout/stderr/exit AND every written file (state, preview, submission,
+  installed skill) — the network save-local branch runs deterministically
+  in fixtures via an instantly-refused URL injected through a new per-case
+  `env` seam. `tryaii diagnose`'s skill-install helpers were generalized
+  in place and are shared by both commands.
+
+### diagnose — agent-first codebase LLM diagnostics (both SDKs)
+
+New `tryaii diagnose` command (verbs: `init`, `plan`, `check`, `report`) and
+`tryaii.diagnose` / `tryaii/diagnose` engine modules. The user's coding
+agent interviews the user, discovers the codebase's LLM call sites
+free-form (any language), and writes an inventory JSON; tryaii runs
+deterministic checks over it and renders a local HTML report.
+**Insight-only**: never edits code, never sends anything anywhere.
+
+- **Four checks per call site** — `model_fit` (full-catalog ranking under
+  the user's quality/cost/speed priorities; rank + absolute dimension
+  scores, never renormalized cross-set deltas; also recommends the best
+  model within ±20% of the current model's price —
+  `recommended_same_price`, a quality upgrade at the price already being
+  paid), `cache_readiness` (the
+  cachelint engine per site), `cost_exposure` (per-call/monthly cost,
+  upper-bound cache savings via conservative read-discount factors in
+  `shared/diagnose/costmodel.json`, quality-tolerant cheaper-swap
+  suggestion), `hygiene` (canonical prompt scan + fix hints via a new
+  public `cachelint.analyzer.hygiene_findings` seam).
+- **Lenient intake, honest degradation**: loosely-shaped inventories are
+  accepted; anything missing marks that check `insufficient data` with a
+  reason for that site — nothing is guessed. Every site appears in the
+  report; healthy ones as green checks.
+- **Agent playbook**: `diagnose init` installs
+  `.claude/skills/tryaii-diagnose/SKILL.md`, an AGENTS.md marker block,
+  and an anchored `/.tryaii/` gitignore entry (idempotent; masters live in
+  `shared/diagnose/skill/`). `diagnose plan --json` hands the agent the
+  check catalog, interview questions, and the exact inventory shape.
+- **Run store + deltas**: each `check` writes
+  `.tryaii/diagnose/<run-id>/` (inventory, findings.json, meta) plus a
+  `latest` pointer; `report` renders a self-contained `index.html` from
+  ONE shared template (`shared/diagnose/report/template.html`) and shows a
+  delta band vs the previous run. `findings.json` carries a redacted
+  `summary` layer (`tryaii.diagnose.summary/1`) — no code, prompts, or
+  paths — designed as the payload for a future opt-in upload (not built).
+- **Live classification** rides the routing daemon (one embedding-model
+  load for N sites) and is gated on `tryaii setup`, which now writes a
+  `setup.json` marker; inventories with precomputed `_classification`
+  need neither.
+- **Cross-SDK parity, enforced**: `shared/diagnose/SPEC.md` contract, 8
+  fixture suites frozen from the Python reference
+  (`scripts/gen-diagnose-fixtures.py --check`), a Node conformance suite
+  (including byte-identical HTML against the Python-rendered goldens), and
+  a cross-CLI test asserting byte-identical stdout/stderr AND written
+  files (findings, meta, report HTML, installed skill) for every CLI
+  fixture. En route, the Node scoring engine switched to half-even
+  rounding/formatting (`halfEvenRound`/`formatFixed`), fixing a real
+  cross-SDK divergence on rounding-boundary scores.
+
+### cachelint — pre-flight prompt-cache analysis (both SDKs)
+
+New `tryaii.cachelint` (Python) / `tryaii/cachelint` (Node subpath export)
+module and a `tryaii cachelint` CLI subcommand: analyze prompts BEFORE they
+are sent and predict whether they will hit the provider's prompt cache.
+
+- **18 dynamic-content detectors** (timestamps, UUIDs, session IDs, secrets,
+  unrendered template slots, date literals; three severity tiers) with exact
+  code-point offsets, plus **stable-prefix computation** — caching is a prefix
+  match, so *where* a dynamic value sits decides how much can cache.
+- **7-provider knowledge base** (OpenAI, Anthropic, Gemini, xAI, OpenRouter,
+  Bedrock, Vertex): per-model token floors, enablement modes (automatic vs
+  `cache_control`/`cachePoint` opt-in), TTLs, verify fields, and gateway
+  upstream inheritance. Ships as shared data
+  (`shared/cachelint/providers.json`), synced into both packages and
+  byte-compared by the parity suite.
+- **Six verdicts** (`CACHEABLE` ... `EFFECTIVELY_UNCACHEABLE`) with ordered,
+  actionable recommendations ending in the exact `usage` field to assert
+  after deploying.
+- **Sequence analysis** for request lists: per-transition `HIT` / `PARTIAL` /
+  `MISS` / `AT_RISK` / `UNKNOWN` predictions, divergence forensics (offset,
+  section, likely cause), and TTL-gap checks via optional `sent_at`.
+- **CLI**: `tryaii cachelint <input.json | -> [--json]`, plus a raw-text mode
+  (`--provider`/`--model`) that treats the entire input as one pasted prompt.
+  Warn-only by design: findings never change the exit code.
+- **Cross-SDK parity, enforced**: both engines conform to 148 frozen golden
+  fixtures generated from the Python reference
+  (`scripts/gen-cachelint-fixtures.py`), and a cross-CLI test asserts
+  **byte-identical stdout** (including `--json`) for every CLI fixture. The
+  behavior contract lives in `shared/cachelint/SPEC.md`.
+- **Dependencies**: exact OpenAI/xAI token counts use the o200k tokenizer —
+  a new `cachelint` pip extra (`pip install tryaii[cachelint]`) on Python;
+  bundled via `js-tiktoken` (the package's first runtime dependency) on Node,
+  loaded only by the cachelint module so router users never pay for it.
+
+Origin: the `cache_providers` prompt-caching research (2026-07) and its
+cachelint prototype, ported with 16 deliberate fixes (crash-free timestamp
+parsing, canonical JSON, Claude-on-Vertex verdicts, and more — see SPEC.md
+§2). Thresholds/prices are time-sensitive; refresh policy in SPEC.md §5.
+
+### cachelint — SDK warn hook + runtime cache verification (both SDKs)
+
+The engine now runs inside the clients. `cache_lint="warn"` (Python:
+`DREClient`, `AsyncDREClient`, `OpenRouterIntegration`) / `cacheLint: 'warn'`
+(Node: `DREClient`, `OpenRouterIntegration`) — or `TRYAII_CACHE_LINT=warn` —
+enables two things on every `chat`/`stream` (and async `route_and_chat`):
+
+- **Pre-flight lint of the actual outgoing prompt** — post routing, message
+  assembly, and truncation, the exact payload is analyzed and problems print
+  1–3 stderr lines (verdict + first blocker). Problems only (`BELOW_THRESHOLD`,
+  `EFFECTIVELY_UNCACHEABLE`, `UNKNOWN_THRESHOLD` with blocking findings), and
+  only **once per unique prompt shape per client instance** (hash-deduped,
+  FIFO-capped, 1h stale reset) — quiet in agent loops.
+- **Runtime verification** — from the second same-shape call onward, a prompt
+  predicted cacheable that reports 0 cached tokens in the response `usage`
+  (`prompt_tokens_details.cached_tokens` / `cached_tokens` / `cache_discount`,
+  read defensively) warns `VERIFY_MISS` once. First calls are the expected
+  cache write; streams verify best-effort when a usage chunk is present.
+
+Warn-only and **fail-open by design**: no lint failure — engine error, missing
+tiktoken (one-time install hint instead), broken stderr — can ever raise into
+or block an API call. Warning strings are byte-identical across both SDKs,
+pinned by mirrored unit tests. Docs: `docs/sdk/client/cache-lint.md`.
+
+### cachelint — AST template introspection (both SDKs)
+
+The warn hook now closes its founding blind spot. A rendered
+`f"...{DAY_OF_WEEK}..."` reaches the provider as `"...Monday..."` — invisible
+to every regex detector — but the SDK runs in-process, so at the wrapped call
+it traces the prompt back to its template and names the exact slot:
+
+```
+[tryaii cachelint] template slot {DAY_OF_WEEK} at app.py:21 renders inside your cacheable prefix — its value changes between calls and breaks the cache there
+[tryaii cachelint]   {DAY_OF_WEEK} = datetime.now().strftime('%A') at app.py:9
+```
+
+- **Automatic within warn mode** — no new API surface. Stack-walk capture to
+  the user's frame (no hardcoded depths; exact call spans via `co_positions`
+  on Python 3.11+, V8 structured CallSites with the spike-pinned await-unwrap
+  rule on Node), then parse-never-execute AST tracing of f-strings / template
+  literals, `.format()`, concatenation, and single-assignment variables.
+- **Validation guard**: the traced template's static text is re-aligned
+  against the ACTUAL rendered prompt; any mismatch (stale source, wrong node,
+  conditionals, bundler rewrites, truncation) discards the analysis — wrong
+  insights are structurally impossible, only missing ones.
+- **Noise policy**: structurally dynamic slots (call-bearing) warn on first
+  sight; bare-name slots arm on first value and warn when it changes; once
+  per (call site, slot); max 3 lines + a summary; where the engine's
+  detectors already catch the rendered value the slot stays silent, and
+  existing blocker warns gain a `rendered by template slot ...` attribution.
+- **Privacy**: the calling module's source is read locally, parsed, never
+  executed, never transmitted; warnings carry file basenames only.
+- **Dependencies**: `acorn` joins the Node package (tiny, zero-dep) for JS
+  parsing; `typescript` becomes an *optional* peer for `.ts` frames (tsx/
+  ts-node users already have it) — unimportable → fail open. Python needs
+  nothing new (stdlib `ast`/`inspect`).
+- Fail-open remains absolute: REPLs, frozen bundles, exec'd code, reassigned
+  variables, function-parameter prompts, `create_task`/`gather` sites, files
+  over 1 MB — all silently produce exactly the previous behavior.
+
 ## 0.4.0 (2026-06-29)
 
 ### Catalog: bump flagship latency tier (claude-fable-5, claude-opus-4-8)

@@ -1,0 +1,77 @@
+{
+  "suite": "report",
+  "target": "tryaii.diagnose.report.render_report_html (findings produced by analyze_inventory)",
+  "cases": [
+    {
+      "name": "report-single",
+      "description": "SPEC §4: full report over the mixed inventory — goal callout, stat tiles, per-file cards, chips, expandable details; no previous run so no delta band.",
+      "input": {
+        "inventory_file": "corpus/inventory-mixed.json",
+        "opts": {
+          "run_id": "fixture-run",
+          "now": "2026-01-01T00:00:00Z",
+          "version": "0.0.0",
+          "priorities": {
+            "quality": 3,
+            "cost": 4,
+            "speed": 2
+          },
+          "goal": "reduce prices"
+        }
+      },
+      "expected": {
+        "golden": "report-single.golden.html"
+      }
+    },
+    {
+      "name": "report-delta",
+      "description": "SPEC §4.2: the same inventory under different priorities as the previous run — the delta band renders (transitions per site, monthly estimate delta).",
+      "input": {
+        "inventory_file": "corpus/inventory-mixed.json",
+        "opts": {
+          "run_id": "fixture-run-b",
+          "now": "2026-01-02T00:00:00Z",
+          "version": "0.0.0",
+          "priorities": {
+            "quality": 3,
+            "cost": 4,
+            "speed": 2
+          },
+          "goal": "reduce prices"
+        },
+        "previous": {
+          "inventory_file": "corpus/inventory-mixed.json",
+          "opts": {
+            "run_id": "fixture-run-a",
+            "now": "2026-01-01T00:00:00Z",
+            "version": "0.0.0",
+            "priorities": {
+              "quality": 5,
+              "cost": 1,
+              "speed": 1
+            },
+            "goal": "reduce prices"
+          }
+        }
+      },
+      "expected": {
+        "golden": "report-delta.golden.html"
+      }
+    },
+    {
+      "name": "report-minimal",
+      "description": "SPEC §4: a degraded single-site run — n/a tiles, insufficient chips with reasons, no goal.",
+      "input": {
+        "inventory_file": "corpus/inventory-minimal.json",
+        "opts": {
+          "run_id": "fixture-min",
+          "now": "2026-01-01T00:00:00Z",
+          "version": "0.0.0"
+        }
+      },
+      "expected": {
+        "golden": "report-minimal.golden.html"
+      }
+    }
+  ]
+}

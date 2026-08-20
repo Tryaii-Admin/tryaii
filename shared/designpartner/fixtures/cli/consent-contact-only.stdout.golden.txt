@@ -1,0 +1,12 @@
+tryaii designpartner -- stage: confirm
+
+consent recorded: contact_only
+
+tier: contact_only
+will send:
+  - your questionnaire answers
+  - your contact details (name, email, company, role)
+-> .tryaii/designpartner/preview.json
+
+next: Show the user the preview (exactly what will be sent). Only after they explicitly agree, confirm.
+  tryaii designpartner --confirm

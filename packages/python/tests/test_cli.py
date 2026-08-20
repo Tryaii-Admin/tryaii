@@ -46,14 +46,68 @@ def test_global_help_prints_shared_text_from_any_position(monkeypatch, capsys, a
     [
         (("help", "route"), "route"),
         (("help", "eval"), "eval"),
+        (("help", "cachelint"), "cachelint"),
         (("eval", "--help"), "eval"),
         (("route", "-h"), "route"),
+        (("cachelint", "--help"), "cachelint"),
         (("models", "--help"), "models"),
     ],
 )
 def test_command_help_prints_per_command_text(monkeypatch, capsys, argv, command):
     _run(monkeypatch, *argv)
     assert capsys.readouterr().out == cli_main.COMMAND_HELP[command]
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [("help", "diagnose"), ("diagnose", "--help"), ("diagnose", "-h")],
+)
+def test_diagnose_help_prints_command_text(monkeypatch, capsys, argv):
+    _run(monkeypatch, *argv)
+    assert capsys.readouterr().out == cli_main.COMMAND_HELP["diagnose"]
+
+
+@pytest.mark.parametrize(
+    "argv,verb",
+    [
+        (("diagnose", "init", "--help"), "init"),
+        (("diagnose", "plan", "--help"), "plan"),
+        (("diagnose", "check", "-h"), "check"),
+        (("diagnose", "report", "--help"), "report"),
+    ],
+)
+def test_diagnose_verb_help_prints_verb_text(monkeypatch, capsys, argv, verb):
+    _run(monkeypatch, *argv)
+    assert capsys.readouterr().out == cli_main.DIAGNOSE_VERB_HELP[verb]
+
+
+def test_diagnose_missing_verb_is_usage_error(monkeypatch, capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        _run(monkeypatch, "diagnose")
+    assert excinfo.value.code == 2
+    assert "missing diagnose verb" in capsys.readouterr().err
+
+
+def test_diagnose_unknown_verb_is_usage_error(monkeypatch, capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        _run(monkeypatch, "diagnose", "frobnicate")
+    assert excinfo.value.code == 2
+    assert "unknown diagnose verb" in capsys.readouterr().err
+
+
+def test_diagnose_check_setup_gate(monkeypatch, capsys, tmp_path):
+    # A site WITHOUT the _classification seam needs live routing, which is
+    # gated on the setup marker; point the data dir at an empty tmp dir so
+    # the marker is definitively absent.
+    monkeypatch.setenv("TRYAII_DRE_DATA_DIR", str(tmp_path / "data"))
+    inv = tmp_path / "inventory.json"
+    inv.write_text('{"sites": [{"file": "a.py", "line": 1, "prompt": "hi"}]}',
+                   encoding="utf-8")
+    with pytest.raises(SystemExit) as excinfo:
+        _run(monkeypatch, "diagnose", "check", str(inv),
+             "--out-dir", str(tmp_path / "out"))
+    assert excinfo.value.code == 1
+    assert "diagnose requires setup" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(

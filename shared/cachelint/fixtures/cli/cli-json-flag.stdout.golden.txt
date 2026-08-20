@@ -1,0 +1,86 @@
+{
+  "items": [
+    {
+      "index": 0,
+      "provider": "Anthropic (Claude)",
+      "provider_key": "anthropic",
+      "upstream": null,
+      "model": "claude-fable-5",
+      "token_report": {
+        "total": {
+          "tokens": 5,
+          "method": "estimate(~3.5 chars/tok)",
+          "exact": false,
+          "note": "for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+        },
+        "sections": {
+          "messages[0]:user": 5
+        }
+      },
+      "threshold": {
+        "min_tokens": 512,
+        "tier": "Fable 5 / Mythos 5 tier (lowest floor)",
+        "increment": null,
+        "meets": false
+      },
+      "system_report": {
+        "present": false,
+        "tokens": 0,
+        "cached_unit_tokens": 0,
+        "cached_unit_meets_threshold": false,
+        "findings_in_system": 0
+      },
+      "findings": [],
+      "stable_prefix": {
+        "tokens": 5,
+        "pct_of_prompt": 100,
+        "limited_by": null,
+        "if_first_fixed_tokens": null
+      },
+      "verdict": {
+        "code": "BELOW_THRESHOLD",
+        "summary": "Total prompt ~5 tok < 512 minimum — nothing will cache. Expanding the static content to reach the floor is often worthwhile."
+      },
+      "enablement": {
+        "mode": "explicit",
+        "detail": "OPT-IN: nothing caches unless you mark a breakpoint with \"cache_control\": {\"type\": \"ephemeral\"} (<= 4 breakpoints; 20-block lookback). Render order is tools -> system -> messages; a byte change invalidates everything after it.",
+        "action": "Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium)."
+      },
+      "provider_intel": {
+        "ttl": "5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'",
+        "read_discount": "90% (0.1x base input)",
+        "write_cost": "write premium: 1.25x (5-min TTL) / 2x (1-hour TTL); no storage fee",
+        "verify_field": "usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens)",
+        "routing": null,
+        "batch": "STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off",
+        "gotchas": [
+          "Below the model's minimum the marked prefix SILENTLY won't cache (cache_creation_input_tokens: 0, no error).",
+          "Model switch = cold cache (model-scoped). Toggling extended thinking invalidates system+messages (tools survive).",
+          "Serialize tool JSON deterministically (sorted keys, frozen order) — non-deterministic serialization is a classic silent invalidator.",
+          "Concurrency: entry readable only after the first response begins streaming — warm one, then fan out.",
+          "Pre-warm with a max_tokens: 0 request to skip cold-write latency on the first real request.",
+          "On Opus 5 / Opus 4.8 / Fable 5 / Mythos 5: append {\"role\": \"system\", ...} to messages for mid-conversation instructions instead of editing the top-level system prompt — preserves the cached prefix.",
+          "No prompt_cache_key equivalent — routing affinity cannot be steered; identical prefixes are the only lever."
+        ],
+        "sources": [
+          "providers/anthropic.md",
+          "claude-api reference (post-research updates)"
+        ]
+      },
+      "recommendations": [
+        "[enablement] Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium).",
+        "[verify] After deploying, assert usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens) > 0 in responses. 0 across identical-prefix requests = a silent invalidator is still present.",
+        "[batch] STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off"
+      ],
+      "warnings": [
+        "Token counts are estimates (estimate(~3.5 chars/tok)). for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+      ]
+    }
+  ],
+  "sequences": [],
+  "meta": {
+    "tool": "cachelint",
+    "knowledge_base": "cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)",
+    "caveat": "Thresholds/prices are time-sensitive; verify against live provider docs."
+  }
+}

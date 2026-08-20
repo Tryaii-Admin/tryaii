@@ -24,6 +24,12 @@
 >
 > _(The wordmark above animates in a blue→red gradient when you run the CLI in a real terminal.)_
 
+**Rather watch the race than predict it?** The same model catalog powers
+[**tryaii.com**](https://tryaii.com) — a side-by-side playground where one prompt
+fans out to OpenAI, Anthropic, Google, xAI, DeepSeek, and Mistral at once and
+streams back with tokens, latency, and per-call cost inline. `tryaii` picks the
+winner before you spend; tryaii.com lets you watch them run.
+
 ## Demo
 
 https://github.com/user-attachments/assets/b9f4d361-5c63-4138-ab13-f589e959798d
@@ -67,6 +73,37 @@ Or rank models for a single prompt:
 tryaii route "Debug this memory leak in my Node.js app" --quality=5 --cost=1 --speed=2
 tryaii models --provider anthropic     # inspect the model catalog
 ```
+
+Or lint a request for prompt-cache readiness before sending it — 18 dynamic-content
+detectors, per-model token floors for 7 providers, and predicted HIT/MISS across
+request sequences ([docs](docs/cli/cachelint.md)):
+
+```bash
+tryaii cachelint request.json                  # verdict-first report; warns, never blocks
+cat prompt.txt | tryaii cachelint - --provider anthropic --model claude-fable-5
+```
+
+The same engine runs inside the SDK clients: `cache_lint="warn"` (Python) /
+`cacheLint: 'warn'` (Node) lints every outgoing chat request at the moment it
+leaves and verifies predictions against the provider's `usage` response —
+warn-only, fail-open, once per prompt shape ([docs](docs/sdk/client/cache-lint.md)).
+
+Or diagnose a whole codebase's LLM call sites — your coding agent finds the calls
+and writes an inventory; `tryaii` runs four deterministic checks over it (model
+fit, cache readiness, cost exposure, prompt hygiene) and renders a local HTML
+report. Insight-only: it never edits code and never sends anything anywhere
+([docs](docs/cli/diagnose/README.md)):
+
+```bash
+tryaii diagnose init                     # once per repo: install the agent playbook
+tryaii diagnose check inventory.json --quality 3 --cost 4 --speed 2
+tryaii diagnose report                   # open .tryaii/diagnose/<run-id>/index.html
+```
+
+Want to shape where tryaii goes next? `tryaii designpartner` enrolls you as a
+design partner: a short questionnaire, explicit consent tiers shown verbatim,
+and nothing leaves your machine until you run `--confirm`
+([docs](docs/cli/designpartner.md)).
 
 Full flag reference is in the [command-line interface](#command-line-interface) section below.
 
@@ -165,6 +202,9 @@ tryaii <command> [options]
 | `benchmarks`         | List the 12 benchmarks and their score-normalization ranges. |
 | `setup`              | Download the embedding model and warm the centroids (one-time). |
 | `regenerate`         | Rebuild benchmark centroids, e.g. after switching the embedding model. |
+| `cachelint <request.json>` | Lint a chat request for prompt-cache readiness — verdict-first report; warns, never blocks. |
+| `diagnose <verb>`    | Agent-first codebase LLM diagnostics — model fit, cache readiness, cost exposure, prompt hygiene; insight-only, rendered to a local HTML report. |
+| `designpartner`      | Enroll as a tryaii design partner — one resumable command; nothing is sent without an explicit `--confirm`. |
 
 ### Options
 
@@ -198,6 +238,9 @@ tryaii <command> [options]
 **`models`** — `--provider <name>` filters by provider; `--json` prints machine-readable output.
 **`benchmarks`** — `--json` prints machine-readable output.
 **`setup` / `regenerate`** — `--model <name>` selects a non-default embedding model.
+**`cachelint`** — `-` reads the request from stdin; `--provider` / `--model` select the cache rules ([docs](docs/cli/cachelint.md)).
+**`diagnose`** — verbs `init` / `plan` / `check` / `report` ([docs](docs/cli/diagnose/README.md)).
+**`designpartner`** — at most one action flag per run: `--answers` / `--consent` / `--confirm` / `--reset`; `--json` prints the machine-readable status agents consume ([docs](docs/cli/designpartner.md)).
 
 ### Global flags & environment
 
@@ -224,7 +267,9 @@ of which models were recommended, broken down by category.
 
 Copy–paste the block below into an agent (Claude Code, Cursor, a custom tool, etc.) to
 teach it how to use this project. The package name is **`tryaii`** on both PyPI and npm.
-Expand it and use the copy button in its top-right corner.
+Expand it and use the copy button in its top-right corner. (The `diagnose` and
+`designpartner` commands need no copy-paste — each installs its own agent skill
+into `.claude/skills/` on first run.)
 
 <details>
 <summary><b>📋 Full agent instructions</b></summary>

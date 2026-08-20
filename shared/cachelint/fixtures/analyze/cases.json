@@ -1,0 +1,1557 @@
+{
+  "suite": "analyze",
+  "target": "api.analyze",
+  "cases": [
+    {
+      "name": "an-below-threshold",
+      "description": "small anthropic prompt -> BELOW_THRESHOLD",
+      "input": {
+        "input_file": "corpus/anthropic-small.json"
+      },
+      "expected": {
+        "items": [
+          {
+            "index": 0,
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "upstream": null,
+            "model": "claude-fable-5",
+            "token_report": {
+              "total": {
+                "tokens": 5,
+                "method": "estimate(~3.5 chars/tok)",
+                "exact": false,
+                "note": "for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+              },
+              "sections": {
+                "messages[0]:user": 5
+              }
+            },
+            "threshold": {
+              "min_tokens": 512,
+              "tier": "Fable 5 / Mythos 5 tier (lowest floor)",
+              "increment": null,
+              "meets": false
+            },
+            "system_report": {
+              "present": false,
+              "tokens": 0,
+              "cached_unit_tokens": 0,
+              "cached_unit_meets_threshold": false,
+              "findings_in_system": 0
+            },
+            "findings": [],
+            "stable_prefix": {
+              "tokens": 5,
+              "pct_of_prompt": 100,
+              "limited_by": null,
+              "if_first_fixed_tokens": null
+            },
+            "verdict": {
+              "code": "BELOW_THRESHOLD",
+              "summary": "Total prompt ~5 tok < 512 minimum — nothing will cache. Expanding the static content to reach the floor is often worthwhile."
+            },
+            "enablement": {
+              "mode": "explicit",
+              "detail": "OPT-IN: nothing caches unless you mark a breakpoint with \"cache_control\": {\"type\": \"ephemeral\"} (<= 4 breakpoints; 20-block lookback). Render order is tools -> system -> messages; a byte change invalidates everything after it.",
+              "action": "Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium)."
+            },
+            "provider_intel": {
+              "ttl": "5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'",
+              "read_discount": "90% (0.1x base input)",
+              "write_cost": "write premium: 1.25x (5-min TTL) / 2x (1-hour TTL); no storage fee",
+              "verify_field": "usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens)",
+              "routing": null,
+              "batch": "STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off",
+              "gotchas": [
+                "Below the model's minimum the marked prefix SILENTLY won't cache (cache_creation_input_tokens: 0, no error).",
+                "Model switch = cold cache (model-scoped). Toggling extended thinking invalidates system+messages (tools survive).",
+                "Serialize tool JSON deterministically (sorted keys, frozen order) — non-deterministic serialization is a classic silent invalidator.",
+                "Concurrency: entry readable only after the first response begins streaming — warm one, then fan out.",
+                "Pre-warm with a max_tokens: 0 request to skip cold-write latency on the first real request.",
+                "On Opus 5 / Opus 4.8 / Fable 5 / Mythos 5: append {\"role\": \"system\", ...} to messages for mid-conversation instructions instead of editing the top-level system prompt — preserves the cached prefix.",
+                "No prompt_cache_key equivalent — routing affinity cannot be steered; identical prefixes are the only lever."
+              ],
+              "sources": [
+                "providers/anthropic.md",
+                "claude-api reference (post-research updates)"
+              ]
+            },
+            "recommendations": [
+              "[enablement] Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium).",
+              "[verify] After deploying, assert usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens) > 0 in responses. 0 across identical-prefix requests = a silent invalidator is still present.",
+              "[batch] STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off"
+            ],
+            "warnings": [
+              "Token counts are estimates (estimate(~3.5 chars/tok)). for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+            ]
+          }
+        ],
+        "sequences": [],
+        "meta": {
+          "tool": "cachelint",
+          "knowledge_base": "cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)",
+          "caveat": "Thresholds/prices are time-sensitive; verify against live provider docs."
+        }
+      }
+    },
+    {
+      "name": "an-clean-anthropic-needs-action",
+      "description": "clean big anthropic -> CACHEABLE_WITH_ACTION, [enablement] first; also pins fix j (no [routing] rec, gotcha present)",
+      "input": {
+        "input_file": "corpus/anthropic-clean-big.json"
+      },
+      "expected": {
+        "items": [
+          {
+            "index": 0,
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "upstream": null,
+            "model": "claude-fable-5",
+            "token_report": {
+              "total": {
+                "tokens": 1029,
+                "method": "estimate(~3.5 chars/tok)",
+                "exact": false,
+                "note": "for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+              },
+              "sections": {
+                "system": 1016,
+                "messages[0]:user": 12
+              }
+            },
+            "threshold": {
+              "min_tokens": 512,
+              "tier": "Fable 5 / Mythos 5 tier (lowest floor)",
+              "increment": null,
+              "meets": true
+            },
+            "system_report": {
+              "present": true,
+              "tokens": 1016,
+              "cached_unit_tokens": 1016,
+              "cached_unit_meets_threshold": true,
+              "findings_in_system": 0
+            },
+            "findings": [],
+            "stable_prefix": {
+              "tokens": 1029,
+              "pct_of_prompt": 100,
+              "limited_by": null,
+              "if_first_fixed_tokens": null
+            },
+            "verdict": {
+              "code": "CACHEABLE_WITH_ACTION",
+              "summary": "~1029 tok, no dynamic content detected — cacheable, but Anthropic (Claude) requires an explicit opt-in (see enablement)."
+            },
+            "enablement": {
+              "mode": "explicit",
+              "detail": "OPT-IN: nothing caches unless you mark a breakpoint with \"cache_control\": {\"type\": \"ephemeral\"} (<= 4 breakpoints; 20-block lookback). Render order is tools -> system -> messages; a byte change invalidates everything after it.",
+              "action": "Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium)."
+            },
+            "provider_intel": {
+              "ttl": "5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'",
+              "read_discount": "90% (0.1x base input)",
+              "write_cost": "write premium: 1.25x (5-min TTL) / 2x (1-hour TTL); no storage fee",
+              "verify_field": "usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens)",
+              "routing": null,
+              "batch": "STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off",
+              "gotchas": [
+                "Below the model's minimum the marked prefix SILENTLY won't cache (cache_creation_input_tokens: 0, no error).",
+                "Model switch = cold cache (model-scoped). Toggling extended thinking invalidates system+messages (tools survive).",
+                "Serialize tool JSON deterministically (sorted keys, frozen order) — non-deterministic serialization is a classic silent invalidator.",
+                "Concurrency: entry readable only after the first response begins streaming — warm one, then fan out.",
+                "Pre-warm with a max_tokens: 0 request to skip cold-write latency on the first real request.",
+                "On Opus 5 / Opus 4.8 / Fable 5 / Mythos 5: append {\"role\": \"system\", ...} to messages for mid-conversation instructions instead of editing the top-level system prompt — preserves the cached prefix.",
+                "No prompt_cache_key equivalent — routing affinity cannot be steered; identical prefixes are the only lever."
+              ],
+              "sources": [
+                "providers/anthropic.md",
+                "claude-api reference (post-research updates)"
+              ]
+            },
+            "recommendations": [
+              "[enablement] Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium).",
+              "[verify] After deploying, assert usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens) > 0 in responses. 0 across identical-prefix requests = a silent invalidator is still present.",
+              "[ttl] 5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'",
+              "[batch] STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off"
+            ],
+            "warnings": [
+              "Token counts are estimates (estimate(~3.5 chars/tok)). for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+            ]
+          }
+        ],
+        "sequences": [],
+        "meta": {
+          "tool": "cachelint",
+          "knowledge_base": "cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)",
+          "caveat": "Thresholds/prices are time-sensitive; verify against live provider docs."
+        }
+      }
+    },
+    {
+      "name": "an-openai-cacheable",
+      "description": "clean big openai -> CACHEABLE with exact tiktoken counts, [routing]/[ttl]/[batch] recs",
+      "input": {
+        "input_file": "corpus/openai-clean-big.json"
+      },
+      "expected": {
+        "items": [
+          {
+            "index": 0,
+            "provider": "OpenAI",
+            "provider_key": "openai",
+            "upstream": null,
+            "model": "gpt-5.2",
+            "token_report": {
+              "total": {
+                "tokens": 1330,
+                "method": "tiktoken(o200k_base)",
+                "exact": true,
+                "note": ""
+              },
+              "sections": {
+                "system": 1321,
+                "messages[0]:user": 9
+              }
+            },
+            "threshold": {
+              "min_tokens": 1024,
+              "tier": "uniform for all OpenAI models (+128-token steps)",
+              "increment": 128,
+              "meets": true
+            },
+            "system_report": {
+              "present": true,
+              "tokens": 1321,
+              "cached_unit_tokens": 1321,
+              "cached_unit_meets_threshold": true,
+              "findings_in_system": 0
+            },
+            "findings": [],
+            "stable_prefix": {
+              "tokens": 1330,
+              "pct_of_prompt": 100,
+              "limited_by": null,
+              "if_first_fixed_tokens": null
+            },
+            "verdict": {
+              "code": "CACHEABLE",
+              "summary": "~1330 tok of stable content, above the 1024 minimum — should cache."
+            },
+            "enablement": {
+              "mode": "automatic",
+              "detail": "Caching is on by default for prompts >= 1,024 tokens — no request changes needed. Reuse the exact prefix; cached amounts grow in 128-token steps.",
+              "action": null
+            },
+            "provider_intel": {
+              "ttl": "5-10 min sliding; up to 24h extended retention (non-ZDR default since May 2026)",
+              "read_discount": "per-model 50% -> 98.75% (90% on GPT-5.x) — NOT a flat 50%",
+              "write_cost": "free through GPT-5.5; ~1.25x input on GPT-5.6+ (single-use large prompts pay the premium for nothing)",
+              "verify_field": "usage.prompt_tokens_details.cached_tokens",
+              "routing": "prompt_cache_key — same string per prefix-group; keep <= ~15 RPM per key",
+              "batch": "batch x caching stacking is UNDOCUMENTED (open question in the research)",
+              "gotchas": [
+                "A cache entry becomes readable only after the writing request completes — N simultaneous cold requests all pay full price. Warm one, then fan out.",
+                "Discount is per-model; verify against the live pricing page before quoting numbers.",
+                "Org-level cache scope."
+              ],
+              "sources": [
+                "providers/openai.md"
+              ]
+            },
+            "recommendations": [
+              "[routing] prompt_cache_key — same string per prefix-group; keep <= ~15 RPM per key",
+              "[verify] After deploying, assert usage.prompt_tokens_details.cached_tokens > 0 in responses. 0 across identical-prefix requests = a silent invalidator is still present.",
+              "[ttl] 5-10 min sliding; up to 24h extended retention (non-ZDR default since May 2026)",
+              "[batch] batch x caching stacking is UNDOCUMENTED (open question in the research)"
+            ],
+            "warnings": []
+          }
+        ],
+        "sequences": [],
+        "meta": {
+          "tool": "cachelint",
+          "knowledge_base": "cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)",
+          "caveat": "Thresholds/prices are time-sensitive; verify against live provider docs."
+        }
+      }
+    },
+    {
+      "name": "an-early-timestamp-uncacheable",
+      "description": "timestamp at the head of system -> EFFECTIVELY_UNCACHEABLE",
+      "input": {
+        "input_file": "corpus/early-timestamp.json"
+      },
+      "expected": {
+        "items": [
+          {
+            "index": 0,
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "upstream": null,
+            "model": "claude-fable-5",
+            "token_report": {
+              "total": {
+                "tokens": 1036,
+                "method": "estimate(~3.5 chars/tok)",
+                "exact": false,
+                "note": "for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+              },
+              "sections": {
+                "system": 1023,
+                "messages[0]:user": 12
+              }
+            },
+            "threshold": {
+              "min_tokens": 512,
+              "tier": "Fable 5 / Mythos 5 tier (lowest floor)",
+              "increment": null,
+              "meets": true
+            },
+            "system_report": {
+              "present": true,
+              "tokens": 1023,
+              "cached_unit_tokens": 1023,
+              "cached_unit_meets_threshold": true,
+              "findings_in_system": 1
+            },
+            "findings": [
+              {
+                "kind": "timestamp-datetime",
+                "severity": "high",
+                "start": 5,
+                "end": 25,
+                "section": "system",
+                "section_offset": 5,
+                "pct_into_prompt": 0.1,
+                "excerpt": "Now: 2026-07-30T09:14:22Z. You are the routing assist...",
+                "why": "A full datetime changes every call — everything after it can never match byte-for-byte."
+              }
+            ],
+            "stable_prefix": {
+              "tokens": 1,
+              "pct_of_prompt": 0.1,
+              "limited_by": {
+                "kind": "timestamp-datetime",
+                "severity": "high",
+                "start": 5,
+                "end": 25,
+                "section": "system",
+                "section_offset": 5,
+                "pct_into_prompt": 0.1,
+                "excerpt": "Now: 2026-07-30T09:14:22Z. You are the routing assist...",
+                "why": "A full datetime changes every call — everything after it can never match byte-for-byte."
+              },
+              "if_first_fixed_tokens": 1036
+            },
+            "verdict": {
+              "code": "EFFECTIVELY_UNCACHEABLE",
+              "summary": "Dynamic content too early: the stable prefix is only ~1 tok, below the 512 minimum — in practice nothing will cache until it moves."
+            },
+            "enablement": {
+              "mode": "explicit",
+              "detail": "OPT-IN: nothing caches unless you mark a breakpoint with \"cache_control\": {\"type\": \"ephemeral\"} (<= 4 breakpoints; 20-block lookback). Render order is tools -> system -> messages; a byte change invalidates everything after it.",
+              "action": "Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium)."
+            },
+            "provider_intel": {
+              "ttl": "5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'",
+              "read_discount": "90% (0.1x base input)",
+              "write_cost": "write premium: 1.25x (5-min TTL) / 2x (1-hour TTL); no storage fee",
+              "verify_field": "usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens)",
+              "routing": null,
+              "batch": "STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off",
+              "gotchas": [
+                "Below the model's minimum the marked prefix SILENTLY won't cache (cache_creation_input_tokens: 0, no error).",
+                "Model switch = cold cache (model-scoped). Toggling extended thinking invalidates system+messages (tools survive).",
+                "Serialize tool JSON deterministically (sorted keys, frozen order) — non-deterministic serialization is a classic silent invalidator.",
+                "Concurrency: entry readable only after the first response begins streaming — warm one, then fan out.",
+                "Pre-warm with a max_tokens: 0 request to skip cold-write latency on the first real request.",
+                "On Opus 5 / Opus 4.8 / Fable 5 / Mythos 5: append {\"role\": \"system\", ...} to messages for mid-conversation instructions instead of editing the top-level system prompt — preserves the cached prefix.",
+                "No prompt_cache_key equivalent — routing affinity cannot be steered; identical prefixes are the only lever."
+              ],
+              "sources": [
+                "providers/anthropic.md",
+                "claude-api reference (post-research updates)"
+              ]
+            },
+            "recommendations": [
+              "[enablement] Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium).",
+              "[fix:timestamp-datetime] at system+5 (0% in): Remove it, round it to a coarse bucket (day/hour), or move it into the final user message (after the cached prefix).",
+              "[impact] Fixing the FIRST finding alone extends the stable prefix from ~1 to ~1036 tok.",
+              "[verify] After deploying, assert usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens) > 0 in responses. 0 across identical-prefix requests = a silent invalidator is still present.",
+              "[batch] STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off"
+            ],
+            "warnings": [
+              "Token counts are estimates (estimate(~3.5 chars/tok)). for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+            ]
+          }
+        ],
+        "sequences": [],
+        "meta": {
+          "tool": "cachelint",
+          "knowledge_base": "cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)",
+          "caveat": "Thresholds/prices are time-sensitive; verify against live provider docs."
+        }
+      }
+    },
+    {
+      "name": "an-late-dynamic-cacheable-prefix",
+      "description": "UUID in the final user message -> CACHEABLE_PREFIX + [impact] rec",
+      "input": {
+        "input_file": "corpus/late-dynamic.json"
+      },
+      "expected": {
+        "items": [
+          {
+            "index": 0,
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "upstream": null,
+            "model": "claude-fable-5",
+            "token_report": {
+              "total": {
+                "tokens": 1035,
+                "method": "estimate(~3.5 chars/tok)",
+                "exact": false,
+                "note": "for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+              },
+              "sections": {
+                "system": 1016,
+                "messages[0]:user": 19
+              }
+            },
+            "threshold": {
+              "min_tokens": 512,
+              "tier": "Fable 5 / Mythos 5 tier (lowest floor)",
+              "increment": null,
+              "meets": true
+            },
+            "system_report": {
+              "present": true,
+              "tokens": 1016,
+              "cached_unit_tokens": 1016,
+              "cached_unit_meets_threshold": true,
+              "findings_in_system": 0
+            },
+            "findings": [
+              {
+                "kind": "uuid",
+                "severity": "high",
+                "start": 3580,
+                "end": 3616,
+                "section": "messages[0]:user",
+                "section_offset": 23,
+                "pct_into_prompt": 98.8,
+                "excerpt": "...s. \\n\\nuser: Continue session 7f9c02aa-51b3-4c2e-9f10-8a4d55e01b27 please.",
+                "why": "UUIDs are unique per session/request — a new value on the next call breaks the prefix."
+              }
+            ],
+            "stable_prefix": {
+              "tokens": 1023,
+              "pct_of_prompt": 98.8,
+              "limited_by": {
+                "kind": "uuid",
+                "severity": "high",
+                "start": 3580,
+                "end": 3616,
+                "section": "messages[0]:user",
+                "section_offset": 23,
+                "pct_into_prompt": 98.8,
+                "excerpt": "...s. \\n\\nuser: Continue session 7f9c02aa-51b3-4c2e-9f10-8a4d55e01b27 please.",
+                "why": "UUIDs are unique per session/request — a new value on the next call breaks the prefix."
+              },
+              "if_first_fixed_tokens": 1035
+            },
+            "verdict": {
+              "code": "CACHEABLE_PREFIX",
+              "summary": "A stable prefix of ~1023 tok (>= 512 minimum) can cache; the dynamic tail after it re-processes at full price each call (that part is normal)."
+            },
+            "enablement": {
+              "mode": "explicit",
+              "detail": "OPT-IN: nothing caches unless you mark a breakpoint with \"cache_control\": {\"type\": \"ephemeral\"} (<= 4 breakpoints; 20-block lookback). Render order is tools -> system -> messages; a byte change invalidates everything after it.",
+              "action": "Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium)."
+            },
+            "provider_intel": {
+              "ttl": "5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'",
+              "read_discount": "90% (0.1x base input)",
+              "write_cost": "write premium: 1.25x (5-min TTL) / 2x (1-hour TTL); no storage fee",
+              "verify_field": "usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens)",
+              "routing": null,
+              "batch": "STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off",
+              "gotchas": [
+                "Below the model's minimum the marked prefix SILENTLY won't cache (cache_creation_input_tokens: 0, no error).",
+                "Model switch = cold cache (model-scoped). Toggling extended thinking invalidates system+messages (tools survive).",
+                "Serialize tool JSON deterministically (sorted keys, frozen order) — non-deterministic serialization is a classic silent invalidator.",
+                "Concurrency: entry readable only after the first response begins streaming — warm one, then fan out.",
+                "Pre-warm with a max_tokens: 0 request to skip cold-write latency on the first real request.",
+                "On Opus 5 / Opus 4.8 / Fable 5 / Mythos 5: append {\"role\": \"system\", ...} to messages for mid-conversation instructions instead of editing the top-level system prompt — preserves the cached prefix.",
+                "No prompt_cache_key equivalent — routing affinity cannot be steered; identical prefixes are the only lever."
+              ],
+              "sources": [
+                "providers/anthropic.md",
+                "claude-api reference (post-research updates)"
+              ]
+            },
+            "recommendations": [
+              "[enablement] Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium).",
+              "[fix:uuid] at messages[0]:user+23 (99% in): Move per-session IDs after the static prefix — or drop them from the prompt entirely.",
+              "[impact] Fixing the FIRST finding alone extends the stable prefix from ~1023 to ~1035 tok.",
+              "[verify] After deploying, assert usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens) > 0 in responses. 0 across identical-prefix requests = a silent invalidator is still present.",
+              "[ttl] 5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'",
+              "[batch] STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off"
+            ],
+            "warnings": [
+              "Token counts are estimates (estimate(~3.5 chars/tok)). for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+            ]
+          }
+        ],
+        "sequences": [],
+        "meta": {
+          "tool": "cachelint",
+          "knowledge_base": "cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)",
+          "caveat": "Thresholds/prices are time-sensitive; verify against live provider docs."
+        }
+      }
+    },
+    {
+      "name": "an-xai-unknown-threshold",
+      "description": "xai -> UNKNOWN_THRESHOLD (structural analysis only)",
+      "input": {
+        "input_file": "corpus/xai-plain.json"
+      },
+      "expected": {
+        "items": [
+          {
+            "index": 0,
+            "provider": "xAI (Grok)",
+            "provider_key": "xai",
+            "upstream": null,
+            "model": "grok-4",
+            "token_report": {
+              "total": {
+                "tokens": 450,
+                "method": "tiktoken(o200k_base)",
+                "exact": false,
+                "note": "xAI tokenizer approximated with o200k_base"
+              },
+              "sections": {
+                "system": 441,
+                "messages[0]:user": 9
+              }
+            },
+            "threshold": {
+              "min_tokens": null,
+              "tier": "NO published activation threshold (least-documented big provider)",
+              "increment": null,
+              "meets": false
+            },
+            "system_report": {
+              "present": true,
+              "tokens": 441,
+              "cached_unit_tokens": 441,
+              "cached_unit_meets_threshold": false,
+              "findings_in_system": 0
+            },
+            "findings": [],
+            "stable_prefix": {
+              "tokens": 450,
+              "pct_of_prompt": 100,
+              "limited_by": null,
+              "if_first_fixed_tokens": null
+            },
+            "verdict": {
+              "code": "UNKNOWN_THRESHOLD",
+              "summary": "xAI (Grok) publishes no activation threshold — analysis is structural only. Stable prefix ~450 tok of 450 total."
+            },
+            "enablement": {
+              "mode": "automatic",
+              "detail": "Automatic, but the cache is PER-SERVER — routing matters more than anything else. Set the x-grok-conv-id header (or prompt_cache_key on the Responses API) so consecutive requests land on the same server.",
+              "action": "Always set x-grok-conv-id (same value per conversation). Append-only: never edit earlier messages."
+            },
+            "provider_intel": {
+              "ttl": "NO guaranteed TTL — entries may be evicted at any time (biggest reliability caveat in the study)",
+              "read_discount": "~75-85% (provisional — verify against live pricing)",
+              "write_cost": "no write premium; no storage",
+              "verify_field": "cached_tokens (OpenAI-compatible usage field)",
+              "routing": "x-grok-conv-id header (per-server routing) / prompt_cache_key on Responses API",
+              "batch": "20% batch discount exists; stacking with caching is UNDOCUMENTED",
+              "gotchas": [
+                "Don't rely on gaps between requests — no TTL guarantee at all.",
+                "Editing an earlier message breaks the append-only prefix."
+              ],
+              "sources": [
+                "providers/xai.md"
+              ]
+            },
+            "recommendations": [
+              "[enablement] Always set x-grok-conv-id (same value per conversation). Append-only: never edit earlier messages.",
+              "[routing] x-grok-conv-id header (per-server routing) / prompt_cache_key on Responses API",
+              "[verify] After deploying, assert cached_tokens (OpenAI-compatible usage field) > 0 in responses. 0 across identical-prefix requests = a silent invalidator is still present.",
+              "[batch] 20% batch discount exists; stacking with caching is UNDOCUMENTED"
+            ],
+            "warnings": [
+              "Token counts are estimates (tiktoken(o200k_base)). xAI tokenizer approximated with o200k_base"
+            ]
+          }
+        ],
+        "sequences": [],
+        "meta": {
+          "tool": "cachelint",
+          "knowledge_base": "cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)",
+          "caveat": "Thresholds/prices are time-sensitive; verify against live provider docs."
+        }
+      }
+    },
+    {
+      "name": "an-vertex-claude-clean-action",
+      "description": "fix i: Claude-on-Vertex clean -> CACHEABLE_WITH_ACTION with (Anthropic upstream) phrasing",
+      "input": {
+        "input_file": "corpus/vertex-claude-clean.json"
+      },
+      "expected": {
+        "items": [
+          {
+            "index": 0,
+            "provider": "Google Vertex AI",
+            "provider_key": "vertex",
+            "upstream": "anthropic",
+            "model": "claude-fable-5",
+            "token_report": {
+              "total": {
+                "tokens": 1029,
+                "method": "estimate(~3.5 chars/tok)",
+                "exact": false,
+                "note": "for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+              },
+              "sections": {
+                "system": 1016,
+                "messages[0]:user": 12
+              }
+            },
+            "threshold": {
+              "min_tokens": 512,
+              "tier": "Claude-on-Vertex (Anthropic tiers): Fable 5 / Mythos 5 tier (lowest floor)",
+              "increment": null,
+              "meets": true
+            },
+            "system_report": {
+              "present": true,
+              "tokens": 1016,
+              "cached_unit_tokens": 1016,
+              "cached_unit_meets_threshold": true,
+              "findings_in_system": 0
+            },
+            "findings": [],
+            "stable_prefix": {
+              "tokens": 1029,
+              "pct_of_prompt": 100,
+              "limited_by": null,
+              "if_first_fixed_tokens": null
+            },
+            "verdict": {
+              "code": "CACHEABLE_WITH_ACTION",
+              "summary": "~1029 tok, no dynamic content detected — cacheable, but Google Vertex AI (Anthropic upstream) requires an explicit opt-in (see enablement)."
+            },
+            "enablement": {
+              "mode": "hybrid",
+              "detail": "Hosts TWO vendors with different cost models: Gemini (implicit auto + explicit CachedContent, 60-min default TTL) and Claude (cache_control breakpoints, 5m->1h).",
+              "action": "Gemini: implicit is on by default; explicit CachedContent for guaranteed reuse. Claude-on-Vertex: add \"cache_control\" breakpoints exactly as on the direct API."
+            },
+            "provider_intel": {
+              "ttl": "Gemini explicit: 60 min default; Claude: 5 min (free refresh) -> 1h opt-in",
+              "read_discount": "Gemini 90%/75%; Claude 90%",
+              "write_cost": "Gemini: std input + storage on explicit (no premium); Claude: +25% / +100% write",
+              "verify_field": "cachedContentTokenCount (Gemini) / cache_read_input_tokens (Claude)",
+              "routing": null,
+              "batch": "stacking UNDOCUMENTED",
+              "gotchas": [
+                "Per GCP project/region isolation; NO cross-project sharing.",
+                "Claude-on-Vertex has a per-project opt-out."
+              ],
+              "sources": [
+                "providers/vertex.md"
+              ]
+            },
+            "recommendations": [
+              "[enablement] Gemini: implicit is on by default; explicit CachedContent for guaranteed reuse. Claude-on-Vertex: add \"cache_control\" breakpoints exactly as on the direct API.",
+              "[verify] After deploying, assert cachedContentTokenCount (Gemini) / cache_read_input_tokens (Claude) > 0 in responses. 0 across identical-prefix requests = a silent invalidator is still present.",
+              "[ttl] Gemini explicit: 60 min default; Claude: 5 min (free refresh) -> 1h opt-in",
+              "[batch] stacking UNDOCUMENTED"
+            ],
+            "warnings": [
+              "Token counts are estimates (estimate(~3.5 chars/tok)). for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+            ]
+          }
+        ],
+        "sequences": [],
+        "meta": {
+          "tool": "cachelint",
+          "knowledge_base": "cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)",
+          "caveat": "Thresholds/prices are time-sensitive; verify against live provider docs."
+        }
+      }
+    },
+    {
+      "name": "an-openrouter-claude-action",
+      "description": "pass-through + anthropic upstream -> CACHEABLE_WITH_ACTION + pin-provider warning",
+      "input": {
+        "input_file": "corpus/openrouter-claude.json"
+      },
+      "expected": {
+        "items": [
+          {
+            "index": 0,
+            "provider": "OpenRouter (gateway)",
+            "provider_key": "openrouter",
+            "upstream": "anthropic",
+            "model": "anthropic/claude-fable-5",
+            "token_report": {
+              "total": {
+                "tokens": 1029,
+                "method": "estimate(~3.5 chars/tok)",
+                "exact": false,
+                "note": "for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+              },
+              "sections": {
+                "system": 1016,
+                "messages[0]:user": 12
+              }
+            },
+            "threshold": {
+              "min_tokens": 512,
+              "tier": "inherited from Anthropic upstream: Fable 5 / Mythos 5 tier (lowest floor)",
+              "increment": null,
+              "meets": true
+            },
+            "system_report": {
+              "present": true,
+              "tokens": 1016,
+              "cached_unit_tokens": 1016,
+              "cached_unit_meets_threshold": true,
+              "findings_in_system": 0
+            },
+            "findings": [],
+            "stable_prefix": {
+              "tokens": 1029,
+              "pct_of_prompt": 100,
+              "limited_by": null,
+              "if_first_fixed_tokens": null
+            },
+            "verdict": {
+              "code": "CACHEABLE_WITH_ACTION",
+              "summary": "~1029 tok, no dynamic content detected — cacheable, but OpenRouter (gateway) (Anthropic upstream) requires an explicit opt-in (see enablement)."
+            },
+            "enablement": {
+              "mode": "pass-through",
+              "detail": "Caching inherits from the upstream provider: automatic for OpenAI/Grok/DeepSeek/Groq/Gemini-2.5, cache_control for Anthropic/Gemini-explicit/Qwen. OpenRouter also has its own opt-in response cache (~80-300ms).",
+              "action": "Match the upstream's rule (for Claude models: forward \"cache_control\" breakpoints — OpenRouter passes them through). PIN the provider routing — switching upstream = cold cache. Use BYOK for privacy."
+            },
+            "provider_intel": {
+              "ttl": "inherited from upstream",
+              "read_discount": "inherited (e.g. 0.1x for Anthropic upstream)",
+              "write_cost": "passes through the upstream write premium",
+              "verify_field": "cached_tokens / cache_write_tokens / cache_discount",
+              "routing": "provider pinning (order/allow lists) — switching providers = cold cache",
+              "batch": "inherits upstream; stacking UNDOCUMENTED",
+              "gotchas": [
+                "SECURITY: the 2026 CacheProbe audit found cross-account prompt-cache leakage in OpenRouter's default shared-credential mode (Groq 100%, Fireworks p=4e-15). Mitigation: BYOK. Whether this was fixed post-mid-2026 is an open question.",
+                "The effective threshold depends on which upstream HOST serves the request (e.g. Claude direct vs Claude-on-Bedrock have different floors) — pin the provider.",
+                "Watch the cache_discount response field to verify savings."
+              ],
+              "sources": [
+                "providers/openrouter.md"
+              ]
+            },
+            "recommendations": [
+              "[enablement] Match the upstream's rule (for Claude models: forward \"cache_control\" breakpoints — OpenRouter passes them through). PIN the provider routing — switching upstream = cold cache. Use BYOK for privacy.",
+              "[routing] provider pinning (order/allow lists) — switching providers = cold cache",
+              "[verify] After deploying, assert cached_tokens / cache_write_tokens / cache_discount > 0 in responses. 0 across identical-prefix requests = a silent invalidator is still present.",
+              "[ttl] inherited from upstream",
+              "[batch] inherits upstream; stacking UNDOCUMENTED"
+            ],
+            "warnings": [
+              "Threshold assumes routing to the DIRECT Anthropic API; if OpenRouter routes to a Bedrock host the floor may differ. Pin the provider.",
+              "Token counts are estimates (estimate(~3.5 chars/tok)). for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+            ]
+          }
+        ],
+        "sequences": [],
+        "meta": {
+          "tool": "cachelint",
+          "knowledge_base": "cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)",
+          "caveat": "Thresholds/prices are time-sensitive; verify against live provider docs."
+        }
+      }
+    },
+    {
+      "name": "an-sections-and-system-report",
+      "description": "tools+system+message: per-section counts, system_report, cached_unit_tokens = tools+system",
+      "input": {
+        "input_file": "corpus/tools-system-msg.json"
+      },
+      "expected": {
+        "items": [
+          {
+            "index": 0,
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "upstream": null,
+            "model": "claude-fable-5",
+            "token_report": {
+              "total": {
+                "tokens": 257,
+                "method": "estimate(~3.5 chars/tok)",
+                "exact": false,
+                "note": "for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+              },
+              "sections": {
+                "tools": 43,
+                "system": 203,
+                "messages[0]:user": 10
+              }
+            },
+            "threshold": {
+              "min_tokens": 512,
+              "tier": "Fable 5 / Mythos 5 tier (lowest floor)",
+              "increment": null,
+              "meets": false
+            },
+            "system_report": {
+              "present": true,
+              "tokens": 203,
+              "cached_unit_tokens": 246,
+              "cached_unit_meets_threshold": false,
+              "findings_in_system": 0
+            },
+            "findings": [],
+            "stable_prefix": {
+              "tokens": 257,
+              "pct_of_prompt": 100,
+              "limited_by": null,
+              "if_first_fixed_tokens": null
+            },
+            "verdict": {
+              "code": "BELOW_THRESHOLD",
+              "summary": "Total prompt ~257 tok < 512 minimum — nothing will cache. Expanding the static content to reach the floor is often worthwhile."
+            },
+            "enablement": {
+              "mode": "explicit",
+              "detail": "OPT-IN: nothing caches unless you mark a breakpoint with \"cache_control\": {\"type\": \"ephemeral\"} (<= 4 breakpoints; 20-block lookback). Render order is tools -> system -> messages; a byte change invalidates everything after it.",
+              "action": "Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium)."
+            },
+            "provider_intel": {
+              "ttl": "5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'",
+              "read_discount": "90% (0.1x base input)",
+              "write_cost": "write premium: 1.25x (5-min TTL) / 2x (1-hour TTL); no storage fee",
+              "verify_field": "usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens)",
+              "routing": null,
+              "batch": "STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off",
+              "gotchas": [
+                "Below the model's minimum the marked prefix SILENTLY won't cache (cache_creation_input_tokens: 0, no error).",
+                "Model switch = cold cache (model-scoped). Toggling extended thinking invalidates system+messages (tools survive).",
+                "Serialize tool JSON deterministically (sorted keys, frozen order) — non-deterministic serialization is a classic silent invalidator.",
+                "Concurrency: entry readable only after the first response begins streaming — warm one, then fan out.",
+                "Pre-warm with a max_tokens: 0 request to skip cold-write latency on the first real request.",
+                "On Opus 5 / Opus 4.8 / Fable 5 / Mythos 5: append {\"role\": \"system\", ...} to messages for mid-conversation instructions instead of editing the top-level system prompt — preserves the cached prefix.",
+                "No prompt_cache_key equivalent — routing affinity cannot be steered; identical prefixes are the only lever."
+              ],
+              "sources": [
+                "providers/anthropic.md",
+                "claude-api reference (post-research updates)"
+              ]
+            },
+            "recommendations": [
+              "[enablement] Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium).",
+              "[verify] After deploying, assert usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens) > 0 in responses. 0 across identical-prefix requests = a silent invalidator is still present.",
+              "[batch] STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off"
+            ],
+            "warnings": [
+              "Token counts are estimates (estimate(~3.5 chars/tok)). for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+            ]
+          }
+        ],
+        "sequences": [],
+        "meta": {
+          "tool": "cachelint",
+          "knowledge_base": "cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)",
+          "caveat": "Thresholds/prices are time-sensitive; verify against live provider docs."
+        }
+      }
+    },
+    {
+      "name": "an-many-blockers-truncated-recs",
+      "description": "8+ blockers -> six [fix:*] recs + '[fix] ...and N more findings' trailer",
+      "input": {
+        "input_file": "corpus/kitchen-sink-findings.json"
+      },
+      "expected": {
+        "items": [
+          {
+            "index": 0,
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "upstream": null,
+            "model": "claude-fable-5",
+            "token_report": {
+              "total": {
+                "tokens": 123,
+                "method": "estimate(~3.5 chars/tok)",
+                "exact": false,
+                "note": "for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+              },
+              "sections": {
+                "system": 116,
+                "messages[0]:user": 7
+              }
+            },
+            "threshold": {
+              "min_tokens": 512,
+              "tier": "Fable 5 / Mythos 5 tier (lowest floor)",
+              "increment": null,
+              "meets": false
+            },
+            "system_report": {
+              "present": true,
+              "tokens": 116,
+              "cached_unit_tokens": 116,
+              "cached_unit_meets_threshold": false,
+              "findings_in_system": 16
+            },
+            "findings": [
+              {
+                "kind": "timestamp-datetime",
+                "severity": "high",
+                "start": 17,
+                "end": 37,
+                "section": "system",
+                "section_offset": 17,
+                "pct_into_prompt": 3.9,
+                "excerpt": "Report generated 2026-07-30T09:14:22Z for session 7f9c02aa-51b3-4...",
+                "why": "A full datetime changes every call — everything after it can never match byte-for-byte."
+              },
+              {
+                "kind": "uuid",
+                "severity": "high",
+                "start": 50,
+                "end": 86,
+                "section": "system",
+                "section_offset": 50,
+                "pct_into_prompt": 11.6,
+                "excerpt": "...07-30T09:14:22Z for session 7f9c02aa-51b3-4c2e-9f10-8a4d55e01b27. session_id: abc123def and ...",
+                "why": "UUIDs are unique per session/request — a new value on the next call breaks the prefix."
+              },
+              {
+                "kind": "session-id",
+                "severity": "high",
+                "start": 88,
+                "end": 109,
+                "section": "system",
+                "section_offset": 88,
+                "pct_into_prompt": 20.4,
+                "excerpt": "...1b3-4c2e-9f10-8a4d55e01b27. session_id: abc123def and api_key = sk-live-0a1b2...",
+                "why": "Per-session/user identifiers vary between calls and users — no cross-request (or cross-user) prefix sharing."
+              },
+              {
+                "kind": "secret-like",
+                "severity": "high",
+                "start": 114,
+                "end": 149,
+                "section": "system",
+                "section_offset": 114,
+                "pct_into_prompt": 26.5,
+                "excerpt": ".... session_id: abc123def and api_key = sk-live-0a1b2c3d4e5f6g7h. Second run 2026-07-30T09:15...",
+                "why": "Secret material in the prompt: rotates (breaking the cache) AND is a security smell — keys don't belong in prompts."
+              },
+              {
+                "kind": "timestamp-datetime",
+                "severity": "high",
+                "start": 161,
+                "end": 181,
+                "section": "system",
+                "section_offset": 161,
+                "pct_into_prompt": 37.4,
+                "excerpt": "...a1b2c3d4e5f6g7h. Second run 2026-07-30T09:15:37Z ref 3e1d02bb-42a1-4d3e-8c20...",
+                "why": "A full datetime changes every call — everything after it can never match byte-for-byte."
+              },
+              {
+                "kind": "uuid",
+                "severity": "high",
+                "start": 186,
+                "end": 222,
+                "section": "system",
+                "section_offset": 186,
+                "pct_into_prompt": 43.2,
+                "excerpt": "...un 2026-07-30T09:15:37Z ref 3e1d02bb-42a1-4d3e-8c20-9b5d66f12c38. Fill {customer_name} and {...",
+                "why": "UUIDs are unique per session/request — a new value on the next call breaks the prefix."
+              },
+              {
+                "kind": "template-braces",
+                "severity": "medium",
+                "start": 229,
+                "end": 244,
+                "section": "system",
+                "section_offset": 229,
+                "pct_into_prompt": 53.1,
+                "excerpt": "...d3e-8c20-9b5d66f12c38. Fill {customer_name} and {order_ref} and ${REGIO...",
+                "why": "Python .format()/f-string style placeholder — a per-call value will land here. (If this is literal JSON/code content, ignore.)"
+              },
+              {
+                "kind": "template-braces",
+                "severity": "medium",
+                "start": 249,
+                "end": 260,
+                "section": "system",
+                "section_offset": 249,
+                "pct_into_prompt": 57.8,
+                "excerpt": "...8. Fill {customer_name} and {order_ref} and ${REGION} and {{ accoun...",
+                "why": "Python .format()/f-string style placeholder — a per-call value will land here. (If this is literal JSON/code content, ignore.)"
+              },
+              {
+                "kind": "template-dollar",
+                "severity": "medium",
+                "start": 265,
+                "end": 274,
+                "section": "system",
+                "section_offset": 265,
+                "pct_into_prompt": 61.5,
+                "excerpt": "...r_name} and {order_ref} and ${REGION} and {{ account.id }}. Due 1...",
+                "why": "${...} template slot (JS template / shell) — value will differ per call."
+              },
+              {
+                "kind": "template-jinja",
+                "severity": "medium",
+                "start": 279,
+                "end": 295,
+                "section": "system",
+                "section_offset": 279,
+                "pct_into_prompt": 64.7,
+                "excerpt": "...rder_ref} and ${REGION} and {{ account.id }}. Due 12/31/2026 or January ...",
+                "why": "Jinja/Handlebars template slot — after rendering, the value will differ per call."
+              },
+              {
+                "kind": "date-us",
+                "severity": "medium",
+                "start": 301,
+                "end": 311,
+                "section": "system",
+                "section_offset": 301,
+                "pct_into_prompt": 69.8,
+                "excerpt": "...} and {{ account.id }}. Due 12/31/2026 or January 5, 2026, epoch 1...",
+                "why": "Date literal — breaks the cache daily if injected as 'today'."
+              },
+              {
+                "kind": "date-verbose",
+                "severity": "medium",
+                "start": 315,
+                "end": 330,
+                "section": "system",
+                "section_offset": 315,
+                "pct_into_prompt": 73.1,
+                "excerpt": "...nt.id }}. Due 12/31/2026 or January 5, 2026, epoch 1785312000. Meeting ...",
+                "why": "Spelled-out date — breaks the cache daily if injected as 'today'."
+              },
+              {
+                "kind": "timestamp-epoch",
+                "severity": "high",
+                "start": 338,
+                "end": 348,
+                "section": "system",
+                "section_offset": 338,
+                "pct_into_prompt": 78.4,
+                "excerpt": "...6 or January 5, 2026, epoch 1785312000. Meeting at 15:30, format %...",
+                "why": "Looks like a Unix epoch timestamp (seconds or ms) — changes every call."
+              },
+              {
+                "kind": "clock-time",
+                "severity": "low",
+                "start": 361,
+                "end": 366,
+                "section": "system",
+                "section_offset": 361,
+                "pct_into_prompt": 83.8,
+                "excerpt": "...poch 1785312000. Meeting at 15:30, format %s, hash 0123456789...",
+                "why": "Clock time — advisory; only a problem if it's an injected 'now'."
+              },
+              {
+                "kind": "template-percent-bare",
+                "severity": "low",
+                "start": 375,
+                "end": 377,
+                "section": "system",
+                "section_offset": 375,
+                "pct_into_prompt": 87,
+                "excerpt": "...0. Meeting at 15:30, format %s, hash 0123456789abcdef0123....",
+                "why": "Bare %-placeholder — advisory (often literal text)."
+              },
+              {
+                "kind": "hex-id",
+                "severity": "low",
+                "start": 384,
+                "end": 404,
+                "section": "system",
+                "section_offset": 384,
+                "pct_into_prompt": 89.1,
+                "excerpt": "...g at 15:30, format %s, hash 0123456789abcdef0123.\\n\\nuser: Summarize the day.",
+                "why": "Long hex string (object id / hash) — advisory; a problem if it varies per request."
+              }
+            ],
+            "stable_prefix": {
+              "tokens": 5,
+              "pct_of_prompt": 4.1,
+              "limited_by": {
+                "kind": "timestamp-datetime",
+                "severity": "high",
+                "start": 17,
+                "end": 37,
+                "section": "system",
+                "section_offset": 17,
+                "pct_into_prompt": 3.9,
+                "excerpt": "Report generated 2026-07-30T09:14:22Z for session 7f9c02aa-51b3-4...",
+                "why": "A full datetime changes every call — everything after it can never match byte-for-byte."
+              },
+              "if_first_fixed_tokens": 14
+            },
+            "verdict": {
+              "code": "BELOW_THRESHOLD",
+              "summary": "Total prompt ~123 tok < 512 minimum — nothing will cache. Expanding the static content to reach the floor is often worthwhile."
+            },
+            "enablement": {
+              "mode": "explicit",
+              "detail": "OPT-IN: nothing caches unless you mark a breakpoint with \"cache_control\": {\"type\": \"ephemeral\"} (<= 4 breakpoints; 20-block lookback). Render order is tools -> system -> messages; a byte change invalidates everything after it.",
+              "action": "Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium)."
+            },
+            "provider_intel": {
+              "ttl": "5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'",
+              "read_discount": "90% (0.1x base input)",
+              "write_cost": "write premium: 1.25x (5-min TTL) / 2x (1-hour TTL); no storage fee",
+              "verify_field": "usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens)",
+              "routing": null,
+              "batch": "STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off",
+              "gotchas": [
+                "Below the model's minimum the marked prefix SILENTLY won't cache (cache_creation_input_tokens: 0, no error).",
+                "Model switch = cold cache (model-scoped). Toggling extended thinking invalidates system+messages (tools survive).",
+                "Serialize tool JSON deterministically (sorted keys, frozen order) — non-deterministic serialization is a classic silent invalidator.",
+                "Concurrency: entry readable only after the first response begins streaming — warm one, then fan out.",
+                "Pre-warm with a max_tokens: 0 request to skip cold-write latency on the first real request.",
+                "On Opus 5 / Opus 4.8 / Fable 5 / Mythos 5: append {\"role\": \"system\", ...} to messages for mid-conversation instructions instead of editing the top-level system prompt — preserves the cached prefix.",
+                "No prompt_cache_key equivalent — routing affinity cannot be steered; identical prefixes are the only lever."
+              ],
+              "sources": [
+                "providers/anthropic.md",
+                "claude-api reference (post-research updates)"
+              ]
+            },
+            "recommendations": [
+              "[enablement] Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium).",
+              "[fix:timestamp-datetime] at system+17 (4% in): Remove it, round it to a coarse bucket (day/hour), or move it into the final user message (after the cached prefix).",
+              "[fix:uuid] at system+50 (12% in): Move per-session IDs after the static prefix — or drop them from the prompt entirely.",
+              "[fix:session-id] at system+88 (20% in): Move per-session/user IDs to the tail (final user message); they prevent any cross-request prefix reuse where they sit.",
+              "[fix:secret-like] at system+114 (26% in): Remove the secret from the prompt (pass credentials out-of-band). This is a security issue independent of caching.",
+              "[fix:timestamp-datetime] at system+161 (37% in): Remove it, round it to a coarse bucket (day/hour), or move it into the final user message (after the cached prefix).",
+              "[fix:uuid] at system+186 (43% in): Move per-session IDs after the static prefix — or drop them from the prompt entirely.",
+              "[fix] ...and 7 more findings (see the findings list).",
+              "[impact] Fixing the FIRST finding alone extends the stable prefix from ~5 to ~14 tok.",
+              "[verify] After deploying, assert usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens) > 0 in responses. 0 across identical-prefix requests = a silent invalidator is still present.",
+              "[batch] STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off"
+            ],
+            "warnings": [
+              "Token counts are estimates (estimate(~3.5 chars/tok)). for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+            ]
+          }
+        ],
+        "sequences": [],
+        "meta": {
+          "tool": "cachelint",
+          "knowledge_base": "cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)",
+          "caveat": "Thresholds/prices are time-sensitive; verify against live provider docs."
+        }
+      }
+    },
+    {
+      "name": "an-warnings-nontext-and-estimate",
+      "description": "non-text block warning + heuristic-estimate warning both surface",
+      "input": {
+        "input_file": "corpus/nontext-blocks.json"
+      },
+      "expected": {
+        "items": [
+          {
+            "index": 0,
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "upstream": null,
+            "model": "claude-fable-5",
+            "token_report": {
+              "total": {
+                "tokens": 146,
+                "method": "estimate(~3.5 chars/tok)",
+                "exact": false,
+                "note": "for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+              },
+              "sections": {
+                "system": 135,
+                "messages[0]:user": 10
+              }
+            },
+            "threshold": {
+              "min_tokens": 512,
+              "tier": "Fable 5 / Mythos 5 tier (lowest floor)",
+              "increment": null,
+              "meets": false
+            },
+            "system_report": {
+              "present": true,
+              "tokens": 135,
+              "cached_unit_tokens": 135,
+              "cached_unit_meets_threshold": false,
+              "findings_in_system": 0
+            },
+            "findings": [],
+            "stable_prefix": {
+              "tokens": 146,
+              "pct_of_prompt": 100,
+              "limited_by": null,
+              "if_first_fixed_tokens": null
+            },
+            "verdict": {
+              "code": "BELOW_THRESHOLD",
+              "summary": "Total prompt ~146 tok < 512 minimum — nothing will cache. Expanding the static content to reach the floor is often worthwhile."
+            },
+            "enablement": {
+              "mode": "explicit",
+              "detail": "OPT-IN: nothing caches unless you mark a breakpoint with \"cache_control\": {\"type\": \"ephemeral\"} (<= 4 breakpoints; 20-block lookback). Render order is tools -> system -> messages; a byte change invalidates everything after it.",
+              "action": "Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium)."
+            },
+            "provider_intel": {
+              "ttl": "5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'",
+              "read_discount": "90% (0.1x base input)",
+              "write_cost": "write premium: 1.25x (5-min TTL) / 2x (1-hour TTL); no storage fee",
+              "verify_field": "usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens)",
+              "routing": null,
+              "batch": "STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off",
+              "gotchas": [
+                "Below the model's minimum the marked prefix SILENTLY won't cache (cache_creation_input_tokens: 0, no error).",
+                "Model switch = cold cache (model-scoped). Toggling extended thinking invalidates system+messages (tools survive).",
+                "Serialize tool JSON deterministically (sorted keys, frozen order) — non-deterministic serialization is a classic silent invalidator.",
+                "Concurrency: entry readable only after the first response begins streaming — warm one, then fan out.",
+                "Pre-warm with a max_tokens: 0 request to skip cold-write latency on the first real request.",
+                "On Opus 5 / Opus 4.8 / Fable 5 / Mythos 5: append {\"role\": \"system\", ...} to messages for mid-conversation instructions instead of editing the top-level system prompt — preserves the cached prefix.",
+                "No prompt_cache_key equivalent — routing affinity cannot be steered; identical prefixes are the only lever."
+              ],
+              "sources": [
+                "providers/anthropic.md",
+                "claude-api reference (post-research updates)"
+              ]
+            },
+            "recommendations": [
+              "[enablement] Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium).",
+              "[verify] After deploying, assert usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens) > 0 in responses. 0 across identical-prefix requests = a silent invalidator is still present.",
+              "[batch] STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off"
+            ],
+            "warnings": [
+              "1 non-text block(s) (images/documents) approximated as placeholders — token counts underestimate them.",
+              "Token counts are estimates (estimate(~3.5 chars/tok)). for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+            ]
+          }
+        ],
+        "sequences": [],
+        "meta": {
+          "tool": "cachelint",
+          "knowledge_base": "cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)",
+          "caveat": "Thresholds/prices are time-sensitive; verify against live provider docs."
+        }
+      }
+    },
+    {
+      "name": "an-inputs-wrapper-single",
+      "description": "{'inputs': [one]} unwraps; single item -> sequences []",
+      "input": {
+        "data": {
+          "inputs": [
+            {
+              "prompt": "Short prompt.",
+              "llm": {
+                "provider": "anthropic",
+                "name": "claude-fable-5"
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "items": [
+          {
+            "index": 0,
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "upstream": null,
+            "model": "claude-fable-5",
+            "token_report": {
+              "total": {
+                "tokens": 5,
+                "method": "estimate(~3.5 chars/tok)",
+                "exact": false,
+                "note": "for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+              },
+              "sections": {
+                "messages[0]:user": 5
+              }
+            },
+            "threshold": {
+              "min_tokens": 512,
+              "tier": "Fable 5 / Mythos 5 tier (lowest floor)",
+              "increment": null,
+              "meets": false
+            },
+            "system_report": {
+              "present": false,
+              "tokens": 0,
+              "cached_unit_tokens": 0,
+              "cached_unit_meets_threshold": false,
+              "findings_in_system": 0
+            },
+            "findings": [],
+            "stable_prefix": {
+              "tokens": 5,
+              "pct_of_prompt": 100,
+              "limited_by": null,
+              "if_first_fixed_tokens": null
+            },
+            "verdict": {
+              "code": "BELOW_THRESHOLD",
+              "summary": "Total prompt ~5 tok < 512 minimum — nothing will cache. Expanding the static content to reach the floor is often worthwhile."
+            },
+            "enablement": {
+              "mode": "explicit",
+              "detail": "OPT-IN: nothing caches unless you mark a breakpoint with \"cache_control\": {\"type\": \"ephemeral\"} (<= 4 breakpoints; 20-block lookback). Render order is tools -> system -> messages; a byte change invalidates everything after it.",
+              "action": "Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium)."
+            },
+            "provider_intel": {
+              "ttl": "5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'",
+              "read_discount": "90% (0.1x base input)",
+              "write_cost": "write premium: 1.25x (5-min TTL) / 2x (1-hour TTL); no storage fee",
+              "verify_field": "usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens)",
+              "routing": null,
+              "batch": "STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off",
+              "gotchas": [
+                "Below the model's minimum the marked prefix SILENTLY won't cache (cache_creation_input_tokens: 0, no error).",
+                "Model switch = cold cache (model-scoped). Toggling extended thinking invalidates system+messages (tools survive).",
+                "Serialize tool JSON deterministically (sorted keys, frozen order) — non-deterministic serialization is a classic silent invalidator.",
+                "Concurrency: entry readable only after the first response begins streaming — warm one, then fan out.",
+                "Pre-warm with a max_tokens: 0 request to skip cold-write latency on the first real request.",
+                "On Opus 5 / Opus 4.8 / Fable 5 / Mythos 5: append {\"role\": \"system\", ...} to messages for mid-conversation instructions instead of editing the top-level system prompt — preserves the cached prefix.",
+                "No prompt_cache_key equivalent — routing affinity cannot be steered; identical prefixes are the only lever."
+              ],
+              "sources": [
+                "providers/anthropic.md",
+                "claude-api reference (post-research updates)"
+              ]
+            },
+            "recommendations": [
+              "[enablement] Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium).",
+              "[verify] After deploying, assert usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens) > 0 in responses. 0 across identical-prefix requests = a silent invalidator is still present.",
+              "[batch] STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off"
+            ],
+            "warnings": [
+              "Token counts are estimates (estimate(~3.5 chars/tok)). for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+            ]
+          }
+        ],
+        "sequences": [],
+        "meta": {
+          "tool": "cachelint",
+          "knowledge_base": "cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)",
+          "caveat": "Thresholds/prices are time-sensitive; verify against live provider docs."
+        }
+      }
+    },
+    {
+      "name": "an-hebrew-30pct",
+      "description": "Hebrew-heavy prompt: 2.6 rate label (fix k) flows into the verdict math",
+      "input": {
+        "input_file": "corpus/hebrew-heavy.json"
+      },
+      "expected": {
+        "items": [
+          {
+            "index": 0,
+            "provider": "Anthropic (Claude)",
+            "provider_key": "anthropic",
+            "upstream": null,
+            "model": "claude-fable-5",
+            "token_report": {
+              "total": {
+                "tokens": 510,
+                "method": "estimate(~2.6 chars/tok)",
+                "exact": false,
+                "note": "for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+              },
+              "sections": {
+                "system": 498,
+                "messages[0]:user": 10
+              }
+            },
+            "threshold": {
+              "min_tokens": 512,
+              "tier": "Fable 5 / Mythos 5 tier (lowest floor)",
+              "increment": null,
+              "meets": false
+            },
+            "system_report": {
+              "present": true,
+              "tokens": 498,
+              "cached_unit_tokens": 498,
+              "cached_unit_meets_threshold": false,
+              "findings_in_system": 0
+            },
+            "findings": [],
+            "stable_prefix": {
+              "tokens": 510,
+              "pct_of_prompt": 100,
+              "limited_by": null,
+              "if_first_fixed_tokens": null
+            },
+            "verdict": {
+              "code": "BELOW_THRESHOLD",
+              "summary": "Total prompt ~510 tok < 512 minimum — nothing will cache. Expanding the static content to reach the floor is often worthwhile."
+            },
+            "enablement": {
+              "mode": "explicit",
+              "detail": "OPT-IN: nothing caches unless you mark a breakpoint with \"cache_control\": {\"type\": \"ephemeral\"} (<= 4 breakpoints; 20-block lookback). Render order is tools -> system -> messages; a byte change invalidates everything after it.",
+              "action": "Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium)."
+            },
+            "provider_intel": {
+              "ttl": "5 min (refreshed FREE on every hit) / 1h opt-in via ttl:'1h'",
+              "read_discount": "90% (0.1x base input)",
+              "write_cost": "write premium: 1.25x (5-min TTL) / 2x (1-hour TTL); no storage fee",
+              "verify_field": "usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens)",
+              "routing": null,
+              "batch": "STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off",
+              "gotchas": [
+                "Below the model's minimum the marked prefix SILENTLY won't cache (cache_creation_input_tokens: 0, no error).",
+                "Model switch = cold cache (model-scoped). Toggling extended thinking invalidates system+messages (tools survive).",
+                "Serialize tool JSON deterministically (sorted keys, frozen order) — non-deterministic serialization is a classic silent invalidator.",
+                "Concurrency: entry readable only after the first response begins streaming — warm one, then fan out.",
+                "Pre-warm with a max_tokens: 0 request to skip cold-write latency on the first real request.",
+                "On Opus 5 / Opus 4.8 / Fable 5 / Mythos 5: append {\"role\": \"system\", ...} to messages for mid-conversation instructions instead of editing the top-level system prompt — preserves the cached prefix.",
+                "No prompt_cache_key equivalent — routing affinity cannot be steered; identical prefixes are the only lever."
+              ],
+              "sources": [
+                "providers/anthropic.md",
+                "claude-api reference (post-research updates)"
+              ]
+            },
+            "recommendations": [
+              "[enablement] Add \"cache_control\": {\"type\": \"ephemeral\"} on the LAST static block (end of system prompt or last stable message). For >5-min gaps use {\"type\": \"ephemeral\", \"ttl\": \"1h\"} (2x write premium).",
+              "[verify] After deploying, assert usage.cache_read_input_tokens (writes: usage.cache_creation_input_tokens) > 0 in responses. 0 across identical-prefix requests = a silent invalidator is still present.",
+              "[batch] STACKS with the Batch API 50%: cache read in a batch = 0.1x * 0.5x = ~95% off"
+            ],
+            "warnings": [
+              "Token counts are estimates (estimate(~2.6 chars/tok)). for exact counts use POST /v1/messages/count_tokens (never tiktoken for Claude)"
+            ]
+          }
+        ],
+        "sequences": [],
+        "meta": {
+          "tool": "cachelint",
+          "knowledge_base": "cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)",
+          "caveat": "Thresholds/prices are time-sensitive; verify against live provider docs."
+        }
+      }
+    },
+    {
+      "name": "an-provider-model-fallback-chain",
+      "description": "top-level provider + llm.model (not name) resolve via the fallback chain",
+      "input": {
+        "data": {
+          "prompt": "Short prompt.",
+          "provider": "openai",
+          "llm": {
+            "model": "gpt-5.2"
+          }
+        }
+      },
+      "expected": {
+        "items": [
+          {
+            "index": 0,
+            "provider": "OpenAI",
+            "provider_key": "openai",
+            "upstream": null,
+            "model": "gpt-5.2",
+            "token_report": {
+              "total": {
+                "tokens": 5,
+                "method": "tiktoken(o200k_base)",
+                "exact": true,
+                "note": ""
+              },
+              "sections": {
+                "messages[0]:user": 5
+              }
+            },
+            "threshold": {
+              "min_tokens": 1024,
+              "tier": "uniform for all OpenAI models (+128-token steps)",
+              "increment": 128,
+              "meets": false
+            },
+            "system_report": {
+              "present": false,
+              "tokens": 0,
+              "cached_unit_tokens": 0,
+              "cached_unit_meets_threshold": false,
+              "findings_in_system": 0
+            },
+            "findings": [],
+            "stable_prefix": {
+              "tokens": 5,
+              "pct_of_prompt": 100,
+              "limited_by": null,
+              "if_first_fixed_tokens": null
+            },
+            "verdict": {
+              "code": "BELOW_THRESHOLD",
+              "summary": "Total prompt ~5 tok < 1024 minimum — nothing will cache. Expanding the static content to reach the floor is often worthwhile."
+            },
+            "enablement": {
+              "mode": "automatic",
+              "detail": "Caching is on by default for prompts >= 1,024 tokens — no request changes needed. Reuse the exact prefix; cached amounts grow in 128-token steps.",
+              "action": null
+            },
+            "provider_intel": {
+              "ttl": "5-10 min sliding; up to 24h extended retention (non-ZDR default since May 2026)",
+              "read_discount": "per-model 50% -> 98.75% (90% on GPT-5.x) — NOT a flat 50%",
+              "write_cost": "free through GPT-5.5; ~1.25x input on GPT-5.6+ (single-use large prompts pay the premium for nothing)",
+              "verify_field": "usage.prompt_tokens_details.cached_tokens",
+              "routing": "prompt_cache_key — same string per prefix-group; keep <= ~15 RPM per key",
+              "batch": "batch x caching stacking is UNDOCUMENTED (open question in the research)",
+              "gotchas": [
+                "A cache entry becomes readable only after the writing request completes — N simultaneous cold requests all pay full price. Warm one, then fan out.",
+                "Discount is per-model; verify against the live pricing page before quoting numbers.",
+                "Org-level cache scope."
+              ],
+              "sources": [
+                "providers/openai.md"
+              ]
+            },
+            "recommendations": [
+              "[routing] prompt_cache_key — same string per prefix-group; keep <= ~15 RPM per key",
+              "[verify] After deploying, assert usage.prompt_tokens_details.cached_tokens > 0 in responses. 0 across identical-prefix requests = a silent invalidator is still present.",
+              "[batch] batch x caching stacking is UNDOCUMENTED (open question in the research)"
+            ],
+            "warnings": []
+          }
+        ],
+        "sequences": [],
+        "meta": {
+          "tool": "cachelint",
+          "knowledge_base": "cache_providers research 2026-07 (research-matrix.md, SYNTHESIS.md, providers/*.md)",
+          "caveat": "Thresholds/prices are time-sensitive; verify against live provider docs."
+        }
+      }
+    }
+  ]
+}

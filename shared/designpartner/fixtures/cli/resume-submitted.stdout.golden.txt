@@ -1,0 +1,5 @@
+tryaii designpartner -- stage: submitted
+
+saved locally at .tryaii/designpartner/submission-20260101T000300Z.json (not delivered)
+
+next: Enrollment complete. Nothing further to do.

@@ -5,6 +5,11 @@
  * weighted by user priorities. This is the heart of the routing logic.
  */
 
+// The half-even helpers replicate Python round()/f"{x:.Nf}" exactly (see
+// shared/cachelint/SPEC.md §1.2/§1.5) — the Python engine is this engine's
+// byte-parity reference, and Math.round/toFixed diverge from it on ties.
+// halfEven.ts is a tiny pure module (no tokenizer data comes with it).
+import { formatFixed, halfEvenRound } from '../cachelint/util/halfEven.js';
 import { ModelInfo } from '../registry/models.js';
 import { BenchmarkNormalizer } from './benchmarks.js';
 import { DEFAULT_PRIORITIES, Priorities } from './priorities.js';
@@ -46,6 +51,17 @@ const TOP_BENCHMARKS_FOR_SCORING = 5;
  * cost/speed instead of being dropped. See scoreModels' neutralFallback retry.
  */
 const NEUTRAL_QUALITY_SCORE = 0.5;
+
+/**
+ * Shrinkage constant for imputing a missing benchmark. The imputed value blends
+ * the model's own demonstrated level with the registry median, weighting the
+ * model's level by `n / (n + K)` where n is how many benchmarks the model
+ * actually has. K=3 means a model needs ~3 real benchmarks before its own level
+ * outweighs the median. This stops a sparse *strong* model being flattened to
+ * "average" while still preventing a one-benchmark model from inflating itself.
+ * With a dense catalog imputation rarely fires, so this is a mild change there.
+ */
+const IMPUTATION_SHRINKAGE_K = 3;
 
 /**
  * Compute the median raw benchmark score across the registry, per benchmark.
@@ -187,7 +203,7 @@ export class ScoringEngine {
           s.finalScore = 0.5;
         } else {
           const normalized = (s.finalScore - minRaw) / (maxRaw - minRaw);
-          s.finalScore = Math.round((0.1 + 0.85 * normalized) * 10000) / 10000;
+          s.finalScore = halfEvenRound(0.1 + 0.85 * normalized, 4);
         }
       }
     } else if (scores.length === 1) {
@@ -195,10 +211,31 @@ export class ScoringEngine {
       // (that forced ~0.95 regardless of how good the model actually is).
       // Surface its own unnormalized weighted score, clamped to [0,1].
       const only = scores[0];
-      only.finalScore = Math.round(Math.max(0, Math.min(1, only.finalScore)) * 10000) / 10000;
+      only.finalScore = halfEvenRound(Math.max(0, Math.min(1, only.finalScore)), 4);
     }
 
     return scores.slice(0, topK);
+  }
+
+  /**
+   * The model's own demonstrated quality level: the *median* of its normalized
+   * scores across every benchmark it has data for, plus that count. Used as the
+   * shrinkage target when imputing missing benchmarks so a strong model isn't
+   * imputed as "average". The median (rather than mean) keeps a single corrupt
+   * or anomalously-low score from dragging the level down. Returns level 0.5
+   * (neutral) for a model with no data.
+   */
+  private _modelLevel(model: ModelInfo): { level: number; count: number } {
+    const entries = Object.entries(model.benchmarkScores).filter(([, raw]) =>
+      Number.isFinite(raw),
+    );
+    if (entries.length === 0) return { level: 0.5, count: 0 };
+    const norms = entries
+      .map(([name, raw]) => this._normalizer.normalize(name, raw))
+      .sort((a, b) => a - b);
+    const mid = Math.floor(norms.length / 2);
+    const level = norms.length % 2 === 1 ? norms[mid] : (norms[mid - 1] + norms[mid]) / 2;
+    return { level, count: norms.length };
   }
 
   private _scoreSingleModel(
@@ -220,11 +257,17 @@ export class ScoringEngine {
     // not registry-median guesses.
     const modelTopBenchmarks: Array<[string, number]> = [];
 
+    // The model's own demonstrated level and how much we trust it, used to
+    // impute missing benchmarks via shrinkage toward the registry median.
+    const { level: modelLevel, count: knownCount } = this._modelLevel(model);
+    const alpha = knownCount / (knownCount + IMPUTATION_SHRINKAGE_K);
+
     for (const [benchmarkName, userSimilarity] of Object.entries(topBenchmarks)) {
-      let rawScore = model.benchmarkScores[benchmarkName];
+      const rawScore = model.benchmarkScores[benchmarkName];
+      let normalized: number;
       let imputed = false;
       // !Number.isFinite treats NaN/Infinity like a missing score so a junk
-      // value is imputed from the median rather than poisoning the result.
+      // value is imputed rather than poisoning the result.
       if (!Number.isFinite(rawScore)) {
         const median = benchmarkMedians[benchmarkName];
         // No model in the registry has data on this benchmark -> nothing to
@@ -232,14 +275,26 @@ export class ScoringEngine {
         // "skip the model entirely if it intersects nothing" semantic, which
         // is exactly what the test at line ~140 of engine.test.ts pins.
         if (median == null) continue;
-        rawScore = median;
+        // Shrinkage imputation: blend the model's own level with the registry
+        // median (in normalized space). A high-coverage strong model keeps a
+        // high imputed value instead of being dragged to the median; a sparse
+        // model stays near the median so it can't inflate itself.
+        const medianNorm = this._normalizer.normalize(benchmarkName, median);
+        normalized = alpha * modelLevel + (1 - alpha) * medianNorm;
         imputed = true;
         imputedCount += 1;
+      } else {
+        normalized = this._normalizer.normalize(benchmarkName, rawScore);
       }
 
-      const normalized = this._normalizer.normalize(benchmarkName, rawScore);
-      weightedQualitySum += userSimilarity * normalized;
-      totalSimilarityWeight += userSimilarity;
+      // Combine prompt-relevance (similarity) with the benchmark's intrinsic
+      // importance weight. similarity says "how much this prompt looks like the
+      // benchmark"; weight says "how much we trust the benchmark as a signal".
+      // With the default (empty) weight table getWeight is 1.0, so this reduces
+      // to the old similarity-only aggregation exactly.
+      const weight = userSimilarity * this._normalizer.getWeight(benchmarkName);
+      weightedQualitySum += weight * normalized;
+      totalSimilarityWeight += weight;
       if (!imputed) modelTopBenchmarks.push([benchmarkName, normalized]);
     }
 
@@ -290,14 +345,14 @@ export class ScoringEngine {
     // Generate reasoning
     const topBenchStr = modelTopBenchmarks
       .slice(0, 2)
-      .map(([b, s]) => `${b} (${Math.round(s * 100)}%)`)
+      .map(([b, s]) => `${b} (${formatFixed(s * 100, 0)}%)`)
       .join(', ');
 
     let reasoning: string;
     if (noSignal) {
       reasoning = 'No benchmark signal -- routed on cost/speed';
     } else {
-      reasoning = `Quality: ${qualityScore.toFixed(2)} on [${topBenchStr}]`;
+      reasoning = `Quality: ${formatFixed(qualityScore, 2)} on [${topBenchStr}]`;
       if (imputedCount > 0) {
         // Tell the reader the score is partly an estimate. Useful when reading
         // eval output and wondering why a model with thin coverage ranked here.
@@ -306,21 +361,21 @@ export class ScoringEngine {
       }
     }
     if (costScore > 0) {
-      reasoning += ` | Cost efficiency: ${costScore.toFixed(2)}`;
+      reasoning += ` | Cost efficiency: ${formatFixed(costScore, 2)}`;
     }
     if (speedScore > 0) {
-      reasoning += ` | Speed: ${speedScore.toFixed(2)} (${model.latency})`;
+      reasoning += ` | Speed: ${formatFixed(speedScore, 2)} (${model.latency})`;
     }
 
     return {
       modelId: model.modelId,
       finalScore: final,
-      qualityScore: Math.round(qualityScore * 10000) / 10000,
-      costScore: Math.round(costScore * 10000) / 10000,
-      speedScore: Math.round(speedScore * 10000) / 10000,
-      qualityContribution: Math.round(qContrib * 10000) / 10000,
-      costContribution: Math.round(cContrib * 10000) / 10000,
-      speedContribution: Math.round(sContrib * 10000) / 10000,
+      qualityScore: halfEvenRound(qualityScore, 4),
+      costScore: halfEvenRound(costScore, 4),
+      speedScore: halfEvenRound(speedScore, 4),
+      qualityContribution: halfEvenRound(qContrib, 4),
+      costContribution: halfEvenRound(cContrib, 4),
+      speedContribution: halfEvenRound(sContrib, 4),
       topBenchmarks: modelTopBenchmarks,
       reasoning,
     };
