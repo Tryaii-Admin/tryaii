@@ -4,7 +4,7 @@
   "cases": [
     {
       "name": "no-answers",
-      "description": "SPEC §3.1: with no answers, only unconditioned questions are applicable — every models_* question is gated.",
+      "description": "SPEC §3.1: with no answers, only unconditioned questions are applicable — every 'Other' follow-up and the latency question are gated.",
       "input": {
         "answers": {}
       },
@@ -13,41 +13,58 @@
           "name",
           "email",
           "company",
-          "role",
-          "company_size",
+          "team_size",
+          "ai_tools_in_use",
+          "decision_authority",
           "providers",
+          "models",
           "frameworks",
+          "existing_solution",
+          "use_cases",
           "calls_per_day",
           "monthly_spend",
           "deployment_stage",
+          "eval_methods",
           "model_choice_process",
           "cache_effort",
           "biggest_pain",
+          "cost_target",
           "features_interest",
-          "follow_up_call"
+          "checkins_ok",
+          "reference_ok"
         ],
         "required": [
           "name",
           "email",
+          "ai_tools_in_use",
+          "decision_authority",
           "providers",
+          "frameworks",
+          "existing_solution",
+          "use_cases",
           "calls_per_day",
           "monthly_spend",
           "deployment_stage",
           "model_choice_process",
           "cache_effort",
           "biggest_pain",
+          "cost_target",
           "features_interest",
-          "follow_up_call"
+          "checkins_ok",
+          "reference_ok"
         ]
       }
     },
     {
       "name": "contains-gates",
-      "description": "SPEC §3.1 contains: selecting openai + other unlocks exactly those two models_* questions, which are then required.",
+      "description": "SPEC §3.1 contains: picking Other for providers and for frameworks unlocks exactly those two follow-up questions, which are then required.",
       "input": {
         "answers": {
           "providers": [
             "openai",
+            "other"
+          ],
+          "frameworks": [
             "other"
           ]
         }
@@ -57,41 +74,55 @@
           "name",
           "email",
           "company",
-          "role",
-          "company_size",
+          "team_size",
+          "ai_tools_in_use",
+          "decision_authority",
           "providers",
-          "models_openai",
           "models_other",
+          "models",
           "frameworks",
+          "frameworks_other",
+          "existing_solution",
+          "use_cases",
           "calls_per_day",
           "monthly_spend",
           "deployment_stage",
+          "eval_methods",
           "model_choice_process",
           "cache_effort",
           "biggest_pain",
+          "cost_target",
           "features_interest",
-          "follow_up_call"
+          "checkins_ok",
+          "reference_ok"
         ],
         "required": [
           "name",
           "email",
+          "ai_tools_in_use",
+          "decision_authority",
           "providers",
-          "models_openai",
           "models_other",
+          "frameworks",
+          "frameworks_other",
+          "existing_solution",
+          "use_cases",
           "calls_per_day",
           "monthly_spend",
           "deployment_stage",
           "model_choice_process",
           "cache_effort",
           "biggest_pain",
+          "cost_target",
           "features_interest",
-          "follow_up_call"
+          "checkins_ok",
+          "reference_ok"
         ]
       }
     },
     {
       "name": "full-valid-answers",
-      "description": "The valid corpus answers unlock the openai + anthropic model questions.",
+      "description": "The valid corpus answers unlock latency_sensitivity (customer-facing production) and nothing else.",
       "input": {
         "answers_file": "corpus/answers-valid.json"
       },
@@ -100,35 +131,47 @@
           "name",
           "email",
           "company",
-          "role",
-          "company_size",
+          "team_size",
+          "ai_tools_in_use",
+          "decision_authority",
           "providers",
-          "models_openai",
-          "models_anthropic",
+          "models",
           "frameworks",
+          "existing_solution",
+          "use_cases",
           "calls_per_day",
           "monthly_spend",
           "deployment_stage",
+          "latency_sensitivity",
+          "eval_methods",
           "model_choice_process",
           "cache_effort",
           "biggest_pain",
+          "cost_target",
           "features_interest",
-          "follow_up_call"
+          "checkins_ok",
+          "reference_ok"
         ],
         "required": [
           "name",
           "email",
+          "ai_tools_in_use",
+          "decision_authority",
           "providers",
-          "models_openai",
-          "models_anthropic",
+          "frameworks",
+          "existing_solution",
+          "use_cases",
           "calls_per_day",
           "monthly_spend",
           "deployment_stage",
+          "latency_sensitivity",
           "model_choice_process",
           "cache_effort",
           "biggest_pain",
+          "cost_target",
           "features_interest",
-          "follow_up_call"
+          "checkins_ok",
+          "reference_ok"
         ]
       }
     },
@@ -145,31 +188,45 @@
           "name",
           "email",
           "company",
-          "role",
-          "company_size",
+          "team_size",
+          "ai_tools_in_use",
+          "decision_authority",
           "providers",
+          "models",
           "frameworks",
+          "existing_solution",
+          "use_cases",
           "calls_per_day",
           "monthly_spend",
           "deployment_stage",
+          "eval_methods",
           "model_choice_process",
           "cache_effort",
           "biggest_pain",
+          "cost_target",
           "features_interest",
-          "follow_up_call"
+          "checkins_ok",
+          "reference_ok"
         ],
         "required": [
           "name",
           "email",
+          "ai_tools_in_use",
+          "decision_authority",
           "providers",
+          "frameworks",
+          "existing_solution",
+          "use_cases",
           "calls_per_day",
           "monthly_spend",
           "deployment_stage",
           "model_choice_process",
           "cache_effort",
           "biggest_pain",
+          "cost_target",
           "features_interest",
-          "follow_up_call"
+          "checkins_ok",
+          "reference_ok"
         ]
       }
     }

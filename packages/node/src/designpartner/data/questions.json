@@ -1,110 +1,494 @@
 {
   "schema": "tryaii.designpartner.questions/1",
-  "about": "The tryaii design-partner questionnaire + consent tiers. The agent asks these conversationally (honoring ask_if) and shows each consent tier's copy VERBATIM. Answers are a flat {question_id: answer} object.",
+  "about": "DRAFT v4 of the tryaii design-partner questionnaire + consent tiers. Every 'Other' option has a companion free-text question (<qid>_other / <topic>_other) gated on it - the interview asks it in the same breath as the parent. Eval methods are multi-select; calls and spend buckets start at 100 and offer 'Other / not sure' with a free-text estimate; the saving question is asked of everyone and allows 'cost isn't what would decide it'. Same schema, same ask_if grammar. The agent asks these conversationally (honoring ask_if) and shows each consent tier's copy VERBATIM. Answers are a flat {question_id: answer} object.",
   "sections": [
     {
       "id": "about",
       "title": "About you",
       "questions": [
-        { "id": "name", "type": "text", "prompt": "What's your name?", "required": true },
-        { "id": "email", "type": "text", "format": "email", "prompt": "What email should we use to reach you about the program?", "required": true },
-        { "id": "company", "type": "text", "prompt": "What company or project is this for?", "required": false },
-        { "id": "role", "type": "text", "prompt": "What's your role there?", "required": false },
         {
-          "id": "company_size",
+          "id": "name",
+          "type": "text",
+          "prompt": "What's your name?",
+          "required": true
+        },
+        {
+          "id": "email",
+          "type": "text",
+          "format": "email",
+          "prompt": "What's the best email to reach you?",
+          "required": true
+        },
+        {
+          "id": "company",
+          "type": "text",
+          "prompt": "What's the name of your company or product?",
+          "required": false
+        },
+        {
+          "id": "team_size",
           "type": "select",
-          "prompt": "How big is the team?",
+          "prompt": "How big is the team behind this AI project?",
           "required": false,
           "options": [
-            { "id": "solo", "label": "Just me" },
-            { "id": "2_10", "label": "2-10 people" },
-            { "id": "11_50", "label": "11-50 people" },
-            { "id": "51_200", "label": "51-200 people" },
-            { "id": "over_200", "label": "More than 200 people" }
+            {
+              "id": "solo",
+              "label": "Just me"
+            },
+            {
+              "id": "2_10",
+              "label": "2-10 people"
+            },
+            {
+              "id": "11_50",
+              "label": "11-50 people"
+            },
+            {
+              "id": "51_200",
+              "label": "51-200 people"
+            },
+            {
+              "id": "over_200",
+              "label": "More than 200 people"
+            }
+          ]
+        },
+        {
+          "id": "ai_tools_in_use",
+          "type": "select",
+          "prompt": "How many AI tools does your team use day to day - coding assistants, gateways, eval tools, that kind of thing?",
+          "required": true,
+          "options": [
+            {
+              "id": "0",
+              "label": "0"
+            },
+            {
+              "id": "1_2",
+              "label": "1-2"
+            },
+            {
+              "id": "3_5",
+              "label": "3-5"
+            },
+            {
+              "id": "6_plus",
+              "label": "6+"
+            },
+            {
+              "id": "other",
+              "label": "Other"
+            }
+          ]
+        },
+        {
+          "id": "ai_tools_other",
+          "type": "text",
+          "prompt": "How many, roughly?",
+          "required": true,
+          "ask_if": {
+            "question": "ai_tools_in_use",
+            "op": "equals",
+            "value": "other"
+          }
+        },
+        {
+          "id": "decision_authority",
+          "type": "select",
+          "prompt": "And who normally decides on a new tool like that?",
+          "required": true,
+          "options": [
+            {
+              "id": "me",
+              "label": "Me - I decide"
+            },
+            {
+              "id": "engineers_pick",
+              "label": "Engineers pick their own"
+            },
+            {
+              "id": "my_manager",
+              "label": "The team lead or manager"
+            },
+            {
+              "id": "finance_procurement",
+              "label": "Procurement or finance"
+            },
+            {
+              "id": "not_sure",
+              "label": "Depends / not sure"
+            }
           ]
         }
       ]
     },
     {
       "id": "ai_usage",
-      "title": "How you use AI",
+      "title": "Your application",
       "questions": [
         {
           "id": "providers",
           "type": "multi_select",
-          "prompt": "Which LLM providers do you use today?",
+          "prompt": "Which LLM providers does your application use?",
           "required": true,
           "options": [
-            { "id": "openai", "label": "OpenAI" },
-            { "id": "anthropic", "label": "Anthropic" },
-            { "id": "google", "label": "Google (Gemini)" },
-            { "id": "meta_llama", "label": "Meta (Llama)" },
-            { "id": "mistral", "label": "Mistral" },
-            { "id": "deepseek", "label": "DeepSeek" },
-            { "id": "xai", "label": "xAI (Grok)" },
-            { "id": "cohere", "label": "Cohere" },
-            { "id": "other", "label": "Other" }
+            {
+              "id": "openai",
+              "label": "OpenAI"
+            },
+            {
+              "id": "anthropic",
+              "label": "Anthropic"
+            },
+            {
+              "id": "google",
+              "label": "Google (Gemini)"
+            },
+            {
+              "id": "mistral",
+              "label": "Mistral"
+            },
+            {
+              "id": "deepseek",
+              "label": "DeepSeek"
+            },
+            {
+              "id": "xai",
+              "label": "xAI (Grok)"
+            },
+            {
+              "id": "open_source",
+              "label": "Open-source / self-hosted models"
+            },
+            {
+              "id": "huggingface",
+              "label": "Hugging Face"
+            },
+            {
+              "id": "other",
+              "label": "Other"
+            }
           ]
         },
-        { "id": "models_openai", "type": "text", "prompt": "Which OpenAI models do you use most?", "required": true, "ask_if": { "question": "providers", "op": "contains", "value": "openai" } },
-        { "id": "models_anthropic", "type": "text", "prompt": "Which Anthropic models do you use most?", "required": true, "ask_if": { "question": "providers", "op": "contains", "value": "anthropic" } },
-        { "id": "models_google", "type": "text", "prompt": "Which Gemini models do you use most?", "required": true, "ask_if": { "question": "providers", "op": "contains", "value": "google" } },
-        { "id": "models_other", "type": "text", "prompt": "Which other providers/models do you use?", "required": true, "ask_if": { "question": "providers", "op": "contains", "value": "other" } },
+        {
+          "id": "models_other",
+          "type": "text",
+          "prompt": "Which other providers?",
+          "required": true,
+          "ask_if": {
+            "question": "providers",
+            "op": "contains",
+            "value": "other"
+          }
+        },
+        {
+          "id": "models",
+          "type": "text",
+          "prompt": "Which models do you use the most?",
+          "required": false
+        },
         {
           "id": "frameworks",
           "type": "multi_select",
-          "prompt": "Which frameworks or gateways sit between your code and the models?",
-          "required": false,
+          "prompt": "How do you call the models from your code?",
+          "required": true,
           "options": [
-            { "id": "langchain", "label": "LangChain" },
-            { "id": "llamaindex", "label": "LlamaIndex" },
-            { "id": "vercel_ai", "label": "Vercel AI SDK" },
-            { "id": "litellm", "label": "LiteLLM" },
-            { "id": "openrouter", "label": "OpenRouter" },
-            { "id": "direct_sdk", "label": "Provider SDKs directly" },
-            { "id": "in_house", "label": "In-house layer" },
-            { "id": "other", "label": "Other" }
+            {
+              "id": "direct_sdk",
+              "label": "Provider SDKs directly"
+            },
+            {
+              "id": "openrouter",
+              "label": "Through OpenRouter"
+            },
+            {
+              "id": "in_house",
+              "label": "Through an in-house layer"
+            },
+            {
+              "id": "other",
+              "label": "Other"
+            }
           ]
+        },
+        {
+          "id": "frameworks_other",
+          "type": "text",
+          "prompt": "Which framework or gateway do you use?",
+          "required": true,
+          "ask_if": {
+            "question": "frameworks",
+            "op": "contains",
+            "value": "other"
+          }
+        },
+        {
+          "id": "existing_solution",
+          "type": "select",
+          "prompt": "Do you already have anything in place for model routing, caching or cost control?",
+          "required": true,
+          "options": [
+            {
+              "id": "none",
+              "label": "Nothing yet"
+            },
+            {
+              "id": "homegrown",
+              "label": "Something we built ourselves"
+            },
+            {
+              "id": "vendor",
+              "label": "A product we use for it"
+            }
+          ]
+        },
+        {
+          "id": "existing_product",
+          "type": "text",
+          "prompt": "Which product is it?",
+          "required": true,
+          "ask_if": {
+            "question": "existing_solution",
+            "op": "equals",
+            "value": "vendor"
+          }
+        },
+        {
+          "id": "use_cases",
+          "type": "multi_select",
+          "prompt": "What does your application use LLMs for?",
+          "required": true,
+          "options": [
+            {
+              "id": "code_generation",
+              "label": "Coding assistance / dev tools"
+            },
+            {
+              "id": "customer_support",
+              "label": "Customer support chat"
+            },
+            {
+              "id": "document_extraction",
+              "label": "Extracting or classifying documents"
+            },
+            {
+              "id": "rag_knowledge_search",
+              "label": "Search / Q&A over your own docs"
+            },
+            {
+              "id": "agent_workflows",
+              "label": "Agents and workflow automation"
+            },
+            {
+              "id": "content_generation",
+              "label": "Content and copy generation"
+            },
+            {
+              "id": "summarization",
+              "label": "Summarization and meeting notes"
+            },
+            {
+              "id": "data_analysis",
+              "label": "Data analysis / text-to-SQL"
+            },
+            {
+              "id": "other",
+              "label": "Other"
+            }
+          ]
+        },
+        {
+          "id": "use_case_other",
+          "type": "text",
+          "prompt": "Tell us what it does.",
+          "required": true,
+          "ask_if": {
+            "question": "use_cases",
+            "op": "contains",
+            "value": "other"
+          }
         },
         {
           "id": "calls_per_day",
           "type": "select",
-          "prompt": "Roughly how many LLM calls per day across your systems?",
+          "prompt": "Roughly how many LLM calls does the application make per day?",
           "required": true,
           "options": [
-            { "id": "under_1k", "label": "Under 1,000" },
-            { "id": "1k_10k", "label": "1,000 - 10,000" },
-            { "id": "10k_100k", "label": "10,000 - 100,000" },
-            { "id": "100k_1m", "label": "100,000 - 1 million" },
-            { "id": "over_1m", "label": "Over 1 million" },
-            { "id": "unsure", "label": "Not sure" }
+            {
+              "id": "under_100",
+              "label": "Under 100"
+            },
+            {
+              "id": "100_1k",
+              "label": "100 - 1,000"
+            },
+            {
+              "id": "1k_10k",
+              "label": "1,000 - 10,000"
+            },
+            {
+              "id": "10k_100k",
+              "label": "10,000 - 100,000"
+            },
+            {
+              "id": "100k_1m",
+              "label": "100,000 - 1 million"
+            },
+            {
+              "id": "over_1m",
+              "label": "Over 1 million"
+            },
+            {
+              "id": "other",
+              "label": "Other / not sure"
+            }
           ]
+        },
+        {
+          "id": "calls_per_day_other",
+          "type": "text",
+          "prompt": "Your best estimate - a number, a range, or 'not sure'.",
+          "required": false,
+          "ask_if": {
+            "question": "calls_per_day",
+            "op": "equals",
+            "value": "other"
+          }
         },
         {
           "id": "monthly_spend",
           "type": "select",
-          "prompt": "Roughly what do you spend on LLM APIs per month?",
+          "prompt": "Roughly what does it cost you in LLM API spend per month?",
           "required": true,
           "options": [
-            { "id": "under_100", "label": "Under $100" },
-            { "id": "100_1k", "label": "$100 - $1,000" },
-            { "id": "1k_10k", "label": "$1,000 - $10,000" },
-            { "id": "10k_100k", "label": "$10,000 - $100,000" },
-            { "id": "over_100k", "label": "Over $100,000" },
-            { "id": "unsure", "label": "Not sure" }
+            {
+              "id": "under_100",
+              "label": "Under $100"
+            },
+            {
+              "id": "100_1k",
+              "label": "$100 - $1,000"
+            },
+            {
+              "id": "1k_10k",
+              "label": "$1,000 - $10,000"
+            },
+            {
+              "id": "10k_100k",
+              "label": "$10,000 - $100,000"
+            },
+            {
+              "id": "over_100k",
+              "label": "Over $100,000"
+            },
+            {
+              "id": "other",
+              "label": "Other / not sure"
+            }
           ]
+        },
+        {
+          "id": "monthly_spend_other",
+          "type": "text",
+          "prompt": "Your best estimate, or 'not sure'.",
+          "required": false,
+          "ask_if": {
+            "question": "monthly_spend",
+            "op": "equals",
+            "value": "other"
+          }
         },
         {
           "id": "deployment_stage",
           "type": "select",
-          "prompt": "Where is your LLM usage today?",
+          "prompt": "Where is the application today?",
           "required": true,
           "options": [
-            { "id": "exploring", "label": "Exploring / experimenting" },
-            { "id": "prototype", "label": "Working prototype" },
-            { "id": "production_internal", "label": "In production for internal users" },
-            { "id": "production_customer_facing", "label": "In production, customer-facing" }
+            {
+              "id": "exploring",
+              "label": "Exploring / experimenting"
+            },
+            {
+              "id": "prototype",
+              "label": "Working prototype"
+            },
+            {
+              "id": "production_internal",
+              "label": "In production for internal users"
+            },
+            {
+              "id": "production_customer_facing",
+              "label": "In production, customer-facing"
+            }
           ]
+        },
+        {
+          "id": "latency_sensitivity",
+          "type": "select",
+          "prompt": "How latency-sensitive is the customer-facing path?",
+          "required": true,
+          "ask_if": {
+            "question": "deployment_stage",
+            "op": "equals",
+            "value": "production_customer_facing"
+          },
+          "options": [
+            {
+              "id": "strict_sla",
+              "label": "Strict - we have an SLA or a p95 target"
+            },
+            {
+              "id": "noticeable",
+              "label": "Users notice, but no hard target"
+            },
+            {
+              "id": "tolerant",
+              "label": "Tolerant - async or background"
+            }
+          ]
+        },
+        {
+          "id": "eval_methods",
+          "type": "multi_select",
+          "prompt": "How do you check output quality? Choose all the approaches you use.",
+          "required": false,
+          "options": [
+            {
+              "id": "vibe_checks",
+              "label": "Someone eyeballs a few outputs before shipping"
+            },
+            {
+              "id": "user_feedback",
+              "label": "User signals - thumbs up/down, complaints, tickets"
+            },
+            {
+              "id": "manual_review",
+              "label": "Regular human review - we sample outputs and label them"
+            },
+            {
+              "id": "automated_test_set",
+              "label": "A saved test set scored automatically (code checks or an LLM grading), run when prompts or models change"
+            },
+            {
+              "id": "ab_experiments",
+              "label": "A/B tests of prompt or model variants against business metrics"
+            },
+            {
+              "id": "other",
+              "label": "Other"
+            }
+          ]
+        },
+        {
+          "id": "eval_other",
+          "type": "text",
+          "prompt": "Which approach?",
+          "required": true,
+          "ask_if": {
+            "question": "eval_methods",
+            "op": "contains",
+            "value": "other"
+          }
         }
       ]
     },
@@ -112,35 +496,214 @@
       "id": "tryaii_fit",
       "title": "Where tryaii fits",
       "questions": [
-        { "id": "model_choice_process", "type": "text", "prompt": "How do you choose which model handles which task today?", "required": true },
+        {
+          "id": "model_choice_process",
+          "type": "multi_select",
+          "prompt": "How do you choose which model to use?",
+          "required": true,
+          "options": [
+            {
+              "id": "default_model",
+              "label": "One default model for everything"
+            },
+            {
+              "id": "tried_a_few",
+              "label": "Tried a few, picked what felt best"
+            },
+            {
+              "id": "benchmarks",
+              "label": "Public benchmarks and leaderboards"
+            },
+            {
+              "id": "own_evals",
+              "label": "Our own evals on our own data"
+            },
+            {
+              "id": "rules",
+              "label": "Rules in code (by task, length, tier...)"
+            },
+            {
+              "id": "router",
+              "label": "An automatic router picks per request"
+            },
+            {
+              "id": "other",
+              "label": "Other"
+            }
+          ]
+        },
+        {
+          "id": "model_choice_other",
+          "type": "text",
+          "prompt": "How do you choose?",
+          "required": true,
+          "ask_if": {
+            "question": "model_choice_process",
+            "op": "contains",
+            "value": "other"
+          }
+        },
+        {
+          "id": "router_name",
+          "type": "text",
+          "prompt": "Which router?",
+          "required": true,
+          "ask_if": {
+            "question": "model_choice_process",
+            "op": "contains",
+            "value": "router"
+          }
+        },
         {
           "id": "cache_effort",
           "type": "select",
-          "prompt": "How much effort have you put into making prompts cache-ready (stable prefixes, provider prompt caching)?",
+          "prompt": "How much effort have you put into making prompts cache-ready?",
           "required": true,
           "options": [
-            { "id": "not_considered", "label": "Haven't thought about it" },
-            { "id": "aware_not_invested", "label": "Aware of it, no time invested" },
-            { "id": "some_structuring", "label": "Some prompt structuring for caching" },
-            { "id": "heavily_optimized", "label": "Heavily optimized for cache hits" }
+            {
+              "id": "not_considered",
+              "label": "Haven't thought about it"
+            },
+            {
+              "id": "aware_not_invested",
+              "label": "Aware of it, no time invested"
+            },
+            {
+              "id": "some_structuring",
+              "label": "Some prompt structuring for caching"
+            },
+            {
+              "id": "heavily_optimized",
+              "label": "Heavily optimized for cache hits"
+            }
           ]
         },
-        { "id": "biggest_pain", "type": "text", "prompt": "What's your biggest LLM pain right now - cost, quality, latency, something else?", "required": true },
+        {
+          "id": "biggest_pain",
+          "type": "select",
+          "prompt": "What's your biggest LLM pain right now?",
+          "required": true,
+          "options": [
+            {
+              "id": "cost",
+              "label": "Cost"
+            },
+            {
+              "id": "quality",
+              "label": "Output quality"
+            },
+            {
+              "id": "latency",
+              "label": "Latency"
+            },
+            {
+              "id": "reliability",
+              "label": "Reliability - rate limits, outages, fallbacks"
+            },
+            {
+              "id": "visibility",
+              "label": "Visibility - we can't see what we spend or why"
+            },
+            {
+              "id": "other",
+              "label": "Something else"
+            }
+          ]
+        },
+        {
+          "id": "biggest_pain_other",
+          "type": "text",
+          "prompt": "Tell us about it in a sentence.",
+          "required": true,
+          "ask_if": {
+            "question": "biggest_pain",
+            "op": "equals",
+            "value": "other"
+          }
+        },
+        {
+          "id": "cost_target",
+          "type": "select",
+          "prompt": "What kind of saving would make a change worth it for you?",
+          "required": true,
+          "options": [
+            {
+              "id": "savings_10",
+              "label": "Around 10%"
+            },
+            {
+              "id": "savings_25",
+              "label": "Around 25%"
+            },
+            {
+              "id": "savings_50",
+              "label": "50% or more"
+            },
+            {
+              "id": "any",
+              "label": "Any real saving"
+            },
+            {
+              "id": "not_cost_driven",
+              "label": "Cost isn't what would decide it"
+            }
+          ]
+        },
         {
           "id": "features_interest",
           "type": "multi_select",
-          "prompt": "Which tryaii capabilities interest you most?",
+          "prompt": "Where would you like to start? Most partners begin with diagnose - it reads your codebase, finds every LLM call, and shows where model choice, caching and cost can improve. That's the part we know best.",
           "required": true,
           "options": [
-            { "id": "diagnose", "label": "diagnose - codebase LLM audit" },
-            { "id": "cachelint", "label": "cachelint - prompt-cache analysis" },
-            { "id": "routing", "label": "routing - pick the best model per prompt" },
-            { "id": "budget", "label": "budget - dataset routing under a spend cap" },
-            { "id": "benchmarks", "label": "benchmark-driven model catalog" },
-            { "id": "dashboard", "label": "eval + diagnose reports" }
+            {
+              "id": "diagnose",
+              "label": "diagnose - audit your codebase's LLM calls: model fit, cache readiness, cost exposure"
+            },
+            {
+              "id": "cachelint",
+              "label": "cachelint - prompt-cache analysis"
+            },
+            {
+              "id": "routing",
+              "label": "routing - pick the best model per prompt"
+            },
+            {
+              "id": "budget",
+              "label": "budget - dataset routing under a spend cap"
+            },
+            {
+              "id": "benchmarks",
+              "label": "benchmark-driven model catalog"
+            },
+            {
+              "id": "dashboard",
+              "label": "eval + diagnose reports"
+            }
           ]
         },
-        { "id": "follow_up_call", "type": "boolean", "prompt": "Open to a short follow-up call with the tryaii team?", "required": true }
+        {
+          "id": "checkins_ok",
+          "type": "boolean",
+          "prompt": "Design partners meet the tryaii team for a 15-minute check-in every other week - it's how we keep this useful for you. Are you up for that?",
+          "required": true
+        },
+        {
+          "id": "checkins_alt",
+          "type": "text",
+          "prompt": "No problem - what would work better for you? (email updates, a monthly call...)",
+          "required": false,
+          "ask_if": {
+            "question": "checkins_ok",
+            "op": "equals",
+            "value": false
+          }
+        },
+        {
+          "id": "reference_ok",
+          "type": "boolean",
+          "prompt": "If tryaii delivers for you, we'll ask you to say so publicly - a quote, your logo, or a short case study. Would you be willing to do that?",
+          "required": true
+        }
       ]
     }
   ],
