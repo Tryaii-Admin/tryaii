@@ -30,30 +30,45 @@
           "name": "Dana Reyes",
           "email": "dana@acme-robotics.io",
           "company": "Acme Robotics",
-          "role": "Head of Platform",
-          "company_size": "11_50",
+          "team_size": "11_50",
+          "ai_tools_in_use": "3_5",
+          "decision_authority": "my_manager",
           "providers": [
             "openai",
             "anthropic"
           ],
-          "models_openai": "gpt-4o, gpt-5-mini",
-          "models_anthropic": "claude-sonnet-4-5",
+          "models": "gpt-4o, gpt-5-mini, claude-sonnet-4-5",
           "frameworks": [
             "direct_sdk",
             "openrouter"
           ],
+          "existing_solution": "homegrown",
+          "use_cases": [
+            "customer_support",
+            "rag_knowledge_search"
+          ],
           "calls_per_day": "10k_100k",
           "monthly_spend": "1k_10k",
           "deployment_stage": "production_customer_facing",
-          "model_choice_process": "Whatever the team picked when the feature shipped; nobody revisits it.",
+          "latency_sensitivity": "noticeable",
+          "eval_methods": [
+            "manual_review",
+            "automated_test_set"
+          ],
+          "model_choice_process": [
+            "tried_a_few",
+            "rules"
+          ],
           "cache_effort": "aware_not_invested",
-          "biggest_pain": "Cost is growing faster than usage.",
+          "biggest_pain": "cost",
+          "cost_target": "savings_25",
           "features_interest": [
             "diagnose",
             "cachelint",
             "routing"
           ],
-          "follow_up_call": true
+          "checkins_ok": true,
+          "reference_ok": true
         },
         "diagnose": null
       }
@@ -89,30 +104,45 @@
           "name": "Dana Reyes",
           "email": "dana@acme-robotics.io",
           "company": "Acme Robotics",
-          "role": "Head of Platform",
-          "company_size": "11_50",
+          "team_size": "11_50",
+          "ai_tools_in_use": "3_5",
+          "decision_authority": "my_manager",
           "providers": [
             "openai",
             "anthropic"
           ],
-          "models_openai": "gpt-4o, gpt-5-mini",
-          "models_anthropic": "claude-sonnet-4-5",
+          "models": "gpt-4o, gpt-5-mini, claude-sonnet-4-5",
           "frameworks": [
             "direct_sdk",
             "openrouter"
           ],
+          "existing_solution": "homegrown",
+          "use_cases": [
+            "customer_support",
+            "rag_knowledge_search"
+          ],
           "calls_per_day": "10k_100k",
           "monthly_spend": "1k_10k",
           "deployment_stage": "production_customer_facing",
-          "model_choice_process": "Whatever the team picked when the feature shipped; nobody revisits it.",
+          "latency_sensitivity": "noticeable",
+          "eval_methods": [
+            "manual_review",
+            "automated_test_set"
+          ],
+          "model_choice_process": [
+            "tried_a_few",
+            "rules"
+          ],
           "cache_effort": "aware_not_invested",
-          "biggest_pain": "Cost is growing faster than usage.",
+          "biggest_pain": "cost",
+          "cost_target": "savings_25",
           "features_interest": [
             "diagnose",
             "cachelint",
             "routing"
           ],
-          "follow_up_call": true
+          "checkins_ok": true,
+          "reference_ok": true
         },
         "diagnose": {
           "run_id": "20260101T000000Z",
@@ -201,30 +231,45 @@
           "name": "Dana Reyes",
           "email": "dana@acme-robotics.io",
           "company": "Acme Robotics",
-          "role": "Head of Platform",
-          "company_size": "11_50",
+          "team_size": "11_50",
+          "ai_tools_in_use": "3_5",
+          "decision_authority": "my_manager",
           "providers": [
             "openai",
             "anthropic"
           ],
-          "models_openai": "gpt-4o, gpt-5-mini",
-          "models_anthropic": "claude-sonnet-4-5",
+          "models": "gpt-4o, gpt-5-mini, claude-sonnet-4-5",
           "frameworks": [
             "direct_sdk",
             "openrouter"
           ],
+          "existing_solution": "homegrown",
+          "use_cases": [
+            "customer_support",
+            "rag_knowledge_search"
+          ],
           "calls_per_day": "10k_100k",
           "monthly_spend": "1k_10k",
           "deployment_stage": "production_customer_facing",
-          "model_choice_process": "Whatever the team picked when the feature shipped; nobody revisits it.",
+          "latency_sensitivity": "noticeable",
+          "eval_methods": [
+            "manual_review",
+            "automated_test_set"
+          ],
+          "model_choice_process": [
+            "tried_a_few",
+            "rules"
+          ],
           "cache_effort": "aware_not_invested",
-          "biggest_pain": "Cost is growing faster than usage.",
+          "biggest_pain": "cost",
+          "cost_target": "savings_25",
           "features_interest": [
             "diagnose",
             "cachelint",
             "routing"
           ],
-          "follow_up_call": true
+          "checkins_ok": true,
+          "reference_ok": true
         },
         "diagnose": {
           "run_id": "20260101T000000Z",

@@ -24,9 +24,11 @@ consent → confirm → submitted.
 
 The `questionnaire` block in the JSON is the catalog: sections of typed
 questions, some gated by `ask_if` conditions (only ask a question whose
-condition is met — e.g. per-provider model questions appear only for
-providers the user selected). Interview conversationally, one topic at a
-time; keep it light.
+condition is met — e.g. each "Other" follow-up appears only when Other
+was picked, and the latency question only for customer-facing
+production). Ask an "Other" follow-up in the same breath as its parent —
+to the user it is one question. Interview conversationally, one topic at
+a time; keep it light.
 
 Honesty rules:
 - EVERY answer comes from the user. Never invent, infer, or autofill —

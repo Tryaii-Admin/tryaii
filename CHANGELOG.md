@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+### designpartner — questionnaire v4 (both SDKs)
+
+The design-partner questionnaire (`shared/designpartner/questions.json`)
+was rewritten after a review of what sales and product actually need
+from an intake. Schema and `ask_if` grammar are unchanged; engines are
+untouched; fixtures and goldens regenerated from the Python reference.
+
+- Asks about the application, not the person: section "How you use AI"
+  is now "Your application"; calls/spend/stage prompts reworded.
+- Qualification data for sales: `ai_tools_in_use` (0 / 1-2 / 3-5 / 6+ /
+  Other) followed by `decision_authority` ("who normally decides on a new
+  tool"), `existing_solution` (+ `existing_product`), `cost_target`
+  (asked of everyone, incl. "cost isn't what would decide it"),
+  `checkins_ok` (one firm bi-weekly 15-minute ask, `checkins_alt` on a
+  no) and `reference_ok` (public reference / case study).
+- Product data: `use_cases` (ranked by builder-survey prevalence),
+  `eval_methods` (multi-select, optional = none), `latency_sensitivity`
+  (customer-facing production only), `model_choice_process` as a
+  multi-select with an automatic-router option (+ `router_name`).
+- Every "Other" option has a companion free-text question gated on it
+  (`models_other`, `frameworks_other`, `use_case_other`, `eval_other`,
+  `model_choice_other`, `biggest_pain_other`, `ai_tools_other`,
+  `calls_per_day_other`, `monthly_spend_other`); the skill asks it in
+  the same breath as its parent.
+- Removed: `role`, `models_openai/anthropic/google`, `company_size`
+  (now `team_size`), `follow_up_call`/`time_commitment` (merged into
+  `checkins_ok`), `timeline`/`priority`, `unsure` buckets (now `other`
+  + free text); providers drop Cohere and Meta (Llama), add
+  open-source/self-hosted and Hugging Face.
+
 ## 0.5.0 (2026-08-21)
 
 ### designpartner — design-partner enrollment (both SDKs)

@@ -4,9 +4,9 @@ tryaii designpartner -- stage: questionnaire
 -> AGENTS.md
 -> .gitignore
 
-  About you: 0/5 answered
-  How you use AI: 0/5 answered
-  Where tryaii fits: 0/5 answered
+  About you: 0/6 answered
+  Your application: 0/9 answered
+  Where tryaii fits: 0/7 answered
 machine-readable catalog: tryaii designpartner --json
 
 next: Interview the user from the questionnaire block (honor ask_if; every answer comes from the user), then save their answers.

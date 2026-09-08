@@ -19,11 +19,12 @@ const OPTS = { now: '2026-08-17T00:00:00Z', stamp: 't1', version: '9.9.9',
 
 const GOOD_ANSWERS: Record<string, unknown> = {
   name: 'Dana', email: 'dana@example.com',
-  providers: ['openai'], models_openai: 'gpt-4o',
-  calls_per_day: 'under_1k', monthly_spend: 'under_100',
-  deployment_stage: 'exploring', model_choice_process: 'defaults',
-  cache_effort: 'not_considered', biggest_pain: 'cost',
-  features_interest: ['routing'], follow_up_call: false,
+  ai_tools_in_use: '1_2', decision_authority: 'me',
+  providers: ['openai'], frameworks: ['direct_sdk'], existing_solution: 'none',
+  use_cases: ['code_generation'], calls_per_day: 'under_100', monthly_spend: 'under_100',
+  deployment_stage: 'exploring', model_choice_process: ['default_model'],
+  cache_effort: 'not_considered', biggest_pain: 'cost', cost_target: 'any',
+  features_interest: ['routing'], checkins_ok: true, reference_ok: false,
 };
 
 const noDiagnose = () => null;
