@@ -13,30 +13,45 @@
           "name": "Dana Reyes",
           "email": "dana@acme-robotics.io",
           "company": "Acme Robotics",
-          "role": "Head of Platform",
-          "company_size": "11_50",
+          "team_size": "11_50",
+          "ai_tools_in_use": "3_5",
+          "decision_authority": "my_manager",
           "providers": [
             "openai",
             "anthropic"
           ],
-          "models_openai": "gpt-4o, gpt-5-mini",
-          "models_anthropic": "claude-sonnet-4-5",
+          "models": "gpt-4o, gpt-5-mini, claude-sonnet-4-5",
           "frameworks": [
             "direct_sdk",
             "openrouter"
           ],
+          "existing_solution": "homegrown",
+          "use_cases": [
+            "customer_support",
+            "rag_knowledge_search"
+          ],
           "calls_per_day": "10k_100k",
           "monthly_spend": "1k_10k",
           "deployment_stage": "production_customer_facing",
-          "model_choice_process": "Whatever the team picked when the feature shipped; nobody revisits it.",
+          "latency_sensitivity": "noticeable",
+          "eval_methods": [
+            "manual_review",
+            "automated_test_set"
+          ],
+          "model_choice_process": [
+            "tried_a_few",
+            "rules"
+          ],
           "cache_effort": "aware_not_invested",
-          "biggest_pain": "Cost is growing faster than usage.",
+          "biggest_pain": "cost",
+          "cost_target": "savings_25",
           "features_interest": [
             "diagnose",
             "cachelint",
             "routing"
           ],
-          "follow_up_call": true
+          "checkins_ok": true,
+          "reference_ok": true
         },
         "problems": [],
         "warnings": []
@@ -44,7 +59,7 @@
     },
     {
       "name": "invalid-kitchen-sink",
-      "description": "SPEC §3.2: ALL problems reported at once — bad email, unknown option (select + multi_select element), wrong types, unknown question — plus every missing required question.",
+      "description": "SPEC §3.2: ALL problems reported at once — bad email, unknown option (select + multi_select element), wrong types (text, multi_select, boolean), an unknown question, every missing required — plus a not_applicable warning for a gated answer whose gate is unmet.",
       "input": {
         "answers_file": "corpus/answers-invalid.json"
       },
@@ -59,9 +74,19 @@
             "message": "'email' must look like an email address"
           },
           {
-            "question": "company_size",
+            "question": "team_size",
             "code": "unknown_option",
-            "message": "'company_size' contains a value that is not one of its option ids"
+            "message": "'team_size' contains a value that is not one of its option ids"
+          },
+          {
+            "question": "ai_tools_in_use",
+            "code": "missing",
+            "message": "'ai_tools_in_use' is required"
+          },
+          {
+            "question": "decision_authority",
+            "code": "missing",
+            "message": "'decision_authority' is required"
           },
           {
             "question": "providers",
@@ -69,14 +94,24 @@
             "message": "'providers' contains a value that is not one of its option ids"
           },
           {
-            "question": "models_openai",
+            "question": "models",
             "code": "invalid_type",
-            "message": "'models_openai' has the wrong type for a text question"
+            "message": "'models' has the wrong type for a text question"
           },
           {
             "question": "frameworks",
             "code": "invalid_type",
             "message": "'frameworks' has the wrong type for a multi_select question"
+          },
+          {
+            "question": "existing_solution",
+            "code": "missing",
+            "message": "'existing_solution' is required"
+          },
+          {
+            "question": "use_cases",
+            "code": "missing",
+            "message": "'use_cases' is required"
           },
           {
             "question": "calls_per_day",
@@ -109,14 +144,24 @@
             "message": "'biggest_pain' is required"
           },
           {
+            "question": "cost_target",
+            "code": "missing",
+            "message": "'cost_target' is required"
+          },
+          {
             "question": "features_interest",
             "code": "missing",
             "message": "'features_interest' is required"
           },
           {
-            "question": "follow_up_call",
+            "question": "checkins_ok",
             "code": "invalid_type",
-            "message": "'follow_up_call' has the wrong type for a boolean question"
+            "message": "'checkins_ok' has the wrong type for a boolean question"
+          },
+          {
+            "question": "reference_ok",
+            "code": "missing",
+            "message": "'reference_ok' is required"
           },
           {
             "question": "favorite_color",
@@ -126,62 +171,86 @@
         ],
         "warnings": [
           {
-            "question": "models_anthropic",
+            "question": "latency_sensitivity",
             "code": "not_applicable",
-            "message": "'models_anthropic' does not apply to these answers — dropped"
+            "message": "'latency_sensitivity' does not apply to these answers — dropped"
           }
         ]
       }
     },
     {
       "name": "not-applicable-dropped",
-      "description": "SPEC §3.1: an answer for a condition-skipped question is dropped with a not_applicable warning, not an error.",
+      "description": "SPEC §3.1: an answer for a condition-skipped question (models_other without Other in providers) is dropped with a not_applicable warning, not an error.",
       "input": {
         "answers": {
           "name": "Dana",
           "email": "dana@example.com",
+          "ai_tools_in_use": "1_2",
+          "decision_authority": "me",
           "providers": [
             "openai"
           ],
-          "models_openai": "gpt-4o",
-          "models_anthropic": "claude-sonnet-4-5",
-          "calls_per_day": "under_1k",
+          "frameworks": [
+            "direct_sdk"
+          ],
+          "existing_solution": "none",
+          "use_cases": [
+            "code_generation"
+          ],
+          "calls_per_day": "under_100",
           "monthly_spend": "under_100",
           "deployment_stage": "exploring",
-          "model_choice_process": "defaults",
+          "model_choice_process": [
+            "default_model"
+          ],
           "cache_effort": "not_considered",
-          "biggest_pain": "latency",
+          "biggest_pain": "cost",
+          "cost_target": "any",
           "features_interest": [
             "routing"
           ],
-          "follow_up_call": false
+          "checkins_ok": true,
+          "reference_ok": false,
+          "models_other": "Azure-hosted Llama"
         }
       },
       "expected": {
         "answers": {
           "name": "Dana",
           "email": "dana@example.com",
+          "ai_tools_in_use": "1_2",
+          "decision_authority": "me",
           "providers": [
             "openai"
           ],
-          "models_openai": "gpt-4o",
-          "calls_per_day": "under_1k",
+          "frameworks": [
+            "direct_sdk"
+          ],
+          "existing_solution": "none",
+          "use_cases": [
+            "code_generation"
+          ],
+          "calls_per_day": "under_100",
           "monthly_spend": "under_100",
           "deployment_stage": "exploring",
-          "model_choice_process": "defaults",
+          "model_choice_process": [
+            "default_model"
+          ],
           "cache_effort": "not_considered",
-          "biggest_pain": "latency",
+          "biggest_pain": "cost",
+          "cost_target": "any",
           "features_interest": [
             "routing"
           ],
-          "follow_up_call": false
+          "checkins_ok": true,
+          "reference_ok": false
         },
         "problems": [],
         "warnings": [
           {
-            "question": "models_anthropic",
+            "question": "models_other",
             "code": "not_applicable",
-            "message": "'models_anthropic' does not apply to these answers — dropped"
+            "message": "'models_other' does not apply to these answers — dropped"
           }
         ]
       }
@@ -193,32 +262,58 @@
         "answers": {
           "name": "",
           "email": "dana@example.com",
+          "ai_tools_in_use": "1_2",
+          "decision_authority": "me",
           "providers": [],
-          "calls_per_day": "under_1k",
+          "frameworks": [
+            "direct_sdk"
+          ],
+          "existing_solution": "none",
+          "use_cases": [
+            "code_generation"
+          ],
+          "calls_per_day": "under_100",
           "monthly_spend": "under_100",
           "deployment_stage": "exploring",
-          "model_choice_process": "defaults",
+          "model_choice_process": [
+            "default_model"
+          ],
           "cache_effort": "not_considered",
-          "biggest_pain": "latency",
+          "biggest_pain": "cost",
+          "cost_target": "any",
           "features_interest": [
             "routing"
           ],
-          "follow_up_call": false
+          "checkins_ok": true,
+          "reference_ok": false
         }
       },
       "expected": {
         "answers": {
           "email": "dana@example.com",
-          "calls_per_day": "under_1k",
+          "ai_tools_in_use": "1_2",
+          "decision_authority": "me",
+          "frameworks": [
+            "direct_sdk"
+          ],
+          "existing_solution": "none",
+          "use_cases": [
+            "code_generation"
+          ],
+          "calls_per_day": "under_100",
           "monthly_spend": "under_100",
           "deployment_stage": "exploring",
-          "model_choice_process": "defaults",
+          "model_choice_process": [
+            "default_model"
+          ],
           "cache_effort": "not_considered",
-          "biggest_pain": "latency",
+          "biggest_pain": "cost",
+          "cost_target": "any",
           "features_interest": [
             "routing"
           ],
-          "follow_up_call": false
+          "checkins_ok": true,
+          "reference_ok": false
         },
         "problems": [
           {
@@ -255,9 +350,34 @@
             "message": "'email' must look like an email address"
           },
           {
+            "question": "ai_tools_in_use",
+            "code": "missing",
+            "message": "'ai_tools_in_use' is required"
+          },
+          {
+            "question": "decision_authority",
+            "code": "missing",
+            "message": "'decision_authority' is required"
+          },
+          {
             "question": "providers",
             "code": "missing",
             "message": "'providers' is required"
+          },
+          {
+            "question": "frameworks",
+            "code": "missing",
+            "message": "'frameworks' is required"
+          },
+          {
+            "question": "existing_solution",
+            "code": "missing",
+            "message": "'existing_solution' is required"
+          },
+          {
+            "question": "use_cases",
+            "code": "missing",
+            "message": "'use_cases' is required"
           },
           {
             "question": "calls_per_day",
@@ -290,14 +410,24 @@
             "message": "'biggest_pain' is required"
           },
           {
+            "question": "cost_target",
+            "code": "missing",
+            "message": "'cost_target' is required"
+          },
+          {
             "question": "features_interest",
             "code": "missing",
             "message": "'features_interest' is required"
           },
           {
-            "question": "follow_up_call",
+            "question": "checkins_ok",
             "code": "missing",
-            "message": "'follow_up_call' is required"
+            "message": "'checkins_ok' is required"
+          },
+          {
+            "question": "reference_ok",
+            "code": "missing",
+            "message": "'reference_ok' is required"
           }
         ],
         "warnings": []

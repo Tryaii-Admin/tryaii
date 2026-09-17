@@ -37,10 +37,13 @@ At most one of `--answers`/`--consent`/`--confirm`/`--reset` per invocation.
 ## The questionnaire
 
 Data-driven (`shared/designpartner/questions.json`): three sections —
-About you · How you use AI · Where tryaii fits — with typed questions and
-explicit `ask_if` conditions (e.g. per-provider model questions appear only
-for the providers you selected). The agent interviews conversationally from
-the `--json` catalog; every answer comes from the user, never invented.
+About you · Your application · Where tryaii fits — with typed questions and
+explicit `ask_if` conditions (e.g. each "Other" option has a free-text
+follow-up that appears only when Other was picked, and the latency question
+appears only for customer-facing production). The agent interviews
+conversationally from the `--json` catalog, asking an "Other" follow-up in
+the same breath as its parent; every answer comes from the user, never
+invented.
 
 ## Consent tiers (shown to the user verbatim)
 

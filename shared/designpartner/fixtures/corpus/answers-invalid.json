@@ -1,11 +1,14 @@
 {
   "name": "Dana Reyes",
   "email": "not-an-email",
-  "company_size": "gigantic",
-  "providers": ["openai", "skynet"],
-  "models_openai": 42,
-  "models_anthropic": "claude-sonnet-4-5",
-  "frameworks": "langchain",
-  "follow_up_call": "yes",
+  "team_size": "gigantic",
+  "providers": [
+    "openai",
+    "skynet"
+  ],
+  "models": 42,
+  "frameworks": "direct_sdk",
+  "latency_sensitivity": "strict_sla",
+  "checkins_ok": "yes",
   "favorite_color": "blue"
 }
