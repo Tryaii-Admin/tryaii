@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 (2026-09-17)
 
 ### designpartner — questionnaire v4 (both SDKs)
 
