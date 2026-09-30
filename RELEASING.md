@@ -33,7 +33,7 @@ A normal release:
 
 ## One-time setup
 
-Trusted Publishing means the registry trusts a GitHub identity (repo + workflow + environment) instead of a long-lived token. Nothing is copied into GitHub secrets. All three steps below must be done once, by someone with admin rights on the repo and owner rights on the registries, before the first tagged release. Until they are done the workflow fails at the publish step and nothing is uploaded.
+Trusted Publishing means the registry trusts a GitHub identity (repo + workflow + environment) instead of a long-lived token. Nothing is copied into GitHub secrets. The two registry entries below must be added once, by the registry account owner, before the first tagged release. Until then the workflow fails at the publish step and nothing is uploaded. The GitHub side is already done.
 
 ### PyPI (existing project `tryaii`)
 
@@ -55,13 +55,15 @@ Trusted Publishing means the registry trusts a GitHub identity (repo + workflow 
    - Environment name: `release`
 3. Save. Then, on the same Settings page under **Publishing access**, select **Require two-factor authentication and disallow tokens** (trusted publisher only). Recommended: it makes the workflow the only way to publish, so a leaked personal token cannot push a release.
 
-### GitHub (needs the repo admin, i.e. the `Tryaii-Admin` account)
+### GitHub (in place since 2026-09-30)
 
-1. **Settings → Environments → New environment** named `release`. Tick **Required reviewers** and add the maintainer who approves releases. Under **Deployment branches and tags** choose *Selected*, add a **tag** rule `v*`.
-2. **Settings → Rules → Rulesets → New tag ruleset** named `release-tags`: target tags matching `v*`; enable *Restrict creations*, *Restrict updates*, *Restrict deletions*; bypass list: repository admins.
-3. **Settings → Rules → Rulesets → New branch ruleset** named `main-protection`: target the default branch; enable *Require a pull request before merging* with 1 approval and *Dismiss stale approvals*, plus *Restrict deletions* and *Block force pushes*; bypass list: repository admins.
+These exist already and need no action. They can only be changed while signed in as the repo owner account (`Tryaii-Admin`): on a repo owned by a personal account, collaborators can never hold the Admin role.
 
-Equivalent `gh api` calls are in the PR that introduced this file. Collaborators with only *Write* access cannot do this; as of 2026-09-30 that is every collaborator except the owner account.
+- Environment `release` (**Settings → Environments**): required reviewer `tamirblu`; deployments limited to tags matching `v*`.
+- Ruleset `release-tags` (**Settings → Rules → Rulesets**): only admins may create, move or delete `v*` tags.
+- Ruleset `main-protection`: changes to `main` need a pull request with one approval; deletions and force pushes are blocked.
+
+If they ever need to be recreated, the fastest route is **New ruleset → Import a ruleset** with the JSON exported from an existing one; the environment is a short form.
 
 ## Security model
 
