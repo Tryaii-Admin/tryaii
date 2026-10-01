@@ -430,6 +430,8 @@ HumanEval, LiveBench, MMLU, MT-Bench, SWE-bench, SuperGLUE, TruthfulQA.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
+Maintainers: the release process (version bump, tag, Trusted Publishing to PyPI and npm) is in [RELEASING.md](RELEASING.md).
+
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
