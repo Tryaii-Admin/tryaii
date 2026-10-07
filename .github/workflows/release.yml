@@ -121,7 +121,7 @@ jobs:
           npm pack
           tarball="tryaii-${EXPECTED}.tgz"
           test -f "$tarball" || { echo "::error::expected $tarball, got: $(ls *.tgz)"; exit 1; }
-          tar tzf "$tarball" | head -20
+          tar tzf "$tarball" | sed -n "1,20p"  # sed reads all input: no SIGPIPE under pipefail
           echo "Pack succeeded: $tarball"
 
       - name: Upload node tarball
