@@ -43,15 +43,23 @@ const config = createDefaultConfig({ dataDir: '/tmp/tryaii' });
 | `OPENROUTER_API_KEY` | clients + integration fallback | `DREClient` fallback only | Calling models via OpenRouter |
 | `OPENAI_API_KEY` | `OpenAIEmbeddingProvider` | — | OpenAI embeddings |
 | `TRYAII_DRE_EMBEDDING_MODEL` | ✓ | — | Default embedding model |
-| `TRYAII_DRE_DATA_DIR` | ✓ | — | Centroid/cache directory |
-| `TRYAII_NO_BANNER` | CLI | CLI | Suppress the [CLI banner](../../cli/README.md#banner) |
+| `TRYAII_DRE_DATA_DIR` | ✓ | credentials + catalog cache | Data directory (default `~/.tryaii`): login credentials, downloaded full catalog, and (Python) the centroid cache |
+| `TRYAII_API_URL` | CLI | CLI | API base URL for `tryaii login` only (default `https://api.tryaii.com`); a stored session always talks to the server that issued it |
+| `TRYAII_NO_BANNER` | CLI | CLI | Suppress the [CLI banner](../../cli/README.md#banner) and the once-a-day login hint |
+| `TRYAII_CATALOG_TRUSTED_KEYS` | ✓ | ✓ | **Development and tests only.** Path to a trusted-keys JSON file that REPLACES the built-in list of public keys a full catalog must be signed with ([catalog contract, section 6](../../catalog/CONTRACT-catalog-v1.md#6-signing-catalog-contract-v11-2026-10-04)) |
 
 ## On-disk layout
 
 ```
 ~/.tryaii/
+  credentials.json                      # after `tryaii login` (mode 0600 on POSIX); removed by `tryaii logout`
+  catalog/
+    full/<version>/                     # the downloaded full catalog (one release kept)
+    state.json                          # last daily check: {"version", "checked_at"}
+    nudge.json                          # last day the login hint was shown
   centroids/
-    centroids_<embedding-model>.json    # user centroid cache ("/" in model names becomes "__")
+    centroids_<embedding-model>__<kind>-<version>.json   # user centroid cache, one per catalog
+                                                          # ("/" in model names becomes "__")
 ```
 
 Embedding model weights are cached separately by the embedding backend (Hugging Face cache).

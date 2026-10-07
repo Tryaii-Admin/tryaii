@@ -1,25 +1,62 @@
-# Default model preset
+# Default model catalog
 
-`ModelRegistry.default()` loads the single bundled preset (`default`): **39 models** with curated benchmark scores, pricing, latency tiers, capabilities, and descriptions (preset version `0.2.0`, data snapshot `2026-06`).
+`ModelRegistry.default()` loads the models of the **default catalog**. There are two catalogs, and the same engine routes both:
 
-| Provider | Count | Model IDs |
+| Catalog | Where it comes from | Size |
 |---|---|---|
-| OpenAI | 14 | `gpt-4o`, `gpt-4o-mini`, `o3`, `o4-mini`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-4.1`, `gpt-5.1`, `gpt-5.2`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.5` |
-| Anthropic | 7 | `claude-sonnet-4-20250514`, `claude-sonnet-4-5-20250929`, `claude-sonnet-4-6`, `claude-haiku-4-5-20251001`, `claude-opus-4-5-20251101`, `claude-opus-4-8`, `claude-fable-5` |
-| Google | 7 | `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-3-flash-preview`, `gemini-3.5-flash`, `gemini-3.1-pro-preview`, `gemini-3.1-flash-lite` |
-| DeepSeek | 4 | `deepseek-reasoner`, `deepseek-chat`, `deepseek-v4-pro`, `deepseek-v4-flash` |
-| xAI | 4 | `grok-4-latest`, `grok-4.3`, `grok-4-1-fast-reasoning-latest`, `grok-code-fast` |
-| Mistral | 3 | `mistral-large-latest`, `mistral-small-latest`, `mistral-medium-2508` |
+| **Starter** | Ships inside the package; no network, no account | **45 models from 6 providers, 16 benchmarks** |
+| **Full** | Downloaded after [`tryaii login`](../../cli/login.md) (free), refreshed at most once a day, signature-checked before use | **322 routable models** |
 
-Per model the preset records: `benchmark_scores` (a subset of the [12 standard benchmarks](../benchmarks/README.md)), `pricing` (USD per 1k tokens, input/output), `latency` tier, `capabilities` tags, and a one-line `description`.
+With the default `catalog="auto"`, the full catalog is used when you are logged in and the starter catalog otherwise. Pass `catalog="starter"` to always use the packaged catalog (no network), or `catalog="full"` to require the full one (raises `LoginRequiredError` when not logged in):
 
-Inspect it anytime:
-
-```bash
-tryaii models --json          # full preset as JSON
-tryaii models --provider xai  # one provider
+```python
+registry = ModelRegistry.default()                    # catalog="auto"
+registry = ModelRegistry.default(catalog="starter")   # packaged, offline
+router = Router(catalog="full")
 ```
 
-Every preset model also has an entry in `MODEL_ID_TO_OPENROUTER`, so it is directly callable through the [OpenRouter integration](../client/openrouter.md).
+```ts
+const registry = ModelRegistry.default();                        // 'auto'
+const offline = ModelRegistry.default(false, null, 'starter');   // packaged, offline
+const router = new Router({ catalog: 'full' });
+```
 
-The preset is a static snapshot — scores and prices age. To route over current data, [build your own registry](README.md#using-a-custom-registry) or update the scores with `registry.add(...)` overrides.
+## The starter catalog
+
+| Provider | Models |
+|---|---:|
+| OpenAI | 16 |
+| Anthropic | 10 |
+| Google | 8 |
+| DeepSeek | 4 |
+| xAI | 4 |
+| Mistral | 3 |
+
+It covers the well-known frontier and value models of those providers (for example `openai/gpt-5.5`, `anthropic/claude-opus-5.5`, `google/gemini-3.1-pro-preview`, `deepseek/deepseek-v4-pro`, `x-ai/grok-4.3`, `mistralai/mistral-large-2512`), scored on the [16 starter benchmarks](../benchmarks/README.md).
+
+Per model the catalog records: `benchmark_scores` (a subset of the catalog's benchmarks), `pricing` (USD per 1k tokens, input/output), `latency` tier, `tokens_per_second` and `ttft_ms` (when measured), `capabilities` tags, and a description.
+
+## Free-tier variants
+
+Ephemeral OpenRouter `:free` variants come and go within days, so they are never routed, listed or counted. They are opt-in at the registry layer:
+
+```python
+registry = ModelRegistry.default(include_free=True)
+registry.load_preset("default", include_free=True)
+```
+
+```ts
+const registry = ModelRegistry.default(true);
+registry.loadPreset('default', { includeFree: true });
+```
+
+## Inspect it
+
+```bash
+tryaii models --json          # the catalog in use, as JSON (:free variants excluded)
+tryaii models --provider x-ai # one provider
+```
+
+Model IDs are OpenRouter-native slugs such as `openai/gpt-5.5`, so they pass directly to the [OpenRouter integration](../client/openrouter.md). `MODEL_ID_TO_OPENROUTER` remains as a compatibility map for legacy IDs.
+
+Both catalogs are snapshots, not a live runtime feed: the starter catalog changes with package releases, the full catalog with each published catalog release. Scores and prices can age between releases; use a [custom registry](README.md#using-a-custom-registry) or `registry.add(...)` overrides when you need different data.

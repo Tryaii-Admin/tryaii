@@ -1,5 +1,170 @@
 # Changelog
 
+## 0.6.0 (2026-10-07)
+
+### Highlights
+
+- **A new built-in catalog.** The package now ships a **starter catalog**: 45
+  well-known models from OpenAI, Anthropic, Google, DeepSeek, xAI and Mistral,
+  scored on 16 current benchmarks. It works offline, with no account.
+- **Log in (free) for the full catalog.** New `tryaii login`, `tryaii logout`
+  and `tryaii whoami` commands. After signing in with your tryaii.com Google
+  account, the **full catalog of 322 models** downloads automatically, is
+  refreshed at most once a day, cached locally, and used only after its
+  Ed25519 signature checks out.
+- **A new routing score.** Quality now decides *which models may win*, and
+  cost and speed decide *which of them does*; cost is judged on a log scale and
+  speed as the wait for a typical answer.
+
+### `tryaii login` / `logout` / `whoami` (both SDKs)
+
+- `tryaii login` is a device sign-in: it prints a URL and a short code; open
+  the URL in any browser (it does not have to be on the same machine, so it
+  works over SSH and in containers), sign in with Google and approve the code.
+  Credentials are stored in `~/.tryaii/credentials.json` (or under
+  `TRYAII_DRE_DATA_DIR`), written atomically with mode 0600 on POSIX. Right
+  after signing in, the full catalog is downloaded
+  (`Downloaded the full catalog (<n> models).`); if that fails, it is fetched
+  on next use and `login` still succeeds.
+- `tryaii logout` revokes the session (best effort) and deletes the
+  credentials and the downloaded catalog.
+- `tryaii whoami [--json]` shows the account, its entitlements and the catalog
+  release in use (`Catalog: full, release <version> (<n> models)` or
+  `Catalog: not downloaded yet`).
+- `TRYAII_API_URL` overrides the API base URL for `login` (default
+  `https://api.tryaii.com`); a stored session always talks to the server that
+  issued it.
+- Output, exit codes and help text are byte-identical in both CLIs. The
+  protocol is specified in `docs/auth/CONTRACT-auth-v1.md`; new docs pages
+  `docs/cli/login.md`, `logout.md`, `whoami.md`.
+
+### Starter catalog and full catalog (both SDKs)
+
+- `Router(catalog="auto" | "starter" | "full")` / `new Router({ catalog })`.
+  `auto` (the default) routes on the full catalog when you are logged in and on
+  the starter catalog otherwise; `starter` always uses the packaged catalog
+  with no network access; `full` raises `LoginRequiredError` when not logged
+  in. A session the server rejected raises `SessionEndedError` (the local
+  credentials and cached catalog are deleted). `ModelRegistry.default()` and
+  `BenchmarkRegistry.default()` take the same option. In Node the constructor
+  starts from the local cache, and the first `route()` (or
+  `await router.ready()`) completes the daily check.
+- The full catalog is checked at most once a day (`ETag` / `If-None-Match`,
+  one request with a 10 s timeout) and cached under `~/.tryaii/catalog/`.
+  Every file is verified against the manifest's sha256 and the manifest
+  against an **Ed25519 signature** from a key built into the package before
+  anything is written or used; a catalog that fails verification is never used
+  (the previous full catalog, or the starter catalog, is used instead, with a
+  one-line notice on stderr). `TRYAII_CATALOG_TRUSTED_KEYS` replaces the
+  built-in key list for development and tests only.
+- CLI: when nobody is logged in, `route`, `eval` and `models` print a one-line
+  hint to **stderr** at most once a day (`Routing on the starter catalog (45
+  models). Log in for free to use the full catalog (322 models): tryaii
+  login`); `TRYAII_NO_BANNER` silences it. `models`, `benchmarks`, `setup` and
+  `regenerate` work on the catalog in use.
+- Routing data is now a **catalog bundle** (`manifest.json`, `models.json`,
+  `benchmarks.json`, `normalization_ranges.json`, `centroids.json`,
+  `training_queries.json`; format in `docs/catalog/CONTRACT-catalog-v1.md`).
+  `load_bundle(dir)` / `loadBundle(dir)`, `Router(bundle=...)` /
+  `new Router({ bundle })`, and `from_bundle` / `fromBundle` on
+  `ModelRegistry`, `BenchmarkRegistry` and `BenchmarkNormalizer` route on any
+  bundle. The benchmark taxonomy, importance weights, random-chance floors and
+  the classifier's category labels moved from code into `benchmarks.json`, so
+  one engine routes both catalogs.
+- The routing daemon routes on the catalog the CLI selected and is replaced
+  when it changes. User centroid caches are now one file per catalog:
+  `centroids_<model>__<kind>-<version>.json`.
+- Ephemeral OpenRouter `:free` variants are never listed, routed, evaluated or
+  picked by budget optimization; `ModelRegistry.default(include_free=True)` /
+  `load_preset(..., include_free=True)` (Node: `{ includeFree: true }`,
+  `isFreeTier()`) opt back in. User-facing model counts never include them.
+- Models carry two measured speed fields, `tokens_per_second` and `ttft_ms`
+  (median time to first token), in `ModelInfo`, `to_dict()` and
+  `tryaii models --json`. Partially known pricing is treated as unknown.
+- `tryaii diagnose` resolves bare model names (`gpt-5.5`) against the
+  provider-prefixed catalog ids.
+- Fixed: `tryaii diagnose` again recognizes provider-native API model ids
+  such as `claude-sonnet-4-5-20250929`, `claude-haiku-4-5@20251001`,
+  `grok-4-latest` and `mistral-medium-2508` (dated and `-latest` aliases),
+  so the `cost_exposure` and `model_fit` checks no longer report
+  `insufficient_data` for them. They map to the matching catalog model only
+  when that model is in the catalog you are using; an unknown id still stays
+  unresolved rather than being matched to a similar model.
+
+### Routing score: `satisficing-v1` (both SDKs)
+
+- **Quality band.** Quality opens a tolerance band below the best candidate,
+  `eps = EPS_UNIT * ((cost - 1) + (speed - 1)) / quality` (`EPS_UNIT = 0.102`,
+  the one tuning dial); every model inside the band is then ranked on cost and
+  speed only. The quality priority sets the band width rather than acting as a
+  weight. At 5/1/1 there is no band: the quality leader wins.
+- **Cost on a log scale.** `U_c` maps $0.05/M -> 1 and $50/M -> 0 on the
+  average price per million tokens; every 10x cheaper is worth the same. A
+  missing price scores 0, not neutral, and is flagged `cost: unknown`.
+- **Speed as perceived wait.** `U_s` is log-scaled on the seconds to a
+  300-token answer, `T300 = ttft_ms/1000 + 300/tokens_per_second` (0.3 s -> 1,
+  30 s -> 0). A missing TTFT falls back to the catalog median
+  (`ttft: estimated`); a missing throughput falls back to a deliberately
+  pessimistic catalog p25 (`speed: unknown`). `latency` remains a display tier.
+- **Evidence-aware quality.** Each benchmark term is weighted by how much of
+  the catalog reports that benchmark (`COVERAGE_EXPONENT`), and imputed terms
+  count half (`IMPUTED_TERM_WEIGHT`), so picks rest on measured scores.
+  `ModelRegistry.benchmark_coverage()` / `benchmarkCoverage()` and
+  `ModelScore.benchmark_weights` / `benchmarkWeights` expose this.
+- **Catalog-fitted normalization.** `NORMALIZATION_RANGES` is fitted to the
+  catalog (`lo` = p25 of real scores, `hi` = max) instead of hand-set floors,
+  spreading the frontier out so the band is meaningful.
+- **New reasoning string**, byte-identical in both SDKs and explicit about the
+  trade it made, e.g. `q'=0.98 (4 real of 5) | imputed: 1/5 | cost 0.2066
+  ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) | within 0.020 of the best
+  (0.98) | at 5/1/2 you accept up to 0.020 less quality for a cheaper or faster
+  model; this pick gave up 0.00 vs anthropic/claude-opus-5.5`.
+- **`ModelScore` gains** `band_base`, `in_band`, `quality_tolerance`,
+  `quality_best`, `signal_flags`, `benchmark_weights`, plus the unrounded
+  `q_prime`, `u_cost`, `u_speed` and `t300`. New exports:
+  `satisficing_combine` / `satisficingCombine`, `quality_tolerance` /
+  `qualityTolerance`, `cost_utility` / `costUtility`, `speed_utility` /
+  `speedUtility`, `EPS_UNIT`,
+  `IMPUTED_TERM_WEIGHT`, `COVERAGE_EXPONENT`.
+- Ties break deterministically on `q'`, then on the number of real
+  (non-imputed) benchmark scores, then on model id.
+- Docs: `sdk/routing/scoring.md` and `sdk/routing/priorities.md` rewritten.
+
+### Design partners
+
+- Added a privacy-first [design-partner guide](docs/design-partners.md) and a
+  GitHub issue template for applications. Eval prompts stay local; sharing is
+  explicit and optional.
+
+### Breaking changes
+
+- **The built-in catalog changed.** The 39-model built-in list is replaced by
+  the 45-model starter catalog. Model ids are now OpenRouter-native
+  `provider/model` slugs (`openai/gpt-5.5`, `anthropic/claude-sonnet-4.5`)
+  instead of bare ids (`gpt-5.5`, `claude-sonnet-4-5-20250929`);
+  `MODEL_ID_TO_OPENROUTER` still maps the old ids.
+- **The benchmark set changed.** The 12 previous benchmarks (MMLU, HellaSwag,
+  HumanEval, SWE-bench, TruthfulQA, ARC, GSM8K, DROP, SuperGLUE, Chatbot Arena
+  (LMSys), MT-Bench, LiveBench) are replaced by the starter catalog's 16:
+  AIME-2024, AIME-2025, GPQA, HLE, AA-LCR, MMLU-Pro, MMMU, LegalBench,
+  LiveCodeBench, SciCode, Tau2-bench, Terminal-bench-Hard, IFBench and Chatbot
+  Arena Elo (+ Code / Vision). Custom models scored only on the old names get
+  no quality signal from them until you add scores on the new ones (or
+  register the old names as custom benchmarks). `STANDARD_BENCHMARKS`,
+  `NORMALIZATION_RANGES`, `BENCHMARK_WEIGHTS` and `RANDOM_CHANCE_FLOORS` now
+  describe the starter catalog.
+- **`final_score` is no longer rescaled into 0.1–0.95.** Contenders (inside the
+  quality band) score in [0.5, 1.0] and everyone else in [0.0, 0.5]; it is
+  comparable within one call only. Use `quality_score`, `cost_score` and
+  `speed_score` to compare across calls.
+- **`SPEED_SCORES` is removed**; speed comes from measured `tokens_per_second`
+  and `ttft_ms`, not from the `latency` tier.
+- **Reasoning strings have a new format** (see above); read the `ModelScore`
+  fields instead of parsing the string.
+- The old package data files (`registry/presets/default_models.json`,
+  `centroids/data/*`) are gone; `ModelRegistry.default()` and
+  `load_preset("default")` keep working and return the default catalog.
+
 ## 0.5.1 (2026-09-17)
 
 ### designpartner — questionnaire v4 (both SDKs)

@@ -1,0 +1,24 @@
+{
+  "counts": {
+    "benchmarks": 16,
+    "models": 45
+  },
+  "created_at": "2026-10-06T21:27:11Z",
+  "embedding_model": "all-MiniLM-L6-v2",
+  "files": {
+    "benchmarks.json": "6464fc0eccfc41e720ae5e639652afe9c00b2f77bd491c26eb3c6e98149ced30",
+    "centroids.json": "a3e3634f459351180fe4083f59be36bb01bb460e4dce96672e3e1b26c3d00484",
+    "models.json": "662bbd30556433efef41cbe0fffbe3d2dd5c9ae28db4ddc1e03ffd34c992f3f5",
+    "normalization_ranges.json": "118738f80b0d2c2e2f2047a86b370b053303d18ee080a03a34b45fd25380e2fe",
+    "training_queries.json": "6bf17c1eb1fc2fb67ed2fe1dcf9ce51157cd5ad3b64d7a217213b8541b2db07c"
+  },
+  "full_counts": {
+    "benchmarks": 33,
+    "models": 322
+  },
+  "key_id": null,
+  "kind": "starter",
+  "schema": 1,
+  "signature": null,
+  "version": "2026.10.07.1"
+}

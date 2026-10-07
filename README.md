@@ -12,7 +12,7 @@
 ████████╗██████╗ ██╗   ██╗ █████╗ ██╗██╗
 ╚══██╔══╝██╔══██╗╚██╗ ██╔╝██╔══██╗██║██║   ▸ Diff Routing Engine
    ██║   ██████╔╝ ╚████╔╝ ███████║██║██║   ▸ semantic, prompt-aware LLM routing
-   ██║   ██╔══██╗  ╚██╔╝  ██╔══██║██║██║   ▸ ranks 39 models by benchmark × cost × speed
+   ██║   ██╔══██╗  ╚██╔╝  ██╔══██║██║██║   ▸ ranks LLMs by benchmark × cost × speed
    ██║   ██║  ██║   ██║   ██║  ██║██║██║   ▸ local embeddings — zero API keys to route
    ╚═╝   ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═╝╚═╝
 ```
@@ -47,6 +47,23 @@ Both install a `tryaii` command on your `PATH`. Routing runs **fully locally** �
 embeddings are computed on-device (`sentence-transformers` on Python, ONNX MiniLM via
 `@xenova/transformers` on Node), so no API key is needed just to rank models. An
 OpenRouter key is only required if you want the SDK to *call* the chosen model for you.
+
+Out of the box, `tryaii` routes on a **starter catalog** of 45 well-known models and
+16 benchmarks that ships inside the package — no account, no network. Log in (free,
+with your tryaii.com Google account) to route on the **full catalog of 322 models**:
+
+```bash
+tryaii login     # device sign-in: open the printed URL in any browser, approve the code
+tryaii whoami    # shows the account and the downloaded catalog release
+tryaii logout    # removes the credentials and the downloaded catalog
+```
+
+After login the full catalog downloads automatically, is refreshed at most once a day,
+cached locally, and checked against an Ed25519 signature before it is used
+([docs](docs/cli/login.md)).
+
+Building a real multi-model product? See the local-first
+[design-partner program](docs/design-partners.md).
 
 ## Examples
 
@@ -143,8 +160,8 @@ result = router.route(
     priorities=Priorities(quality=5, cost=1, speed=2),
 )
 
-print(result.best_model)      # e.g. "gpt-5-nano"
-print(result.best_reasoning)  # "Quality: 0.94 on [HumanEval ...]"
+print(result.best_model)      # e.g. "anthropic/claude-opus-5.5"
+print(result.best_reasoning)  # "q'=0.98 (4 real of 5) | imputed: 1/5 | cost 0.2066 ($12.00/M) | ..."
 ```
 
 </td><td>
@@ -158,8 +175,8 @@ const result = await router.route(
   { priorities: Priorities.performance() },
 );
 
-console.log(result.bestModel);            // e.g. "gpt-5-nano"
-console.log(result.scores[0].reasoning);  // "Quality: 0.94 ..."
+console.log(result.bestModel);            // e.g. "anthropic/claude-opus-5.5"
+console.log(result.scores[0].reasoning);  // "q'=0.98 (4 real of 5) | ..."
 ```
 
 </td></tr>
@@ -198,13 +215,16 @@ tryaii <command> [options]
 |---------|--------------|
 | `route "<prompt>"`   | Classify one prompt and print ranked model recommendations with reasoning. |
 | `eval <input.json>`  | Route a whole dataset and write `results.jsonl`, `summary.json`, and an `index.html` dashboard. |
-| `models`             | List the built-in models (provider, latency, pricing). |
-| `benchmarks`         | List the 12 benchmarks and their score-normalization ranges. |
+| `models`             | List the models of the catalog in use (provider, latency, pricing): the 45-model starter catalog, or the full catalog after `login`. |
+| `benchmarks`         | List the catalog's benchmarks and their score-normalization ranges (16 in the starter catalog). |
 | `setup`              | Download the embedding model and warm the centroids (one-time). |
 | `regenerate`         | Rebuild benchmark centroids, e.g. after switching the embedding model. |
 | `cachelint <request.json>` | Lint a chat request for prompt-cache readiness — verdict-first report; warns, never blocks. |
 | `diagnose <verb>`    | Agent-first codebase LLM diagnostics — model fit, cache readiness, cost exposure, prompt hygiene; insight-only, rendered to a local HTML report. |
 | `designpartner`      | Enroll as a tryaii design partner — one resumable command; nothing is sent without an explicit `--confirm`. |
+| `login`              | Sign in with your tryaii.com account (free; unlocks the full model catalog of 322 models). |
+| `logout`             | Sign out and remove the stored credentials and the downloaded full catalog. |
+| `whoami`             | Show the signed-in account and the catalog release in use (`--json`). |
 
 ### Options
 
@@ -241,20 +261,27 @@ tryaii <command> [options]
 **`cachelint`** — `-` reads the request from stdin; `--provider` / `--model` select the cache rules ([docs](docs/cli/cachelint.md)).
 **`diagnose`** — verbs `init` / `plan` / `check` / `report` ([docs](docs/cli/diagnose/README.md)).
 **`designpartner`** — at most one action flag per run: `--answers` / `--consent` / `--confirm` / `--reset`; `--json` prints the machine-readable status agents consume ([docs](docs/cli/designpartner.md)).
+**`login` / `logout`** — no options ([login](docs/cli/login.md), [logout](docs/cli/logout.md)).
+**`whoami`** — `--json` prints the account as the server returns it ([docs](docs/cli/whoami.md)).
 
 ### Global flags & environment
 
 | Flag / env | Effect |
 |------------|--------|
 | `--no-banner` | Skip the startup banner (works before or after the command). |
-| `TRYAII_NO_BANNER=1` | Same as `--no-banner`, via the environment. |
+| `TRYAII_NO_BANNER=1` | Same as `--no-banner`, via the environment; also silences the once-a-day login hint. |
+| `TRYAII_API_URL` | API base URL for `login` (default `https://api.tryaii.com`). |
 | `NO_COLOR=1` | Render the banner monochrome (color convention). |
 | `-V, --version` | Print the version and exit. |
 | `-v, --verbose` | Verbose logging. |
 | `-h, --help` | Show help (works before or after the command, plus bare `tryaii help`). |
 
 All global flags work identically on the npm and PyPI CLIs and are accepted in any position.
-Exit codes also match: `0` success, `1` runtime failure, `2` usage error.
+Exit codes also match: `0` success, `1` runtime failure, `2` usage error (`130` when `login` is cancelled).
+
+When nobody is logged in, `route`, `eval` and `models` print a one-line hint on **stderr**
+at most once a day: `Routing on the starter catalog (45 models). Log in for free to use the
+full catalog (322 models): tryaii login`.
 
 The banner prints to **stderr** and auto-suppresses when output is piped or redirected, so
 `tryaii models --json > models.json` stays clean. See [Examples](#examples) (top of this
@@ -318,11 +345,15 @@ CLI (same command for both packages)
   tryaii eval examples/prompts.json --max-price=0.50 --difficulty-source=intrinsic   # spend more on harder prompts
   tryaii models --json        # machine-readable model catalog (stdout)
   tryaii benchmarks --json    # machine-readable benchmark catalog
+  tryaii login                # optional, free: unlocks the full 322-model catalog
   # Add --no-banner (or set TRYAII_NO_BANNER=1) for clean, scriptable output.
 
 NOTES
   - route() is async in Node, sync in Python.
-  - Routing is local and free; only DREClient/OpenRouter calls hit the network.
+  - Routing is local and free; only DREClient/OpenRouter calls hit the network
+    (plus, once logged in, an at-most-daily check for a new full-catalog release).
+  - Without login, routing uses the 45-model starter catalog; after `tryaii login`
+    it uses the full catalog of 322 models.
   - In budget eval, --max-price is a hard cap and quality/cost/speed flags are ignored.
 ````
 
@@ -337,7 +368,7 @@ Expand a block and use the copy button in its top-right corner.
 
 ```text
 Install the `tryaii` PyPI package (`pip install tryaii`) — a local, no-API-key LLM
-router that ranks 39 models by quality, price, and latency. Demo evaluating LLMs per price:
+router that ranks LLMs by quality, price, and latency. Demo evaluating LLMs per price:
 create prompts.json (an array of 5 example prompt strings), then run a budget eval where
 --max-price is the total $ cap for the whole dataset and the optimizer maximizes quality
 under it:
@@ -356,7 +387,7 @@ quality-per-dollar. Also show the per-prompt tradeoff in Python:
 
 ```text
 Install the `tryaii` npm package (`npm install tryaii`) — a local, no-API-key LLM
-router that ranks 39 models by quality, price, and latency. Demo evaluating LLMs per price:
+router that ranks LLMs by quality, price, and latency. Demo evaluating LLMs per price:
 create prompts.json (an array of 5 example prompt strings), then run a budget eval where
 --max-price is the total $ cap for the whole dataset and the optimizer maximizes quality
 under it:
@@ -378,13 +409,14 @@ quality-per-dollar. Also show the per-prompt tradeoff in Node (route() is async)
 User Prompt
     |
     v
-[Embed locally]  -->  Cosine similarity vs 12 benchmark centroids
-    |                  (HumanEval, MMLU, GSM8K, SWE-bench, ...)
+[Embed locally]  -->  Cosine similarity vs the catalog's benchmark centroids
+    |                  (GPQA, LiveCodeBench, MMLU-Pro, Tau2-bench, ...)
     v
 [Classify task]  -->  "This is a CODE_TECHNICAL task"
     |
     v
-[Score models]   -->  (quality·qW + cost·cW + speed·sW) / (qW+cW+sW)
+[Score models]   -->  quality sets a tolerance band below the best model;
+    |                  cost and speed pick the winner inside the band
     |
     v
 Top-K ranked models, each with human-readable reasoning
@@ -394,10 +426,10 @@ Top-K ranked models, each with human-readable reasoning
 
 ```
 tryaii/
-  shared/                  Single source of truth for model data
-    models/                39 models with benchmarks and pricing
-    centroids/             Pre-computed embedding centroids
-    training/              Training queries used to build the centroids
+  shared/                  Single source of truth, synced into both packages
+    catalog/starter/       Starter catalog bundle: 45 models, 16 benchmarks, centroids,
+                           training queries, normalization ranges
+    cachelint/ diagnose/ designpartner/   Cross-SDK specs and fixtures
   packages/
     python/                pip install tryaii
     node/                  npm install tryaii
@@ -406,18 +438,29 @@ tryaii/
 
 ## Models & benchmarks
 
-**39 models across 6 providers**, pre-loaded with benchmark scores and pricing — and fully
-extensible via `router.addModel(...)`:
+The package ships a **starter catalog: 45 models from 6 providers, scored on 16
+benchmarks** — enough to route real workloads with no account and no network. Model ids
+are OpenRouter-native slugs (`provider/model`, e.g. `openai/gpt-5.5`,
+`anthropic/claude-opus-5.5`), so the chosen id can be passed straight through to
+OpenRouter, and the catalog is fully extensible via `router.addModel(...)` /
+`router.add_model(...)`.
 
-- **OpenAI** (14): GPT-5.5, GPT-5.4, GPT-5.2, GPT-5.1, GPT-5, O3, O4-mini, GPT-4o, and more
-- **Anthropic** (7): Claude Fable 5, Claude Opus 4.8, Claude Opus 4.5, Claude Sonnet 4.6, Claude Haiku 4.5, and more
-- **Google** (7): Gemini 3.5 Flash, Gemini 3.1 Pro, Gemini 3 Flash, Gemini 2.5 Pro/Flash, and more
-- **DeepSeek** (4): V4 Pro, V4 Flash, Reasoner, Chat
-- **xAI** (4): Grok 4.3, Grok 4, Grok 4.1 Fast Reasoning, Grok Code Fast
-- **Mistral** (3): Large, Medium, Small
+- **openai** (16): GPT-5.5, GPT-5.4 (+ mini / nano), GPT-5.x, o3 / o4-mini, GPT-4o, gpt-oss-120b, and more
+- **anthropic** (10): Claude Opus 5.5, Fable 5.1 / 5, Sonnet 5.5 / 4.x, Opus 4.8 / 4.5, Haiku 4.5
+- **google** (8): Gemini 3.8 Flash, 3.5 Flash, 3.1 Pro / Flash-Lite, 2.5 family
+- **deepseek** (4), **x-ai** (4), **mistralai** (3)
 
-**12 benchmarks** drive classification: ARC, Chatbot Arena (LMSys), DROP, GSM8K, HellaSwag,
-HumanEval, LiveBench, MMLU, MT-Bench, SWE-bench, SuperGLUE, TruthfulQA.
+**16 benchmarks** drive classification in the starter catalog: AIME-2024/2025, GPQA,
+HLE, AA-LCR, MMLU-Pro, MMMU, LegalBench, LiveCodeBench, SciCode, Tau2-bench,
+Terminal-bench-Hard, IFBench, and Chatbot Arena Elo (+ Code / Vision).
+
+**Log in for the full catalog.** `tryaii login` (free) unlocks the full catalog of
+**322 routable models** across many more providers and benchmarks. It downloads right
+after login, refreshes at most once a day, is cached under `~/.tryaii/catalog/`, and is
+used only after its Ed25519 signature checks out. In code, `Router(catalog="auto")`
+(the default) picks the full catalog when you are logged in; `catalog="starter"` keeps
+routing offline on the packaged catalog. Ephemeral OpenRouter `:free` variants are never
+routed in either catalog.
 
 ## Packages
 

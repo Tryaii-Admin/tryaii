@@ -26,8 +26,8 @@ Estimated cost : $0.412345        (budget mode only)
 Budget         : $0.500000        (budget mode only)
 
 Top recommended models:
-  claude-sonnet-4-5-20250929                  60  (50.85%)
-  gemini-2.5-flash                            31  (26.27%)
+  anthropic/claude-fable-5                    60  (50.85%)
+  google/gemini-2.5-flash                     31  (26.27%)
   ...                                              (top 10 of the distribution)
 
 [eval] per-prompt results -> <output>/results.jsonl

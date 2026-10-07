@@ -29,26 +29,32 @@ export class Priorities {
   }
 
   /**
-   * Quality weight: 0.3 (priority 1) .. 1.2 (priority 5). Quality always keeps a
-   * baseline influence so a prompt is never scored on cost/speed alone -- this
-   * also guarantees the weight total is never zero (no divide-by-zero in the
-   * scoring engine even when cost and speed are both fully suppressed).
+   * Quality weight: 0.3 (priority 1) .. 1.2 (priority 5).
+   *
+   * **Not used by the router any more.** Under `satisficing-v1` the quality
+   * priority reaches the algorithm only through the band width `eps` (see
+   * `qualityTolerance` in the engine). Kept for backward-compatible reporting;
+   * it must not be reintroduced into the combine step.
    */
   get qualityWeight(): number {
     return 0.3 + ((this.quality - 1) / 4) * 0.9;
   }
 
   /**
-   * Cost weight: 0 (priority 1) .. 1.0 (priority 5). Fully suppressible -- a
-   * priority of 1 removes cost from the decision entirely, so e.g.
-   * `Priorities(5, 1, 1)` is a true quality-only route (previously cost/speed
-   * kept a 0.28 floor that let a cheaper model out-rank a higher-quality one).
+   * Cost weight `wc = (cost - 1) / 4`: 0 at priority 1 (the cost term is OFF),
+   * 1.0 at priority 5. Inside the quality band the engine ranks on
+   * `(wc*U_c + ws*U_s) / (wc + ws)`, so this is a *share*, not a scale, and
+   * `wc + ws == 0` is the strict-quality path.
+   *
+   * Deliberately NOT a soft weight (`0.05 + 0.95(k-1)/4`): measured as a no-op
+   * at (3,3,3), it degrades price-noise stability at (1,5,1) and breaks the
+   * exactness of both regression anchors.
    */
   get costWeight(): number {
     return ((this.cost - 1) / 4) * 1.0;
   }
 
-  /** Speed weight: 0 (priority 1) .. 1.0 (priority 5). Fully suppressible, like cost. */
+  /** Speed weight `ws = (speed - 1) / 4`: 0 at priority 1 (OFF), 1.0 at 5. */
   get speedWeight(): number {
     return ((this.speed - 1) / 4) * 1.0;
   }

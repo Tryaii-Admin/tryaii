@@ -121,7 +121,7 @@
     <div class="stat"><div class="k">Findings</div><div class="v warn">5</div></div>
     <div class="stat"><div class="k">Est. monthly cost</div><div class="v">$312.00</div></div>
     <div class="stat"><div class="k">Cache savings (max)</div><div class="v">n/a</div></div>
-    <div class="stat"><div class="k">Swap savings</div><div class="v ok">$306.00</div></div>
+    <div class="stat"><div class="k">Swap savings</div><div class="v ok">$312.00</div></div>
   </div>
 
   <div class="delta">since <code>fixture-run-a</code>: 0 site(s) improved, 0 regressed, 0 new, 0 removed · monthly est. +$0.00</div>
@@ -178,33 +178,33 @@
 
 
       <details>
-        <summary>model fit — gpt-4o is a poor fit for this prompt (rank 22 of 39) — best: grok-4-1-fast-reasoning-latest</summary>
+        <summary>model fit — openai/gpt-4o is a poor fit for this prompt (rank 43 of 45) — best: google/gemini-3.8-flash</summary>
         <ul class="kv">
           <li><span class="k">category</span><span class="v">analysis &gt; summarization</span></li>
           <li><span class="k">confidence</span><span class="v">0.83</span></li>
 
-          <li><span class="k">best in price range (±20%)</span><span class="v">gemini-3.5-flash (rank 5)</span></li>
+          <li><span class="k">best in price range (±20%)</span><span class="v">google/gemini-3.1-pro-preview (rank 2)</span></li>
 
         </ul>
         <table class="rank">
           <tr><th>#</th><th class="m">model</th><th>quality</th><th>cost</th><th>speed</th></tr>
 
-          <tr class=""><td>1</td><td class="m">grok-4-1-fast-reasoning-latest</td><td>0.8299</td><td>0.9965</td><td>0.8</td></tr>
-          <tr class=""><td></td><td class="r" colspan="4">Quality: 0.83 on [MMLU (97%), Chatbot Arena (LMSys) (70%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)</td></tr>
+          <tr class=""><td>1</td><td class="m">google/gemini-3.8-flash</td><td>0.9142</td><td>0.4489</td><td>0.5353</td></tr>
+          <tr class=""><td></td><td class="r" colspan="4">q&#39;=0.91 (3 real of 3) | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.06 vs anthropic/claude-fable-5.1</td></tr>
 
-          <tr class=""><td>2</td><td class="m">grok-4.3</td><td>0.9011</td><td>0.9812</td><td>0.6</td></tr>
-          <tr class=""><td></td><td class="r" colspan="4">Quality: 0.90 on [MMLU (95%), Chatbot Arena (LMSys) (86%)] | Cost efficiency: 0.98 | Speed: 0.60 (medium)</td></tr>
+          <tr class=""><td>2</td><td class="m">google/gemini-3.1-pro-preview</td><td>0.8973</td><td>0.2846</td><td>0.3643</td></tr>
+          <tr class=""><td></td><td class="r" colspan="4">q&#39;=0.90 (3 real of 3) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.06 vs anthropic/claude-fable-5.1</td></tr>
 
-          <tr class=""><td>3</td><td class="m">gemini-3-flash-preview</td><td>0.819</td><td>0.996</td><td>0.8</td></tr>
-          <tr class=""><td></td><td class="r" colspan="4">Quality: 0.82 on [MMLU (87%), Chatbot Arena (LMSys) (75%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)</td></tr>
+          <tr class=""><td>3</td><td class="m">anthropic/claude-opus-5.5</td><td>0.9439</td><td>0.2066</td><td>0.4154</td></tr>
+          <tr class=""><td></td><td class="r" colspan="4">q&#39;=0.94 (1 real of 3) | imputed: 2/3 | cost 0.2066 ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.06 vs anthropic/claude-fable-5.1</td></tr>
 
-          <tr class=""><td>4</td><td class="m">deepseek-v4-pro</td><td>0.8625</td><td>0.9935</td><td>0.6</td></tr>
-          <tr class=""><td></td><td class="r" colspan="4">Quality: 0.86 on [MMLU (92%), Chatbot Arena (LMSys) (82%)] | Cost efficiency: 0.99 | Speed: 0.60 (medium)</td></tr>
+          <tr class=""><td>4</td><td class="m">anthropic/claude-fable-5.1</td><td>0.9705</td><td>0.0739</td><td>0.2547</td></tr>
+          <tr class=""><td></td><td class="r" colspan="4">q&#39;=0.97 (3 real of 3) | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.06 vs anthropic/claude-fable-5.1</td></tr>
 
-          <tr class=""><td>5</td><td class="m">gemini-3.5-flash</td><td>0.8366</td><td>0.9475</td><td>0.8</td></tr>
-          <tr class=""><td></td><td class="r" colspan="4">Quality: 0.84 on [MMLU (88%), Chatbot Arena (LMSys) (77%)] | Cost efficiency: 0.95 | Speed: 0.80 (fast)</td></tr>
+          <tr class=""><td>5</td><td class="m">anthropic/claude-fable-5</td><td>0.9546</td><td>0.0739</td><td>0.2319</td></tr>
+          <tr class=""><td></td><td class="r" colspan="4">q&#39;=0.95 (3 real of 3) | cost 0.0739 ($30.00/M) | speed 0.2319 (10.31 s to 300 tok) | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.06 vs anthropic/claude-fable-5.1</td></tr>
 
-          <tr class="current"><td>22</td><td class="m">gpt-4o</td><td>0.7641</td><td>0.9375</td><td>0.6</td></tr>
+          <tr class="current"><td>43</td><td class="m">openai/gpt-4o</td><td>0.0179</td><td>0.301</td><td>0.3502</td></tr>
           <tr class="current"><td></td><td class="r" colspan="4"></td></tr>
 
         </table>
@@ -261,7 +261,7 @@
 
           <li><span class="k">monthly cost (2000 calls/day)</span><span class="v">$312.00</span></li>
 
-          <li><span class="k">cheaper swap</span><span class="v">deepseek-v4-flash at $0.0001/call (saves $306.00/mo)</span></li>
+          <li><span class="k">cheaper swap</span><span class="v">deepseek/deepseek-v4-flash at $0.0000/call (saves $312.00/mo)</span></li>
 
         </ul>
       </details>
@@ -314,7 +314,7 @@
 
 
       <details>
-        <summary>model fit — recommended: grok-4.3 (no current model to compare)</summary>
+        <summary>model fit — recommended: google/gemini-3.8-flash (no current model to compare)</summary>
         <ul class="kv">
           <li><span class="k">category</span><span class="v">conversation &gt; chat</span></li>
           <li><span class="k">confidence</span><span class="v">0.71</span></li>
@@ -323,20 +323,20 @@
         <table class="rank">
           <tr><th>#</th><th class="m">model</th><th>quality</th><th>cost</th><th>speed</th></tr>
 
-          <tr class=""><td>1</td><td class="m">grok-4.3</td><td>0.8578</td><td>0.9812</td><td>0.6</td></tr>
-          <tr class=""><td></td><td class="r" colspan="4">Quality: 0.86 on [Chatbot Arena (LMSys) (86%), MT-Bench (85%)] | Cost efficiency: 0.98 | Speed: 0.60 (medium)</td></tr>
+          <tr class=""><td>1</td><td class="m">google/gemini-3.8-flash</td><td>0.9345</td><td>0.4489</td><td>0.5353</td></tr>
+          <tr class=""><td></td><td class="r" colspan="4">q&#39;=0.93 (1 real of 2) | imputed: 1/2 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5</td></tr>
 
-          <tr class=""><td>2</td><td class="m">gemini-3-flash-preview</td><td>0.7716</td><td>0.996</td><td>0.8</td></tr>
-          <tr class=""><td></td><td class="r" colspan="4">Quality: 0.77 on [Chatbot Arena (LMSys) (75%), MT-Bench (80%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)</td></tr>
+          <tr class=""><td>2</td><td class="m">google/gemini-3.5-flash</td><td>0.8526</td><td>0.3263</td><td>0.4802</td></tr>
+          <tr class=""><td></td><td class="r" colspan="4">q&#39;=0.85 (2 real of 2) | cost 0.3263 ($5.25/M) | speed 0.4802 (3.29 s to 300 tok) | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5</td></tr>
 
-          <tr class=""><td>3</td><td class="m">gpt-5.4</td><td>0.9192</td><td>0.9125</td><td>0.6</td></tr>
-          <tr class=""><td></td><td class="r" colspan="4">Quality: 0.92 on [Chatbot Arena (LMSys) (89%), MT-Bench (96%)] | Cost efficiency: 0.91 | Speed: 0.60 (medium)</td></tr>
+          <tr class=""><td>3</td><td class="m">google/gemini-3.1-pro-preview</td><td>0.8642</td><td>0.2846</td><td>0.3643</td></tr>
+          <tr class=""><td></td><td class="r" colspan="4">q&#39;=0.86 (2 real of 2) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5</td></tr>
 
-          <tr class=""><td>4</td><td class="m">gpt-5.2</td><td>0.9009</td><td>0.9213</td><td>0.6</td></tr>
-          <tr class=""><td></td><td class="r" colspan="4">Quality: 0.90 on [Chatbot Arena (LMSys) (86%), MT-Bench (95%)] | Cost efficiency: 0.92 | Speed: 0.60 (medium)</td></tr>
+          <tr class=""><td>4</td><td class="m">anthropic/claude-opus-5.5</td><td>0.9732</td><td>0.2066</td><td>0.4154</td></tr>
+          <tr class=""><td></td><td class="r" colspan="4">q&#39;=0.97 (1 real of 2) | imputed: 1/2 | cost 0.2066 ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5</td></tr>
 
-          <tr class=""><td>5</td><td class="m">gemini-3.5-flash</td><td>0.7953</td><td>0.9475</td><td>0.8</td></tr>
-          <tr class=""><td></td><td class="r" colspan="4">Quality: 0.80 on [Chatbot Arena (LMSys) (77%), MT-Bench (83%)] | Cost efficiency: 0.95 | Speed: 0.80 (fast)</td></tr>
+          <tr class=""><td>5</td><td class="m">anthropic/claude-fable-5.1</td><td>0.9271</td><td>0.0739</td><td>0.2547</td></tr>
+          <tr class=""><td></td><td class="r" colspan="4">q&#39;=0.93 (1 real of 2) | imputed: 1/2 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5</td></tr>
 
         </table>
       </details>
@@ -381,7 +381,7 @@
 
 
       <details>
-        <summary>model fit — recommended: grok-4-1-fast-reasoning-latest (no current model to compare)</summary>
+        <summary>model fit — recommended: google/gemini-3.8-flash (no current model to compare)</summary>
         <ul class="kv">
           <li><span class="k">category</span><span class="v">writing &gt; business-writing</span></li>
           <li><span class="k">confidence</span><span class="v">0.62</span></li>
@@ -390,20 +390,20 @@
         <table class="rank">
           <tr><th>#</th><th class="m">model</th><th>quality</th><th>cost</th><th>speed</th></tr>
 
-          <tr class=""><td>1</td><td class="m">grok-4-1-fast-reasoning-latest</td><td>0.8658</td><td>0.9965</td><td>0.8</td></tr>
-          <tr class=""><td></td><td class="r" colspan="4">Quality: 0.87 on [MMLU (97%), TruthfulQA (70%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)</td></tr>
+          <tr class=""><td>1</td><td class="m">google/gemini-3.8-flash</td><td>0.9211</td><td>0.4489</td><td>0.5353</td></tr>
+          <tr class=""><td></td><td class="r" colspan="4">q&#39;=0.92 (2 real of 2) | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.05 vs anthropic/claude-fable-5.1</td></tr>
 
-          <tr class=""><td>2</td><td class="m">gemini-3-flash-preview</td><td>0.8022</td><td>0.996</td><td>0.8</td></tr>
-          <tr class=""><td></td><td class="r" colspan="4">Quality: 0.80 on [MMLU (87%), TruthfulQA (70%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)</td></tr>
+          <tr class=""><td>2</td><td class="m">google/gemini-3.5-flash</td><td>0.8637</td><td>0.3263</td><td>0.4802</td></tr>
+          <tr class=""><td></td><td class="r" colspan="4">q&#39;=0.86 (2 real of 2) | cost 0.3263 ($5.25/M) | speed 0.4802 (3.29 s to 300 tok) | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.05 vs anthropic/claude-fable-5.1</td></tr>
 
-          <tr class=""><td>3</td><td class="m">gpt-5.4</td><td>0.9365</td><td>0.9125</td><td>0.6</td></tr>
-          <tr class=""><td></td><td class="r" colspan="4">Quality: 0.94 on [MMLU (94%), TruthfulQA (93%)] | Cost efficiency: 0.91 | Speed: 0.60 (medium)</td></tr>
+          <tr class=""><td>3</td><td class="m">google/gemini-3.1-pro-preview</td><td>0.9315</td><td>0.2846</td><td>0.3643</td></tr>
+          <tr class=""><td></td><td class="r" colspan="4">q&#39;=0.93 (2 real of 2) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.05 vs anthropic/claude-fable-5.1</td></tr>
 
-          <tr class=""><td>4</td><td class="m">gemini-3.1-flash-lite</td><td>0.7198</td><td>0.9912</td><td>1</td></tr>
-          <tr class=""><td></td><td class="r" colspan="4">Quality: 0.72 on [MMLU (81%), TruthfulQA (57%)] | Cost efficiency: 0.99 | Speed: 1.00 (very fast)</td></tr>
+          <tr class=""><td>4</td><td class="m">anthropic/claude-opus-5.5</td><td>0.8714</td><td>0.2066</td><td>0.4154</td></tr>
+          <tr class=""><td></td><td class="r" colspan="4">q&#39;=0.87 (0 real of 2) | imputed: 2/2 | cost 0.2066 ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.05 vs anthropic/claude-fable-5.1</td></tr>
 
-          <tr class=""><td>5</td><td class="m">gpt-5.2</td><td>0.9227</td><td>0.9213</td><td>0.6</td></tr>
-          <tr class=""><td></td><td class="r" colspan="4">Quality: 0.92 on [MMLU (93%), TruthfulQA (91%)] | Cost efficiency: 0.92 | Speed: 0.60 (medium)</td></tr>
+          <tr class=""><td>5</td><td class="m">openai/gpt-5.5</td><td>0.8355</td><td>0.152</td><td>0.5105</td></tr>
+          <tr class=""><td></td><td class="r" colspan="4">q&#39;=0.84 (2 real of 2) | cost 0.1520 ($17.50/M) | speed 0.5105 (2.86 s to 300 tok) | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.05 vs anthropic/claude-fable-5.1</td></tr>
 
         </table>
       </details>

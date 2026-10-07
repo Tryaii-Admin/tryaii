@@ -5,6 +5,8 @@
  * This module normalizes them all to a 0-1 range for fair comparison.
  */
 
+import { CatalogBundle, starterBundle } from '../catalog/bundle.js';
+
 export class NormalizationRange {
   readonly minScore: number;
   readonly maxScore: number;
@@ -24,62 +26,73 @@ export class NormalizationRange {
   }
 }
 
-/**
- * Standard benchmark normalization ranges.
+/*
+ * Benchmark data -- ranges, importance weights and plausibility floors -- is
+ * CATALOG data, not code: it comes from the active catalog bundle
+ * (docs/catalog/CONTRACT-catalog-v1.md; normalization_ranges.json and
+ * benchmarks.json), so the same engine code routes the starter and the full
+ * catalog. The module-level tables below are derived from the *packaged starter
+ * bundle* and are kept for backwards compatibility; a Router built on another
+ * bundle gets its tables through `BenchmarkNormalizer.fromBundle` /
+ * `BenchmarkRegistry.fromBundle` instead.
  *
- * Fit to the observed min/max of the shipped model catalog so it spreads across
- * most of 0-1. Loose ranges crush frontier models into a narrow high band where
- * quality can't differentiate them and routing collapses onto cost/speed; re-fit
- * when the catalog changes substantially. Keep in sync with STANDARD_BENCHMARKS.
+ * Ranges are generated when the catalog is built (lo = p25 of a benchmark's
+ * real scores across the routable full catalog, hi = their max) and shipped
+ * identically in every bundle, so a model scores the same on both catalogs for
+ * every benchmark they share.
+ *
+ * Scales differ per benchmark and are NOT all 0-100:
+ *   - Chatbot Arena variants are ELO ratings.
+ *   - LiveBench and its sub-tracks are 0-1 fractions.
+ *   - The rest are 0-100 accuracy percentages.
+ * Out-of-range outliers simply clamp to [0, 1].
+ *
+ * Importance weights (benchmarks.json `weight`) are the "how much do we trust
+ * this benchmark as a routing signal" axis, orthogonal to the prompt's
+ * similarity to the benchmark: higher pulls model ranking harder, 1.0 is
+ * neutral. Random-chance floors (`random_chance_floor`) mark scores below a
+ * multiple-choice benchmark's random baseline as corrupt; they are dropped on
+ * load (see `isImplausibleBenchmarkScore`). Mirrors the Python package.
  */
-export const NORMALIZATION_RANGES: Record<string, NormalizationRange> = {
-  'MMLU': new NormalizationRange(40, 96, 'Academic knowledge across 57 subjects'),
-  'HellaSwag': new NormalizationRange(68, 99, 'Commonsense reasoning'),
-  'HumanEval': new NormalizationRange(30, 97, 'Code generation'),
-  'SWE-bench': new NormalizationRange(8, 86, 'Real-world software engineering'),
-  'TruthfulQA': new NormalizationRange(40, 86, 'Truthful question answering'),
-  'ARC': new NormalizationRange(70, 96, 'Science exam questions'),
-  'GSM8K': new NormalizationRange(65, 99, 'Grade school math'),
-  'DROP': new NormalizationRange(48, 91, 'Reading comprehension with arithmetic'),
-  'SuperGLUE': new NormalizationRange(48, 95, 'Natural language understanding'),
-  'Chatbot Arena (LMSys)': new NormalizationRange(1300, 1520, 'Human-rated chat quality'),
-  'MT-Bench': new NormalizationRange(6, 10, 'Multi-turn conversation quality'),
-  'LiveBench': new NormalizationRange(58, 84, 'Fresh, contamination-resistant evaluation'),
-};
+
+/** `{benchmark: NormalizationRange}` from a bundle's normalization_ranges.json. */
+export function rangesFromBundle(bundle: CatalogBundle): Record<string, NormalizationRange> {
+  const ranges: Record<string, NormalizationRange> = {};
+  for (const [name, entry] of Object.entries(bundle.rangeEntries())) {
+    ranges[name] = new NormalizationRange(entry.lo, entry.hi, entry.description ?? '');
+  }
+  return ranges;
+}
+
+const STARTER = starterBundle();
+
+/** Normalization ranges of the packaged starter catalog. */
+export const NORMALIZATION_RANGES: Record<string, NormalizationRange> = rangesFromBundle(STARTER);
+
+/** Importance weights of the packaged starter catalog's benchmarks. */
+export const BENCHMARK_WEIGHTS: Record<string, number> = STARTER.benchmarkWeights();
 
 /**
- * Per-benchmark importance weights ("trust" multipliers), orthogonal to
- * prompt-similarity: the weight multiplies into the similarity weight in the
- * scoring engine, so a higher weight pulls model ranking harder toward that
- * benchmark. Weight 1.0 is neutral, and an all-1.0 (or empty) table reproduces
- * the old similarity-only behaviour exactly.
- *
- * Left empty here: the weight *values* are a property of the shipped catalog
- * (which benchmarks are saturated/gamed vs contamination-resistant) and belong
- * with the catalog data, so the default catalog stays neutral. Keys, when set,
- * must be benchmark names present in NORMALIZATION_RANGES.
+ * Weight used for any benchmark with no explicit entry (neutral). Engine
+ * semantics for custom / unknown benchmarks, not catalog data.
  */
-export const BENCHMARK_WEIGHTS: Record<string, number> = {};
-
-/** Weight used for any benchmark with no explicit entry (neutral). */
 export const DEFAULT_BENCHMARK_WEIGHT = 1.0;
 
-/**
- * Plausibility floors for multiple-choice benchmarks: a real model cannot score
- * meaningfully below random chance, so a value under these floors is corrupt
- * data (e.g. a normalized sub-score of GPQA=1.3 where the real accuracy is ~90).
- * Such values are dropped on load (see `isImplausibleBenchmarkScore`) so they
- * neither crater the model directly nor poison the imputation medians.
- *
- * Left empty here: floors are only needed for catalogs whose upstream sources
- * emit such corruption, so they ship with the catalog data. The mechanism is
- * always active and is a no-op while this table is empty.
- */
-export const RANDOM_CHANCE_FLOORS: Record<string, number> = {};
+/** Random-chance floors of the packaged starter catalog's benchmarks. */
+export const RANDOM_CHANCE_FLOORS: Record<string, number> = STARTER.randomChanceFloors();
 
-/** True if a raw benchmark score is implausibly low for its scale (corrupt). */
-export function isImplausibleBenchmarkScore(benchmark: string, rawScore: number): boolean {
-  const floor = RANDOM_CHANCE_FLOORS[benchmark];
+/**
+ * True if a raw benchmark score is implausibly low for its scale (corrupt).
+ *
+ * `floors` defaults to the starter catalog's `RANDOM_CHANCE_FLOORS`; a registry
+ * loading another bundle passes that bundle's floors.
+ */
+export function isImplausibleBenchmarkScore(
+  benchmark: string,
+  rawScore: number,
+  floors?: Record<string, number>,
+): boolean {
+  const floor = (floors ?? RANDOM_CHANCE_FLOORS)[benchmark];
   return floor !== undefined && rawScore < floor;
 }
 
@@ -94,9 +107,18 @@ export class BenchmarkNormalizer {
   private _ranges: Map<string, NormalizationRange>;
   private _weights: Map<string, number>;
 
-  constructor() {
-    this._ranges = new Map(Object.entries(NORMALIZATION_RANGES));
-    this._weights = new Map(Object.entries(BENCHMARK_WEIGHTS));
+  /** Defaults: the packaged starter catalog's tables. */
+  constructor(
+    ranges?: Record<string, NormalizationRange>,
+    weights?: Record<string, number>,
+  ) {
+    this._ranges = new Map(Object.entries(ranges ?? NORMALIZATION_RANGES));
+    this._weights = new Map(Object.entries(weights ?? BENCHMARK_WEIGHTS));
+  }
+
+  /** A normalizer holding exactly one bundle's ranges and weights. */
+  static fromBundle(bundle: CatalogBundle): BenchmarkNormalizer {
+    return new BenchmarkNormalizer(rangesFromBundle(bundle), bundle.benchmarkWeights());
   }
 
   /** Normalize a raw benchmark score to 0-1. */

@@ -9,6 +9,7 @@ Commands (kept in parity with the Node SDK's `tryaii`):
     tryaii models                        -- List available models
     tryaii benchmarks                    -- List available benchmarks
     tryaii regenerate                    -- Regenerate centroids (after model change)
+    tryaii login | logout | whoami       -- tryaii.com account sign-in (device flow)
     tryaii help [command]                -- Global help, or detailed help for one command
 
 Per-command help is also reachable via `tryaii <command> -h/--help`.
@@ -48,6 +49,9 @@ Commands:
   benchmarks            List available benchmarks (--json)
   setup                 Download the embedding model and warm centroids (--model <name>)
   regenerate            Rebuild benchmark centroids, e.g. after changing the embedding model (--model <name>)
+  login                 Sign in with your tryaii.com account (free; unlocks the full model catalog)
+  logout                Sign out and remove the stored credentials
+  whoami                Show the signed-in account
 
 Common options:
   --quality <1-5>       Quality priority for route/eval (default 3)
@@ -508,6 +512,62 @@ Exit codes:
 Docs: docs/cli/designpartner.md
 """
 
+HELP_LOGIN = """tryaii login -- Sign in with your tryaii.com account
+
+Usage:
+  tryaii login
+
+Starts a device sign-in: prints a URL and a short code. Open the URL in any
+browser (it does not have to be on this machine), sign in with Google and
+approve the code. Works over SSH and inside containers.
+
+Credentials are stored in ~/.tryaii/credentials.json (or under
+TRYAII_DRE_DATA_DIR).
+
+After signing in, the full model catalog is downloaded and kept up to date
+automatically (checked at most once a day).
+
+Environment:
+  TRYAII_API_URL        Override the API base URL (default https://api.tryaii.com)
+
+Examples:
+  tryaii login
+
+Exit codes:
+  0 success, 1 denied, expired or network failure, 2 bad flag, 130 cancelled.
+"""
+
+HELP_LOGOUT = """tryaii logout -- Sign out and remove the stored credentials
+
+Usage:
+  tryaii logout
+
+Revokes the session on the server (best effort) and deletes the local
+credentials file.
+
+Examples:
+  tryaii logout
+
+Exit codes:
+  0 success or already signed out, 1 could not remove the credentials file, 2 bad flag.
+"""
+
+HELP_WHOAMI = """tryaii whoami -- Show the signed-in account
+
+Usage:
+  tryaii whoami [options]
+
+Options:
+  --json                Print the account as pretty-printed JSON
+
+Examples:
+  tryaii whoami
+  tryaii whoami --json
+
+Exit codes:
+  0 signed in, 1 not signed in, session ended or network failure, 2 bad flag.
+"""
+
 HELP_HELP = """tryaii help -- Show help for tryaii or a specific command
 
 Usage:
@@ -519,8 +579,8 @@ detailed help for that command. The flags -h/--help after any command do
 the same thing.
 
 Topics:
-  route, eval, cachelint, diagnose, designpartner, models, benchmarks, setup,
-  regenerate, help
+  route, eval, cachelint, diagnose, designpartner, models, benchmarks,
+  setup, regenerate, login, logout, whoami, help
 
 Examples:
   tryaii help
@@ -544,6 +604,9 @@ COMMAND_HELP = {
     "benchmarks": HELP_BENCHMARKS,
     "setup": HELP_SETUP,
     "regenerate": HELP_REGENERATE,
+    "login": HELP_LOGIN,
+    "logout": HELP_LOGOUT,
+    "whoami": HELP_WHOAMI,
     "help": HELP_HELP,
 }
 
@@ -585,12 +648,37 @@ def _write_paced(text: str) -> None:
         time.sleep(_LINE_DELAY)
 
 
-def _acquire_route_fn(config, no_daemon: bool):
+def _cli_catalog(nudge: bool = False):
+    """Select the catalog for a CLI command (docs/catalog/CONTRACT-catalog-v1.md
+    section 5) and print what the contract says to stderr: the session-ended
+    line (exit 1), the no-access / download-failure / schema lines, and --
+    for route, eval and models (``nudge=True``) -- the once-a-day login
+    nudge. Returns the CatalogBundle to use."""
+    from tryaii.catalog import client
+
+    try:
+        selection = client.select_catalog("auto")
+    except client.SessionEndedError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+    if selection.notice == client.NOTICE_NOT_LOGGED_IN:
+        if nudge:
+            client.maybe_nudge(selection)
+    else:
+        message = client.notice_message(selection.notice)
+        if message:
+            print(message, file=sys.stderr, flush=True)
+    return selection.bundle
+
+
+def _acquire_route_fn(config, no_daemon: bool, bundle=None):
     """Return (route_fn, source) where route_fn(prompt, priorities, top_k) -> RouteResult.
 
     Prefers a warm background daemon (auto-starting one if needed) so repeated
     CLI calls skip the embedding-model load. Falls back to an in-process Router
-    when the daemon is disabled, unavailable, or fails to start in time.
+    when the daemon is disabled, unavailable, or fails to start in time. Both
+    route on ``bundle`` (the catalog the command selected); a daemon on another
+    catalog is replaced.
     """
     from tryaii import daemon as daemon_mod
 
@@ -604,19 +692,46 @@ def _acquire_route_fn(config, no_daemon: bool):
             )
 
         try:
-            state = daemon_mod.ensure_daemon(config, on_starting=_notice)
+            state = daemon_mod.ensure_daemon(config, on_starting=_notice, bundle=bundle)
         except Exception as exc:  # noqa: BLE001 -- never let daemon issues break routing
             logging.getLogger("tryaii").warning("daemon unavailable, routing in-process: %s", exc)
             state = None
         if state is not None:
-            return (lambda prompt, priorities, top_k: daemon_mod.route(
-                state, prompt, priorities, top_k)), "daemon"
+            return _daemon_route_fn(state, config, bundle), "daemon"
 
+    return _inprocess_route_fn(config, bundle), "inprocess"
+
+
+def _inprocess_route_fn(config, bundle):
     from tryaii import Router
 
-    router = Router(config=config)
-    return (lambda prompt, priorities, top_k: router.route(
-        prompt, priorities=priorities, top_k=top_k)), "inprocess"
+    router = Router(config=config, bundle=bundle, catalog="starter")
+    return lambda prompt, priorities, top_k: router.route(
+        prompt, priorities=priorities, top_k=top_k)
+
+
+def _daemon_route_fn(state, config, bundle):
+    """Route through the daemon; if it fails mid-request (died, restarted on
+    another catalog by a concurrent CLI, bad response), route in-process on
+    the same ``bundle`` from then on. Mirrors routeViaDaemonOrFallback in
+    the Node CLI."""
+    from tryaii import daemon as daemon_mod
+
+    fallback = []
+
+    def route_fn(prompt, priorities, top_k):
+        if not fallback:
+            try:
+                return daemon_mod.route(state, prompt, priorities, top_k)
+            except Exception as exc:  # noqa: BLE001 -- never let daemon issues break routing
+                # debug, not warning: the Node CLI falls back silently too
+                # (byte-identical stderr).
+                logging.getLogger("tryaii").debug(
+                    "daemon request failed, routing in-process: %s", exc)
+                fallback.append(_inprocess_route_fn(config, bundle))
+        return fallback[0](prompt, priorities, top_k)
+
+    return route_fn
 
 
 def cmd_route(args):
@@ -632,12 +747,13 @@ def cmd_route(args):
         speed=args.speed,
     )
 
-    route_fn, _source = _acquire_route_fn(config, getattr(args, "no_daemon", False))
+    bundle = _cli_catalog(nudge=True)
+    route_fn, _source = _acquire_route_fn(config, getattr(args, "no_daemon", False), bundle)
     result = route_fn(args.prompt, priorities, args.top_k)
 
     # Provider/pricing for display come from the (cheap, torch-free) model
     # registry so the daemon path doesn't need to ship them over the wire.
-    registry = ModelRegistry.default()
+    registry = ModelRegistry.from_bundle(bundle)
 
     buf = f"\nPrompt: {args.prompt}\n"
     buf += f"Category: {result.classification.broad_category} > {result.classification.subcategory}\n"
@@ -1020,11 +1136,12 @@ def cmd_eval(args):
     print(f"[eval] loaded {len(rows)} prompt(s)")
 
     config = TryaiiDreConfig()
+    bundle = _cli_catalog(nudge=True)
     budget_summary = None
     if args.max_price is not None:
         # Budget optimization drives the scoring engine directly, so it needs a
         # real in-process Router rather than the daemon's route() surface.
-        router = Router(config=config)
+        router = Router(config=config, bundle=bundle)
         print("[eval] warming up router...")
         router.route("warmup", priorities=priorities, top_k=1)
         print(
@@ -1126,7 +1243,8 @@ def cmd_eval(args):
                 f"{optimization.effective_output_tokens} tokens/prompt"
             )
     else:
-        route_fn, _source = _acquire_route_fn(config, getattr(args, "no_daemon", False))
+        route_fn, _source = _acquire_route_fn(
+            config, getattr(args, "no_daemon", False), bundle)
         print("[eval] warming up router...")
         route_fn("warmup", priorities, 1)
         results = []
@@ -1200,8 +1318,9 @@ def cmd_setup(args):
     print(f"Setting up TryAii with embedding model: {config.embedding_model}")
     print("This will download the model and load benchmark centroids (one-time operation)...\n")
 
+    bundle = _cli_catalog()
     provider = LocalEmbeddingProvider(model_name=config.embedding_model)
-    loader = CentroidLoader(config=config, embedding_provider=provider)
+    loader = CentroidLoader(config=config, embedding_provider=provider, bundle=bundle)
     centroids = loader.get_centroids()
 
     # Marker consumed by `diagnose check` (its setup gate): live classification
@@ -1222,7 +1341,7 @@ def cmd_models(args):
     """List available models."""
     from tryaii import ModelRegistry
 
-    registry = ModelRegistry.default()
+    registry = ModelRegistry.from_bundle(_cli_catalog(nudge=True))
     models = registry.all_models
 
     if args.provider:
@@ -1256,7 +1375,7 @@ def cmd_benchmarks(args):
     """List available benchmarks."""
     from tryaii import BenchmarkRegistry
 
-    registry = BenchmarkRegistry.default()
+    registry = BenchmarkRegistry.from_bundle(_cli_catalog())
 
     if args.json:
         data = [b.to_dict() for b in registry.all_benchmarks]
@@ -1285,11 +1404,12 @@ def cmd_regenerate(args):
 
     print(f"Regenerating centroids for: {config.embedding_model}")
 
+    bundle = _cli_catalog()
     provider = LocalEmbeddingProvider(model_name=config.embedding_model)
-    loader = CentroidLoader(config=config, embedding_provider=provider)
+    loader = CentroidLoader(config=config, embedding_provider=provider, bundle=bundle)
     centroids = loader.regenerate()
 
-    print(f"Done! Generated {len(centroids)} centroids at {config.centroid_file}")
+    print(f"Done! Generated {len(centroids)} centroids at {loader.cache_path}")
 
 
 def cmd_cachelint(args):
@@ -1485,6 +1605,7 @@ def _diagnose_check(argv):
     )
 
     classify_fn = None
+    config = None
     if needs_routing:
         from tryaii.config import TryaiiDreConfig
 
@@ -1495,12 +1616,21 @@ def _diagnose_check(argv):
                   file=sys.stderr)
             sys.exit(1)
 
+    # ONE catalog selection for the whole command (contract section 5): the
+    # registry the checks resolve / price / fit models against and the
+    # classifier both use it, so the library default is never selected again.
+    bundle = _cli_catalog()
+    from tryaii.registry.models import ModelRegistry
+
+    registry = ModelRegistry.from_bundle(bundle)
+
+    if needs_routing:
         from tryaii import Priorities
         from tryaii.classifiers.base import MAX_PROMPT_LENGTH
 
         priorities_obj = Priorities(
             quality=args.quality, cost=args.cost, speed=args.speed)
-        route_fn, _source = _acquire_route_fn(config, args.no_daemon)
+        route_fn, _source = _acquire_route_fn(config, args.no_daemon, bundle)
 
         def classify_fn(canonical):
             result = route_fn(canonical[:MAX_PROMPT_LENGTH], priorities_obj, 1)
@@ -1531,6 +1661,7 @@ def _diagnose_check(argv):
             "output_tokens": args.output_tokens,
         },
         classify_fn=classify_fn,
+        registry=registry,
     )
 
     write_run(Path(args.out_dir), data, findings)
@@ -1872,6 +2003,186 @@ def cmd_diagnose(argv):
         sys.exit(1)
 
 
+# --- login / logout / whoami (docs/auth/CONTRACT-auth-v1.md sections 6-7) --
+# Every message below is byte-identical to the Node CLI (packages/node/src/auth/commands.ts).
+
+_AUTH_SESSION_ENDED = "Your session has ended. Run: tryaii login"
+_AUTH_RATE_LIMITED = "Too many sign-in attempts. Wait a minute and try again."
+_AUTH_CANNOT_DELETE = "Could not remove the credentials file."
+
+
+def _auth_unreachable(api_url: str) -> str:
+    return f"Could not reach {api_url}. Check your connection and try again."
+
+
+def _auth_unexpected(api_url: str, code: str) -> str:
+    return f"Unexpected response from {api_url}: {code}."
+
+
+def _auth_utf8_stdout() -> None:
+    """Item 20: emails and names are printed as UTF-8 whatever the console
+    code page (a cp1252 stdout used to crash login AFTER saving)."""
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001 -- best effort; never break output
+        pass
+
+
+def _auth_email(creds) -> str:
+    user = (creds or {}).get("user")
+    return str(user.get("email", "")) if isinstance(user, dict) else ""
+
+
+def cmd_login(args):
+    """Device sign-in: print URL + code, poll, store the credentials."""
+    from tryaii.auth import flow, store
+    from tryaii.auth.transport import AuthError, effective_api_url, session_api_url
+
+    _auth_utf8_stdout()
+    # TRYAII_API_URL applies to login only (v1.1 item 13).
+    api_url = effective_api_url()
+    previous = store.load()
+    try:
+        if previous is not None:
+            print(f"Already logged in as {_auth_email(previous)}. "
+                  "Signing in again replaces that session.", flush=True)
+        try:
+            device = flow.start_device(api_url)
+            print("To sign in, open this URL in a browser:\n"
+                  f"  {device.get('verification_uri')}\n"
+                  f"and enter the code: {device.get('user_code')}\n"
+                  "\n"
+                  f"Or open directly: {device.get('verification_uri_complete')}\n"
+                  "\n"
+                  "Waiting for approval (expires in 10 minutes, Ctrl+C to cancel)...",
+                  flush=True)
+            token = flow.poll_for_token(api_url, device)
+        except AuthError as exc:
+            if exc.is_network:
+                message = _auth_unreachable(api_url)
+            elif exc.is_rate_limited:
+                message = _AUTH_RATE_LIMITED
+            elif exc.code == "access_denied":
+                message = "Login denied in the browser."
+            elif exc.code == "expired_token":
+                message = "The code expired. Run tryaii login again."
+            else:
+                message = f"Login failed: {exc.code}."
+            print(message, file=sys.stderr)
+            sys.exit(1)
+    except KeyboardInterrupt:
+        print("Login cancelled.", file=sys.stderr)
+        sys.exit(130)
+
+    creds = flow.credentials_from_token(api_url, token, flow.clock())
+    store.save(creds)
+    old_refresh = (previous or {}).get("refresh_token")
+    if old_refresh and old_refresh != creds.get("refresh_token"):
+        # Replace the old session: revoke it at the host that issued it,
+        # best effort (never fails login).
+        flow.revoke(session_api_url(previous.get("api_url")), old_refresh)
+    print(f"Logged in as {_auth_email(creds)}.", flush=True)
+    # Catalog contract section 5: download the full catalog right away
+    # (stdout either way; login still exits 0).
+    from tryaii.catalog import client
+
+    try:
+        bundle = client.download_after_login()
+    except Exception:  # noqa: BLE001 -- never fail a successful login
+        bundle = None
+    if bundle is not None:
+        print(f"Downloaded the full catalog ({client.routable_count(bundle)} models).")
+    else:
+        print(client.MSG_LOGIN_DOWNLOAD_FAILED)
+
+
+def cmd_logout(args):
+    """Revoke (best effort) and delete the local credentials file."""
+    from tryaii.auth import flow, store
+    from tryaii.auth.transport import session_api_url
+    from tryaii.catalog import client
+
+    _auth_utf8_stdout()
+    path = store.credentials_path()
+    if not path.exists():
+        client.clear_cache()
+        print("Not logged in.")
+        return
+    # An unreadable or foreign-schema file is still removed (nothing to revoke).
+    creds = store.load(path)
+    if creds is not None:
+        flow.revoke(session_api_url(creds.get("api_url")), creds["refresh_token"])
+    # Catalog contract section 5: the full catalog and its state go too,
+    # also when the revoke failed.
+    client.clear_cache()
+    try:
+        store.delete(path)
+    except OSError:
+        # Item 19: never claim "Logged out." while the token is still on disk.
+        print(_AUTH_CANNOT_DELETE, file=sys.stderr)
+        sys.exit(1)
+    print("Logged out.")
+
+
+def cmd_whoami(args):
+    """Refresh if needed, then GET /v1/auth/me."""
+    from tryaii.auth import flow, store
+    from tryaii.auth.transport import AuthError, session_api_url
+
+    _auth_utf8_stdout()
+    creds = store.load()
+    if creds is None:
+        print("Not logged in. Run: tryaii login", file=sys.stderr)
+        sys.exit(1)
+    # A stored session always talks to the host that issued it (item 13).
+    api_url = session_api_url(creds.get("api_url"))
+
+    def _fail(exc, session_ended):
+        if exc.is_network:
+            print(_auth_unreachable(api_url), file=sys.stderr)
+        elif session_ended:
+            # Refresh rejected (invalid_grant) or /me 401: the session is gone
+            # -- and with it the full catalog cache (catalog contract section 5).
+            from tryaii.catalog import client
+
+            client.end_session()
+            print(_AUTH_SESSION_ENDED, file=sys.stderr)
+        else:
+            # Item 14: any other error keeps the file.
+            print(_auth_unexpected(api_url, exc.code), file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        creds, refreshed = flow.refresh_if_needed(api_url, creds)
+    except AuthError as exc:
+        _fail(exc, exc.code == "invalid_grant")
+    if refreshed:
+        store.save(creds)  # persist the rotated refresh token
+
+    try:
+        account = flow.me(api_url, creds["access_token"])
+    except AuthError as exc:
+        _fail(exc, exc.status == 401)
+
+    if args.json:
+        print(json.dumps(account, indent=2, ensure_ascii=False))
+        return
+    user = account.get("user")
+    user = user if isinstance(user, dict) else {}
+    entitlements = account.get("entitlements") or []
+    print(f"Logged in as {user.get('email', '')} ({user.get('name', '')})")
+    print(f"Entitlements: {', '.join(str(e) for e in entitlements) or 'none'}")
+    # Catalog contract section 5: third line, from the local cache only.
+    from tryaii.catalog import client
+
+    cached = client.cached_full(client.read_state())
+    if cached is not None:
+        print(f"Catalog: full, release {cached.version} "
+              f"({client.routable_count(cached)} models)")
+    else:
+        print("Catalog: not downloaded yet")
+
+
 def cli():
     """Main CLI entry point."""
     # -v/--verbose, --no-banner, -V/--version and -h/--help are handled before
@@ -1976,6 +2287,12 @@ def cli():
     regen_parser = subparsers.add_parser("regenerate", help="Regenerate centroids")
     regen_parser.add_argument("--model", help="Embedding model name")
 
+    # login / logout / whoami (docs/auth/CONTRACT-auth-v1.md section 6)
+    subparsers.add_parser("login", help="Sign in with your tryaii.com account")
+    subparsers.add_parser("logout", help="Sign out and remove the stored credentials")
+    whoami_parser = subparsers.add_parser("whoami", help="Show the signed-in account")
+    whoami_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
     raw_args = sys.argv[1:]
 
     # --version short-circuits everything else (matches the Node CLI).
@@ -2070,6 +2387,9 @@ def cli():
         "models": cmd_models,
         "benchmarks": cmd_benchmarks,
         "regenerate": cmd_regenerate,
+        "login": cmd_login,
+        "logout": cmd_logout,
+        "whoami": cmd_whoami,
     }
     try:
         handlers[args.command](args)

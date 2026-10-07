@@ -55,95 +55,95 @@
             "line": 42,
             "provider": "openai",
             "model": "gpt-4o",
-            "resolved_model_id": "gpt-4o",
+            "resolved_model_id": "openai/gpt-4o",
             "notes": "main support flow",
             "checks": {
               "model_fit": {
                 "status": "finding",
                 "reason": null,
-                "summary": "gpt-4o is a poor fit for this prompt (rank 22 of 39) — best: grok-4-1-fast-reasoning-latest",
+                "summary": "openai/gpt-4o is a poor fit for this prompt (rank 43 of 45) — best: google/gemini-3.8-flash",
                 "classification": {
                   "broad_category": "analysis",
                   "subcategory": "summarization",
                   "confidence": 0.83
                 },
-                "current_rank": 22,
-                "catalog_size": 39,
+                "current_rank": 43,
+                "catalog_size": 45,
                 "current": {
-                  "model_id": "gpt-4o",
-                  "quality_score": 0.7641,
-                  "cost_score": 0.9375,
-                  "speed_score": 0.6
+                  "model_id": "openai/gpt-4o",
+                  "quality_score": 0.0179,
+                  "cost_score": 0.301,
+                  "speed_score": 0.3502
                 },
                 "recommended": {
-                  "model_id": "grok-4-1-fast-reasoning-latest",
-                  "quality_score": 0.8299,
-                  "cost_score": 0.9965,
-                  "speed_score": 0.8,
+                  "model_id": "google/gemini-3.8-flash",
+                  "quality_score": 0.9142,
+                  "cost_score": 0.4489,
+                  "speed_score": 0.5353,
                   "top_benchmarks": [
                     [
-                      "MMLU",
-                      0.9679
+                      "MMLU-Pro",
+                      0.8834
                     ],
                     [
-                      "Chatbot Arena (LMSys)",
-                      0.7045
+                      "Chatbot Arena Elo",
+                      0.954
                     ],
                     [
-                      "DROP",
-                      0.7907
+                      "LegalBench",
+                      0.8825
                     ]
                   ],
-                  "reasoning": "Quality: 0.83 on [MMLU (97%), Chatbot Arena (LMSys) (70%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+                  "reasoning": "q'=0.91 (3 real of 3) | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.06 vs anthropic/claude-fable-5.1"
                 },
                 "recommended_same_price": {
-                  "model_id": "gemini-3.5-flash",
-                  "rank": 5,
-                  "quality_score": 0.8366,
-                  "cost_score": 0.9475,
-                  "speed_score": 0.8,
+                  "model_id": "google/gemini-3.1-pro-preview",
+                  "rank": 2,
+                  "quality_score": 0.8973,
+                  "cost_score": 0.2846,
+                  "speed_score": 0.3643,
                   "is_current": false
                 },
                 "top": [
                   {
                     "rank": 1,
-                    "model_id": "grok-4-1-fast-reasoning-latest",
-                    "quality_score": 0.8299,
-                    "cost_score": 0.9965,
-                    "speed_score": 0.8,
-                    "reasoning": "Quality: 0.83 on [MMLU (97%), Chatbot Arena (LMSys) (70%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+                    "model_id": "google/gemini-3.8-flash",
+                    "quality_score": 0.9142,
+                    "cost_score": 0.4489,
+                    "speed_score": 0.5353,
+                    "reasoning": "q'=0.91 (3 real of 3) | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.06 vs anthropic/claude-fable-5.1"
                   },
                   {
                     "rank": 2,
-                    "model_id": "grok-4.3",
-                    "quality_score": 0.9011,
-                    "cost_score": 0.9812,
-                    "speed_score": 0.6,
-                    "reasoning": "Quality: 0.90 on [MMLU (95%), Chatbot Arena (LMSys) (86%)] | Cost efficiency: 0.98 | Speed: 0.60 (medium)"
+                    "model_id": "google/gemini-3.1-pro-preview",
+                    "quality_score": 0.8973,
+                    "cost_score": 0.2846,
+                    "speed_score": 0.3643,
+                    "reasoning": "q'=0.90 (3 real of 3) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.06 vs anthropic/claude-fable-5.1"
                   },
                   {
                     "rank": 3,
-                    "model_id": "gemini-3-flash-preview",
-                    "quality_score": 0.819,
-                    "cost_score": 0.996,
-                    "speed_score": 0.8,
-                    "reasoning": "Quality: 0.82 on [MMLU (87%), Chatbot Arena (LMSys) (75%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+                    "model_id": "anthropic/claude-opus-5.5",
+                    "quality_score": 0.9439,
+                    "cost_score": 0.2066,
+                    "speed_score": 0.4154,
+                    "reasoning": "q'=0.94 (1 real of 3) | imputed: 2/3 | cost 0.2066 ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.06 vs anthropic/claude-fable-5.1"
                   },
                   {
                     "rank": 4,
-                    "model_id": "deepseek-v4-pro",
-                    "quality_score": 0.8625,
-                    "cost_score": 0.9935,
-                    "speed_score": 0.6,
-                    "reasoning": "Quality: 0.86 on [MMLU (92%), Chatbot Arena (LMSys) (82%)] | Cost efficiency: 0.99 | Speed: 0.60 (medium)"
+                    "model_id": "anthropic/claude-fable-5.1",
+                    "quality_score": 0.9705,
+                    "cost_score": 0.0739,
+                    "speed_score": 0.2547,
+                    "reasoning": "q'=0.97 (3 real of 3) | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.06 vs anthropic/claude-fable-5.1"
                   },
                   {
                     "rank": 5,
-                    "model_id": "gemini-3.5-flash",
-                    "quality_score": 0.8366,
-                    "cost_score": 0.9475,
-                    "speed_score": 0.8,
-                    "reasoning": "Quality: 0.84 on [MMLU (88%), Chatbot Arena (LMSys) (77%)] | Cost efficiency: 0.95 | Speed: 0.80 (fast)"
+                    "model_id": "anthropic/claude-fable-5",
+                    "quality_score": 0.9546,
+                    "cost_score": 0.0739,
+                    "speed_score": 0.2319,
+                    "reasoning": "q'=0.95 (3 real of 3) | cost 0.0739 ($30.00/M) | speed 0.2319 (10.31 s to 300 tok) | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.06 vs anthropic/claude-fable-5.1"
                   }
                 ]
               },
@@ -208,9 +208,9 @@
                   "cost_usd": 312
                 },
                 "swap": {
-                  "model_id": "deepseek-v4-flash",
-                  "cost_per_call_usd": 0.0001,
-                  "monthly_savings_usd": 306
+                  "model_id": "deepseek/deepseek-v4-flash",
+                  "cost_per_call_usd": 0,
+                  "monthly_savings_usd": 312
                 }
               },
               "hygiene": {
@@ -256,73 +256,69 @@
               "model_fit": {
                 "status": "insufficient_data",
                 "reason": "no model declared",
-                "summary": "recommended: grok-4.3 (no current model to compare)",
+                "summary": "recommended: google/gemini-3.8-flash (no current model to compare)",
                 "classification": {
                   "broad_category": "conversation",
                   "subcategory": "chat",
                   "confidence": 0.71
                 },
                 "current_rank": null,
-                "catalog_size": 39,
+                "catalog_size": 45,
                 "current": null,
                 "recommended": {
-                  "model_id": "grok-4.3",
-                  "quality_score": 0.8578,
-                  "cost_score": 0.9812,
-                  "speed_score": 0.6,
+                  "model_id": "google/gemini-3.8-flash",
+                  "quality_score": 0.9345,
+                  "cost_score": 0.4489,
+                  "speed_score": 0.5353,
                   "top_benchmarks": [
                     [
-                      "Chatbot Arena (LMSys)",
-                      0.8636
-                    ],
-                    [
-                      "MT-Bench",
-                      0.85
+                      "Chatbot Arena Elo",
+                      0.954
                     ]
                   ],
-                  "reasoning": "Quality: 0.86 on [Chatbot Arena (LMSys) (86%), MT-Bench (85%)] | Cost efficiency: 0.98 | Speed: 0.60 (medium)"
+                  "reasoning": "q'=0.93 (1 real of 2) | imputed: 1/2 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5"
                 },
                 "recommended_same_price": null,
                 "top": [
                   {
                     "rank": 1,
-                    "model_id": "grok-4.3",
-                    "quality_score": 0.8578,
-                    "cost_score": 0.9812,
-                    "speed_score": 0.6,
-                    "reasoning": "Quality: 0.86 on [Chatbot Arena (LMSys) (86%), MT-Bench (85%)] | Cost efficiency: 0.98 | Speed: 0.60 (medium)"
+                    "model_id": "google/gemini-3.8-flash",
+                    "quality_score": 0.9345,
+                    "cost_score": 0.4489,
+                    "speed_score": 0.5353,
+                    "reasoning": "q'=0.93 (1 real of 2) | imputed: 1/2 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5"
                   },
                   {
                     "rank": 2,
-                    "model_id": "gemini-3-flash-preview",
-                    "quality_score": 0.7716,
-                    "cost_score": 0.996,
-                    "speed_score": 0.8,
-                    "reasoning": "Quality: 0.77 on [Chatbot Arena (LMSys) (75%), MT-Bench (80%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+                    "model_id": "google/gemini-3.5-flash",
+                    "quality_score": 0.8526,
+                    "cost_score": 0.3263,
+                    "speed_score": 0.4802,
+                    "reasoning": "q'=0.85 (2 real of 2) | cost 0.3263 ($5.25/M) | speed 0.4802 (3.29 s to 300 tok) | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5"
                   },
                   {
                     "rank": 3,
-                    "model_id": "gpt-5.4",
-                    "quality_score": 0.9192,
-                    "cost_score": 0.9125,
-                    "speed_score": 0.6,
-                    "reasoning": "Quality: 0.92 on [Chatbot Arena (LMSys) (89%), MT-Bench (96%)] | Cost efficiency: 0.91 | Speed: 0.60 (medium)"
+                    "model_id": "google/gemini-3.1-pro-preview",
+                    "quality_score": 0.8642,
+                    "cost_score": 0.2846,
+                    "speed_score": 0.3643,
+                    "reasoning": "q'=0.86 (2 real of 2) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5"
                   },
                   {
                     "rank": 4,
-                    "model_id": "gpt-5.2",
-                    "quality_score": 0.9009,
-                    "cost_score": 0.9213,
-                    "speed_score": 0.6,
-                    "reasoning": "Quality: 0.90 on [Chatbot Arena (LMSys) (86%), MT-Bench (95%)] | Cost efficiency: 0.92 | Speed: 0.60 (medium)"
+                    "model_id": "anthropic/claude-opus-5.5",
+                    "quality_score": 0.9732,
+                    "cost_score": 0.2066,
+                    "speed_score": 0.4154,
+                    "reasoning": "q'=0.97 (1 real of 2) | imputed: 1/2 | cost 0.2066 ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5"
                   },
                   {
                     "rank": 5,
-                    "model_id": "gemini-3.5-flash",
-                    "quality_score": 0.7953,
-                    "cost_score": 0.9475,
-                    "speed_score": 0.8,
-                    "reasoning": "Quality: 0.80 on [Chatbot Arena (LMSys) (77%), MT-Bench (83%)] | Cost efficiency: 0.95 | Speed: 0.80 (fast)"
+                    "model_id": "anthropic/claude-fable-5.1",
+                    "quality_score": 0.9271,
+                    "cost_score": 0.0739,
+                    "speed_score": 0.2547,
+                    "reasoning": "q'=0.93 (1 real of 2) | imputed: 1/2 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5"
                   }
                 ]
               },
@@ -362,73 +358,73 @@
               "model_fit": {
                 "status": "insufficient_data",
                 "reason": "unknown model 'claude-9-mega'",
-                "summary": "recommended: grok-4-1-fast-reasoning-latest (no current model to compare)",
+                "summary": "recommended: google/gemini-3.8-flash (no current model to compare)",
                 "classification": {
                   "broad_category": "writing",
                   "subcategory": "business-writing",
                   "confidence": 0.62
                 },
                 "current_rank": null,
-                "catalog_size": 39,
+                "catalog_size": 45,
                 "current": null,
                 "recommended": {
-                  "model_id": "grok-4-1-fast-reasoning-latest",
-                  "quality_score": 0.8658,
-                  "cost_score": 0.9965,
-                  "speed_score": 0.8,
+                  "model_id": "google/gemini-3.8-flash",
+                  "quality_score": 0.9211,
+                  "cost_score": 0.4489,
+                  "speed_score": 0.5353,
                   "top_benchmarks": [
                     [
-                      "MMLU",
-                      0.9679
+                      "MMLU-Pro",
+                      0.8834
                     ],
                     [
-                      "TruthfulQA",
-                      0.6957
+                      "GPQA",
+                      0.973
                     ]
                   ],
-                  "reasoning": "Quality: 0.87 on [MMLU (97%), TruthfulQA (70%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+                  "reasoning": "q'=0.92 (2 real of 2) | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.05 vs anthropic/claude-fable-5.1"
                 },
                 "recommended_same_price": null,
                 "top": [
                   {
                     "rank": 1,
-                    "model_id": "grok-4-1-fast-reasoning-latest",
-                    "quality_score": 0.8658,
-                    "cost_score": 0.9965,
-                    "speed_score": 0.8,
-                    "reasoning": "Quality: 0.87 on [MMLU (97%), TruthfulQA (70%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+                    "model_id": "google/gemini-3.8-flash",
+                    "quality_score": 0.9211,
+                    "cost_score": 0.4489,
+                    "speed_score": 0.5353,
+                    "reasoning": "q'=0.92 (2 real of 2) | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.05 vs anthropic/claude-fable-5.1"
                   },
                   {
                     "rank": 2,
-                    "model_id": "gemini-3-flash-preview",
-                    "quality_score": 0.8022,
-                    "cost_score": 0.996,
-                    "speed_score": 0.8,
-                    "reasoning": "Quality: 0.80 on [MMLU (87%), TruthfulQA (70%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+                    "model_id": "google/gemini-3.5-flash",
+                    "quality_score": 0.8637,
+                    "cost_score": 0.3263,
+                    "speed_score": 0.4802,
+                    "reasoning": "q'=0.86 (2 real of 2) | cost 0.3263 ($5.25/M) | speed 0.4802 (3.29 s to 300 tok) | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.05 vs anthropic/claude-fable-5.1"
                   },
                   {
                     "rank": 3,
-                    "model_id": "gpt-5.4",
-                    "quality_score": 0.9365,
-                    "cost_score": 0.9125,
-                    "speed_score": 0.6,
-                    "reasoning": "Quality: 0.94 on [MMLU (94%), TruthfulQA (93%)] | Cost efficiency: 0.91 | Speed: 0.60 (medium)"
+                    "model_id": "google/gemini-3.1-pro-preview",
+                    "quality_score": 0.9315,
+                    "cost_score": 0.2846,
+                    "speed_score": 0.3643,
+                    "reasoning": "q'=0.93 (2 real of 2) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.05 vs anthropic/claude-fable-5.1"
                   },
                   {
                     "rank": 4,
-                    "model_id": "gemini-3.1-flash-lite",
-                    "quality_score": 0.7198,
-                    "cost_score": 0.9912,
-                    "speed_score": 1,
-                    "reasoning": "Quality: 0.72 on [MMLU (81%), TruthfulQA (57%)] | Cost efficiency: 0.99 | Speed: 1.00 (very fast)"
+                    "model_id": "anthropic/claude-opus-5.5",
+                    "quality_score": 0.8714,
+                    "cost_score": 0.2066,
+                    "speed_score": 0.4154,
+                    "reasoning": "q'=0.87 (0 real of 2) | imputed: 2/2 | cost 0.2066 ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.05 vs anthropic/claude-fable-5.1"
                   },
                   {
                     "rank": 5,
-                    "model_id": "gpt-5.2",
-                    "quality_score": 0.9227,
-                    "cost_score": 0.9213,
-                    "speed_score": 0.6,
-                    "reasoning": "Quality: 0.92 on [MMLU (93%), TruthfulQA (91%)] | Cost efficiency: 0.92 | Speed: 0.60 (medium)"
+                    "model_id": "openai/gpt-5.5",
+                    "quality_score": 0.8355,
+                    "cost_score": 0.152,
+                    "speed_score": 0.5105,
+                    "reasoning": "q'=0.84 (2 real of 2) | cost 0.1520 ($17.50/M) | speed 0.5105 (2.86 s to 300 tok) | within 0.136 of the best (0.97) | at 3/4/2 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.05 vs anthropic/claude-fable-5.1"
                   }
                 ]
               },
@@ -519,19 +515,19 @@
           "totals": {
             "est_monthly_cost_usd": 312,
             "est_monthly_cache_savings_usd": null,
-            "est_monthly_swap_savings_usd": 306,
+            "est_monthly_swap_savings_usd": 312,
             "sites_with_traffic_data": 1
           },
           "swap_stats": {
             "sites_with_cheaper_swap": 1,
-            "median_current_rank": 22
+            "median_current_rank": 43
           }
         }
       }
     },
     {
       "name": "checks-subset",
-      "description": "SPEC §3: opts.checks selects checks; unselected ones emit skipped/not-selected and the cost check loses its swap (no model_fit ranking).",
+      "description": "SPEC §3: opts.checks selects checks; unselected ones emit skipped/not-selected and the cost check loses its swap (no model_fit ranking). The site declares a dated Anthropic API id (claude-sonnet-4-5-20250929), resolved by the §2.1 step-4 alias fallback.",
       "input": {
         "data": {
           "sites": [
@@ -587,7 +583,7 @@
             "line": 5,
             "provider": "anthropic",
             "model": "claude-sonnet-4-5-20250929",
-            "resolved_model_id": "claude-sonnet-4-5-20250929",
+            "resolved_model_id": "anthropic/claude-sonnet-4.5",
             "checks": {
               "model_fit": {
                 "status": "skipped",

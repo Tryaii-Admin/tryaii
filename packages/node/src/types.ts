@@ -3,9 +3,10 @@
  */
 
 /**
- * Latency tier for a model. "unknown" is used for models whose provider
- * publishes no speed data; the scoring engine treats it as its conservative
- * default (0.3).
+ * Latency tier for a model. "unknown" is shipped for catalog models whose
+ * provider publishes no speed data. This is a *display* tier only: the scoring
+ * engine derives speed from `tokens_per_second` and `ttft_ms`, and falls back to
+ * the catalog p25 of `U_s` when throughput is missing.
  */
 export type LatencyTier = 'very fast' | 'fast' | 'medium' | 'slow' | 'very slow' | 'unknown';
 
@@ -26,6 +27,10 @@ export interface ModelData {
   capabilities?: string[];
   pricing?: ModelPricingData | null;
   latency?: LatencyTier | null;
+  /** Measured output throughput (tokens/second). Absent or null when unknown. */
+  tokens_per_second?: number | null;
+  /** Measured time to first token (milliseconds). Absent or null when unknown. */
+  ttft_ms?: number | null;
   description?: string;
 }
 

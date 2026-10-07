@@ -28,6 +28,7 @@ import { BudgetMode, DifficultySource, routeDatasetWithBudget } from './budget.j
 // in the diagnose summary); halfEven.ts is tiny and data-free.
 import { formatFixed } from './cachelint/util/halfEven.js';
 import { benchmarkToDict, BenchmarkRegistry } from './benchmarks/registry.js';
+import type { CatalogBundle } from './catalog/bundle.js';
 import { CentroidGenerator } from './centroids/generator.js';
 import { ClassificationResult } from './classifiers/base.js';
 import {
@@ -54,19 +55,50 @@ import { Priorities } from './scoring/priorities.js';
 type RouteFn = (prompt: string, priorities: Priorities, topK: number) => Promise<RouteResult>;
 
 /**
+ * Select the catalog for a CLI command (docs/catalog/CONTRACT-catalog-v1.md
+ * section 5) and print what the contract says to stderr: the session-ended
+ * line (exit 1), the no-access / download-failure / schema lines, and -- for
+ * route, eval and models (`nudge`) -- the once-a-day login nudge.
+ * Same lines as the Python CLI's _cli_catalog.
+ */
+async function cliCatalog(nudge = false): Promise<CatalogBundle> {
+  const client = await import('./catalog/client.js');
+  let selection;
+  try {
+    selection = await client.selectCatalog('auto', { version: version() });
+  } catch (error) {
+    if (error instanceof client.SessionEndedError) {
+      process.stderr.write(`${error.message}\n`);
+      throw new CliExit(1);
+    }
+    throw error;
+  }
+  if (selection.notice === 'not_logged_in') {
+    if (nudge) client.maybeNudge(selection);
+  } else {
+    const message = client.noticeMessage(selection.notice);
+    if (message) process.stderr.write(`${message}\n`);
+  }
+  return selection.bundle;
+}
+
+/**
  * Resolve a routing function, preferring a warm background daemon (auto-starting
  * one if needed) so repeated CLI calls skip the embedding-model load. Falls back
  * to an in-process Router when the daemon is disabled, unavailable, or slow to
- * start.
+ * start. Both route on `bundle` (the catalog the command selected); a daemon on
+ * another catalog is replaced.
  */
 async function acquireRouteFn(
   config: TryaiiDreConfig,
   noDaemon: boolean,
+  bundle: CatalogBundle,
 ): Promise<{ routeFn: RouteFn; source: 'daemon' | 'inprocess' }> {
   if (!noDaemon && !daemon.isDisabled()) {
     let state: daemon.DaemonState | null = null;
     try {
       state = await daemon.ensureDaemon(config, {
+        bundle,
         onStarting: () =>
           process.stderr.write(
             '[tryaii] starting routing daemon (first run loads the embedding ' +
@@ -77,24 +109,41 @@ async function acquireRouteFn(
       state = null;
     }
     if (state) {
-      const ready = state;
-      return {
-        routeFn: (prompt, priorities, topK) =>
-          daemon.routeViaDaemon(ready, prompt, priorities, topK),
-        source: 'daemon',
-      };
+      return { routeFn: routeViaDaemonOrFallback(state, config, bundle), source: 'daemon' };
     }
   }
 
-  const router = new Router({ config: { embeddingModel: config.embeddingModel } });
-  return {
-    routeFn: (prompt, priorities, topK) => router.route(prompt, { priorities, topK }),
-    source: 'inprocess',
-  };
+  return { routeFn: inProcessRouteFn(config, bundle), source: 'inprocess' };
+}
+
+function inProcessRouteFn(config: TryaiiDreConfig, bundle: CatalogBundle): RouteFn {
+  const router = new Router({ config: { embeddingModel: config.embeddingModel }, bundle });
+  return (prompt, priorities, topK) => router.route(prompt, { priorities, topK });
+}
+
+/**
+ * Route through the daemon; if it fails mid-request (died, restarted on
+ * another catalog by a concurrent CLI, bad response), route in-process on the
+ * same `bundle` from then on, silently. Mirrors _daemon_route_fn in the
+ * Python CLI.
+ */
+function routeViaDaemonOrFallback(
+  state: daemon.DaemonState,
+  config: TryaiiDreConfig,
+  bundle: CatalogBundle,
+): RouteFn {
+  return daemon.routeWithFallback(state, () => inProcessRouteFn(config, bundle));
 }
 
 /** Error type whose message is shown to the user without a stack trace. */
 class CliError extends Error {}
+
+/** Stop with this exit code; the message was already printed. */
+class CliExit extends Error {
+  constructor(readonly exitCode: number) {
+    super(`exit ${exitCode}`);
+  }
+}
 
 /** Bad invocation (unknown command/option, missing argument, invalid value); exits 2 like argparse. */
 class CliUsageError extends CliError {}
@@ -153,13 +202,14 @@ async function cmdRoute(subArgs: string[]): Promise<void> {
   const topK = intFlag('--top-k', values['top-k'], 5);
 
   const config = createDefaultConfig();
-  const { routeFn } = await acquireRouteFn(config, Boolean(values['no-daemon']));
+  const bundle = await cliCatalog(true);
+  const { routeFn } = await acquireRouteFn(config, Boolean(values['no-daemon']), bundle);
   const result = await routeFn(prompt, priorities, topK);
   const classification = result.classification;
 
   // Provider/pricing for display come from the (cheap) model registry so the
   // daemon path doesn't need to ship them over the wire.
-  const registry = ModelRegistry.default();
+  const registry = ModelRegistry.fromBundle(bundle);
 
   let buf = `\nPrompt: ${prompt}\n`;
   buf += `Category: ${classification?.broadCategory ?? ''} > ${classification?.subcategory ?? ''}\n`;
@@ -269,7 +319,7 @@ async function cmdModels(subArgs: string[]): Promise<void> {
     },
   });
 
-  const registry = ModelRegistry.default();
+  const registry = ModelRegistry.fromBundle(await cliCatalog(true));
   let models = registry.allModels;
   if (values.provider) {
     const provider = values.provider.toLowerCase();
@@ -318,7 +368,7 @@ async function cmdBenchmarks(subArgs: string[]): Promise<void> {
     options: { json: { type: 'boolean', default: false } },
   });
 
-  const registry = BenchmarkRegistry.default();
+  const registry = BenchmarkRegistry.fromBundle(await cliCatalog());
 
   if (values.json) {
     out.write(JSON.stringify(registry.allBenchmarks.map(benchmarkToDict), null, 2) + '\n');
@@ -350,9 +400,10 @@ async function cmdSetup(subArgs: string[]): Promise<void> {
   out.write(`Setting up TryAii with embedding model: ${embeddingModel}\n`);
   out.write('This will download the model and load benchmark centroids (one-time operation)...\n\n');
 
+  const bundle = await cliCatalog();
   const router = values.model
-    ? new Router({ config: { embeddingModel: values.model } })
-    : new Router();
+    ? new Router({ config: { embeddingModel: values.model }, bundle })
+    : new Router({ bundle });
   await router.route('warmup');
 
   // Marker consumed by `diagnose check` (its setup gate): live classification
@@ -391,10 +442,11 @@ async function cmdRegenerate(subArgs: string[]): Promise<void> {
   out.write(`Regenerating centroids for: ${embeddingModel}\n`);
 
   const config = createDefaultConfig(values.model ? { embeddingModel } : undefined);
+  const bundle = await cliCatalog();
   const provider = new LocalEmbeddingProvider(`Xenova/${embeddingModel}`);
-  const generator = new CentroidGenerator(provider);
+  const generator = new CentroidGenerator(provider, bundle);
   const centroids = await generator.generateAsync();
-  const path = centroidFilePath(config);
+  const path = centroidFilePath(config, bundle);
   generator.save(centroids, path);
 
   out.write(`Done! Generated ${Object.keys(centroids).length} centroids at ${path}\n`);
@@ -648,13 +700,14 @@ async function cmdEval(subArgs: string[]): Promise<void> {
   out.write(`[eval] loaded ${rows.length} prompt(s)\n`);
 
   const config = createDefaultConfig();
+  const bundle = await cliCatalog(true);
   let results: Record<string, unknown>[];
   let budgetSummary: Record<string, unknown> | null = null;
 
   if (maxPrice != null) {
     // Budget optimization drives the scoring engine directly, so it needs a
     // real in-process Router rather than the daemon's route() surface.
-    const router = new Router({ config: { embeddingModel: config.embeddingModel } });
+    const router = new Router({ config: { embeddingModel: config.embeddingModel }, bundle });
     out.write('[eval] warming up router...\n');
     await router.route('warmup', { priorities, topK: 1 });
     out.write(
@@ -747,7 +800,7 @@ async function cmdEval(subArgs: string[]): Promise<void> {
       );
     }
   } else {
-    const { routeFn } = await acquireRouteFn(config, Boolean(values['no-daemon']));
+    const { routeFn } = await acquireRouteFn(config, Boolean(values['no-daemon']), bundle);
     out.write('[eval] warming up router...\n');
     await routeFn('warmup', priorities, 1);
     results = [];
@@ -987,17 +1040,23 @@ async function diagnoseCheck(argv: string[]): Promise<void> {
     norm.sites.some((site) => site.prompt !== null && site.classification === null);
 
   let classifyFn: ((canonical: string) => Promise<Record<string, unknown> | null>) | undefined;
-  if (needsRouting) {
-    const config = createDefaultConfig();
-    if (!existsSync(join(config.dataDir, 'setup.json'))) {
-      throw new CliError(
-        "diagnose requires setup: run 'tryaii setup' first " +
-          '(downloads the embedding model and warms centroids)',
-      );
-    }
+  const config = createDefaultConfig();
+  if (needsRouting && !existsSync(join(config.dataDir, 'setup.json'))) {
+    throw new CliError(
+      "diagnose requires setup: run 'tryaii setup' first " +
+        '(downloads the embedding model and warms centroids)',
+    );
+  }
 
+  // ONE catalog selection for the whole command (contract section 5): the
+  // registry the checks resolve / price / fit models against and the
+  // classifier both use it, so the library default is never selected again.
+  const bundle = await cliCatalog();
+  const registry = ModelRegistry.fromBundle(bundle);
+
+  if (needsRouting) {
     const prioritiesObj = new Priorities(quality, cost, speed);
-    const { routeFn } = await acquireRouteFn(config, values['no-daemon']);
+    const { routeFn } = await acquireRouteFn(config, values['no-daemon'], bundle);
 
     classifyFn = async (canonical: string) => {
       const result = await routeFn(canonical.slice(0, MAX_PROMPT_LENGTH), prioritiesObj, 1);
@@ -1032,6 +1091,7 @@ async function diagnoseCheck(argv: string[]): Promise<void> {
         : null,
     },
     classifyFn,
+    registry,
   );
 
   diagnose.writeRun(values['out-dir'], data, findings);
@@ -1459,6 +1519,54 @@ async function cmdDesignpartner(subArgs: string[]): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// login / logout / whoami (docs/auth/CONTRACT-auth-v1.md sections 6-7)
+// ---------------------------------------------------------------------------
+
+const authIO = {
+  stdout: (text: string): void => {
+    out.write(text);
+  },
+  stderr: (text: string): void => {
+    process.stderr.write(text);
+  },
+};
+
+async function cmdLogin(subArgs: string[]): Promise<void> {
+  parseArgs({ args: subArgs, options: {} });
+  const auth = await import('./auth/index.js');
+  // Ctrl+C aborts the polling sleep / in-flight request; runLogin then
+  // prints "Login cancelled." and returns 130.
+  const controller = new AbortController();
+  const onSigint = (): void => controller.abort();
+  process.on('SIGINT', onSigint);
+  try {
+    process.exitCode = await auth.runLogin(authIO, {
+      version: version(),
+      signal: controller.signal,
+    });
+  } finally {
+    process.off('SIGINT', onSigint);
+  }
+}
+
+async function cmdLogout(subArgs: string[]): Promise<void> {
+  parseArgs({ args: subArgs, options: {} });
+  const auth = await import('./auth/index.js');
+  process.exitCode = await auth.runLogout(authIO, { version: version() });
+}
+
+async function cmdWhoami(subArgs: string[]): Promise<void> {
+  const { values } = parseArgs({
+    args: subArgs,
+    options: { json: { type: 'boolean', default: false } },
+  });
+  const auth = await import('./auth/index.js');
+  process.exitCode = await auth.runWhoami(authIO, { version: version() }, {
+    json: values.json,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // help / dispatch
 // ---------------------------------------------------------------------------
 
@@ -1477,6 +1585,9 @@ Commands:
   benchmarks            List available benchmarks (--json)
   setup                 Download the embedding model and warm centroids (--model <name>)
   regenerate            Rebuild benchmark centroids, e.g. after changing the embedding model (--model <name>)
+  login                 Sign in with your tryaii.com account (free; unlocks the full model catalog)
+  logout                Sign out and remove the stored credentials
+  whoami                Show the signed-in account
 
 Common options:
   --quality <1-5>       Quality priority for route/eval (default 3)
@@ -1939,6 +2050,62 @@ Exit codes:
 Docs: docs/cli/designpartner.md
 `;
 
+const HELP_LOGIN = `tryaii login -- Sign in with your tryaii.com account
+
+Usage:
+  tryaii login
+
+Starts a device sign-in: prints a URL and a short code. Open the URL in any
+browser (it does not have to be on this machine), sign in with Google and
+approve the code. Works over SSH and inside containers.
+
+Credentials are stored in ~/.tryaii/credentials.json (or under
+TRYAII_DRE_DATA_DIR).
+
+After signing in, the full model catalog is downloaded and kept up to date
+automatically (checked at most once a day).
+
+Environment:
+  TRYAII_API_URL        Override the API base URL (default https://api.tryaii.com)
+
+Examples:
+  tryaii login
+
+Exit codes:
+  0 success, 1 denied, expired or network failure, 2 bad flag, 130 cancelled.
+`;
+
+const HELP_LOGOUT = `tryaii logout -- Sign out and remove the stored credentials
+
+Usage:
+  tryaii logout
+
+Revokes the session on the server (best effort) and deletes the local
+credentials file.
+
+Examples:
+  tryaii logout
+
+Exit codes:
+  0 success or already signed out, 1 could not remove the credentials file, 2 bad flag.
+`;
+
+const HELP_WHOAMI = `tryaii whoami -- Show the signed-in account
+
+Usage:
+  tryaii whoami [options]
+
+Options:
+  --json                Print the account as pretty-printed JSON
+
+Examples:
+  tryaii whoami
+  tryaii whoami --json
+
+Exit codes:
+  0 signed in, 1 not signed in, session ended or network failure, 2 bad flag.
+`;
+
 const HELP_HELP = `tryaii help -- Show help for tryaii or a specific command
 
 Usage:
@@ -1950,8 +2117,8 @@ detailed help for that command. The flags -h/--help after any command do
 the same thing.
 
 Topics:
-  route, eval, cachelint, diagnose, designpartner, models, benchmarks, setup,
-  regenerate, help
+  route, eval, cachelint, diagnose, designpartner, models, benchmarks,
+  setup, regenerate, login, logout, whoami, help
 
 Examples:
   tryaii help
@@ -1975,6 +2142,9 @@ const COMMAND_HELP: Record<string, string> = {
   benchmarks: HELP_BENCHMARKS,
   setup: HELP_SETUP,
   regenerate: HELP_REGENERATE,
+  login: HELP_LOGIN,
+  logout: HELP_LOGOUT,
+  whoami: HELP_WHOAMI,
   help: HELP_HELP,
 };
 
@@ -2096,6 +2266,15 @@ async function main(): Promise<void> {
     case 'regenerate':
       await cmdRegenerate(subArgs);
       break;
+    case 'login':
+      await cmdLogin(subArgs);
+      break;
+    case 'logout':
+      await cmdLogout(subArgs);
+      break;
+    case 'whoami':
+      await cmdWhoami(subArgs);
+      break;
     default:
       throw new CliUsageError(`Unknown command: ${command}\nRun "tryaii --help" for usage.`);
   }
@@ -2108,6 +2287,10 @@ function isParseArgsUsageError(error: unknown): boolean {
 }
 
 main().catch((error) => {
+  if (error instanceof CliExit) {
+    process.exitCode = error.exitCode;
+    return;
+  }
   const message =
     error instanceof CliError
       ? error.message

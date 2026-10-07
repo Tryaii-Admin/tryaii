@@ -17,22 +17,27 @@ import numpy as np
 
 from tryaii.benchmarks.standard import STANDARD_BENCHMARKS
 from tryaii.cache.lru import LRUCache
+from tryaii.catalog.bundle import CatalogBundle
 from tryaii.centroids.generator import benchmark_fingerprint
 from tryaii.centroids.loader import CentroidLoader
 from tryaii.classifiers.base import BaseClassifier, ClassificationResult
 from tryaii.config import TryaiiDreConfig
 from tryaii.embeddings.base import BaseEmbeddingProvider
 
-# Benchmark -> broad category mapping for display purposes
 # Benchmark -> (broad_category, subcategory) mapping for display purposes.
 #
-# Derived from the standard benchmark definitions so the classifier's category
-# labels can never drift from the benchmark taxonomy (or its names). The
-# subcategory is the benchmark's primary (first) subcategory.
+# Category labels are catalog data (benchmarks.json); this module-level table
+# is the packaged starter catalog's and is kept for backwards compatibility. A
+# classifier labels with its centroid loader's catalog bundle (see
+# ``EmbeddingClassifier``). The subcategory is the benchmark's primary (first)
+# subcategory.
 BENCHMARK_CATEGORIES: dict[str, tuple[str, str]] = {
     b.name: (b.broad_category, b.subcategories[0] if b.subcategories else "GENERAL")
     for b in STANDARD_BENCHMARKS
 }
+
+# Label for a top benchmark the catalog has no category for (custom benchmarks).
+FALLBACK_CATEGORY: tuple[str, str] = ("TECHNICAL", "CODE_TECHNICAL")
 
 # Logistic steepness for intrinsic difficulty. Only affects the spread of the
 # reported [0,1] value; ordering (which drives batch-normalized allocation) is
@@ -137,10 +142,21 @@ class EmbeddingClassifier(BaseClassifier):
         embedding_provider: BaseEmbeddingProvider,
         centroid_loader: CentroidLoader,
         config: Optional[TryaiiDreConfig] = None,
+        categories: Optional[dict[str, tuple[str, str]]] = None,
     ):
         self._provider = embedding_provider
         self._centroid_loader = centroid_loader
         self._config = config or TryaiiDreConfig()
+        # Category labels: explicit, else the loader's catalog bundle, else the
+        # starter catalog's table.
+        if categories is None:
+            bundle = getattr(centroid_loader, "bundle", None)
+            categories = (
+                bundle.benchmark_categories()
+                if isinstance(bundle, CatalogBundle)
+                else BENCHMARK_CATEGORIES
+            )
+        self._categories: dict[str, tuple[str, str]] = dict(categories)
 
         # Caches
         self._embedding_cache = LRUCache[np.ndarray](
@@ -210,9 +226,7 @@ class EmbeddingClassifier(BaseClassifier):
         )
         top_score = benchmark_scores[top_benchmark]
 
-        broad_cat, sub_cat = BENCHMARK_CATEGORIES.get(
-            top_benchmark, ("TECHNICAL", "CODE_TECHNICAL")
-        )
+        broad_cat, sub_cat = self._categories.get(top_benchmark, FALLBACK_CATEGORY)
 
         result = ClassificationResult(
             benchmark_scores=benchmark_scores,

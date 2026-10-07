@@ -13,9 +13,12 @@ import os
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from tryaii.scoring.benchmarks import BenchmarkNormalizer, NormalizationRange
+
+if TYPE_CHECKING:
+    from tryaii.catalog.bundle import CatalogBundle
 
 
 @dataclass
@@ -34,6 +37,12 @@ class BenchmarkDefinition:
     broad_category: str = "TECHNICAL"
     subcategories: list[str] = field(default_factory=list)
     metadata: dict = field(default_factory=dict)
+    # Catalog fields (benchmarks.json). ``weight`` None = keep the normalizer's
+    # default for this name; ``random_chance_floor`` None = no floor. Not part
+    # of ``to_dict`` (the ``tryaii benchmarks --json`` shape is unchanged).
+    weight: Optional[float] = None
+    random_chance_floor: Optional[float] = None
+    family: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -63,7 +72,41 @@ class BenchmarkDefinition:
             broad_category=d.get("broad_category", "TECHNICAL"),
             subcategories=d.get("subcategories", []),
             metadata=d.get("metadata", {}),
+            weight=d.get("weight"),
+            random_chance_floor=d.get("random_chance_floor"),
+            family=d.get("family", ""),
         )
+
+
+def definitions_from_bundle(bundle: CatalogBundle) -> list[BenchmarkDefinition]:
+    """BenchmarkDefinitions for a bundle's benchmarks.json, in display order.
+
+    The normalization range comes from the bundle's normalization_ranges.json
+    (fallback 0-100 for a name it lacks); training queries stay empty -- the
+    centroid generator reads them from the bundle when it needs them.
+    """
+    ranges = bundle.range_entries()
+    definitions = []
+    for entry in bundle.benchmark_entries:
+        rng = ranges.get(entry["name"])
+        definitions.append(
+            BenchmarkDefinition(
+                name=entry["name"],
+                description=entry.get("description", ""),
+                training_queries=[],
+                normalization=(
+                    NormalizationRange(rng["lo"], rng["hi"], rng.get("description", ""))
+                    if rng is not None
+                    else NormalizationRange(0, 100)
+                ),
+                broad_category=entry.get("broad_category", "TECHNICAL"),
+                subcategories=list(entry.get("subcategories", [])),
+                weight=float(entry["weight"]),
+                random_chance_floor=entry.get("random_chance_floor"),
+                family=entry.get("family", ""),
+            )
+        )
+    return definitions
 
 
 class BenchmarkRegistry:
@@ -77,7 +120,7 @@ class BenchmarkRegistry:
         - Integrating with the centroid generator and scoring engine
 
     Usage:
-        registry = BenchmarkRegistry.default()  # Standard 12 benchmarks
+        registry = BenchmarkRegistry.default()  # Standard benchmark set
 
         # Add a custom benchmark
         registry.register(BenchmarkDefinition(
@@ -101,12 +144,21 @@ class BenchmarkRegistry:
         self._benchmarks: dict[str, BenchmarkDefinition] = {}
 
     @classmethod
-    def default(cls) -> BenchmarkRegistry:
-        """Create registry with the standard 12 benchmarks."""
-        from tryaii.benchmarks.standard import STANDARD_BENCHMARKS
+    def default(cls, bundle=None, catalog: str = "auto") -> BenchmarkRegistry:
+        """Create a registry pre-loaded with the default catalog's benchmarks.
 
+        ``bundle`` (a CatalogBundle or bundle directory) overrides the default
+        catalog -- see :func:`tryaii.catalog.resolve_bundle`.
+        """
+        from tryaii.catalog.bundle import resolve_bundle
+
+        return cls.from_bundle(resolve_bundle(bundle, catalog=catalog))
+
+    @classmethod
+    def from_bundle(cls, bundle: CatalogBundle) -> BenchmarkRegistry:
+        """Create a registry holding exactly one bundle's benchmarks."""
         registry = cls()
-        for benchmark in STANDARD_BENCHMARKS:
+        for benchmark in definitions_from_bundle(bundle):
             registry._benchmarks[benchmark.name] = benchmark
         return registry
 
@@ -150,7 +202,24 @@ class BenchmarkRegistry:
                 benchmark.normalization.max_score,
                 benchmark.description,
             )
+            if benchmark.weight is not None:
+                normalizer.register_weight(name, benchmark.weight)
         return normalizer
+
+    def random_chance_floors(self) -> dict[str, float]:
+        """``{name: floor}`` for the registered benchmarks that declare one."""
+        return {
+            name: b.random_chance_floor
+            for name, b in self._benchmarks.items()
+            if b.random_chance_floor is not None
+        }
+
+    def categories(self) -> dict[str, tuple[str, str]]:
+        """``{name: (broad_category, primary subcategory)}`` for the classifier."""
+        return {
+            name: (b.broad_category, b.subcategories[0] if b.subcategories else "GENERAL")
+            for name, b in self._benchmarks.items()
+        }
 
     def load_from_file(self, path: str | Path) -> int:
         """
@@ -159,7 +228,7 @@ class BenchmarkRegistry:
         Returns:
             Number of benchmarks loaded.
         """
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
 
         count = 0
@@ -179,7 +248,7 @@ class BenchmarkRegistry:
         # Write to temp file then atomically rename
         fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
         try:
-            with os.fdopen(fd, "w") as f:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
             os.replace(tmp_path, path)
         except BaseException:

@@ -6,7 +6,7 @@
  *
  *   const router = new Router();
  *   const result = await router.route('Write a Python function to merge sorted arrays');
- *   console.log(result.bestModel);   // e.g., "gpt-5.2"
+ *   console.log(result.bestModel);   // e.g., "openai/gpt-5.2"
  *   console.log(result.scores);      // Top models with scores and reasoning
  *
  * The default `LocalEmbeddingProvider` is async-only, so `route()` itself is
@@ -15,6 +15,10 @@
  */
 
 import { BenchmarkRegistry, BenchmarkDefinition } from './benchmarks/registry.js';
+import { CatalogBundle, resolveBundle } from './catalog/bundle.js';
+import type { BundleLike } from './catalog/bundle.js';
+import { assertCatalogMode, selectedBundle } from './catalog/client.js';
+import type { CatalogMode } from './catalog/client.js';
 import { NormalizationRange } from './scoring/benchmarks.js';
 import { CentroidLoader } from './centroids/loader.js';
 import { ClassificationResult } from './classifiers/base.js';
@@ -91,33 +95,105 @@ export interface RouteOptions {
  */
 export class Router {
   private _config: TryaiiDreConfig;
-  private _registry: ModelRegistry;
-  private _benchmarkRegistry: BenchmarkRegistry;
-  private _scoringEngine: ScoringEngine;
+  private _bundle!: CatalogBundle;
+  private _registry!: ModelRegistry;
+  private _benchmarkRegistry!: BenchmarkRegistry;
+  private _scoringEngine!: ScoringEngine;
   private _embeddingProvider: BaseEmbeddingProvider | null;
   private _centroidLoader: CentroidLoader | null = null;
   private _classifier: EmbeddingClassifier | null = null;
+  private _catalogMode: CatalogMode;
+  /**
+   * True once the catalog check is done (explicit bundle, 'starter', or
+   * ready() ran). Until then ready() / route() run the daily check -- which
+   * also detects a session that ended (SessionEndedError).
+   */
+  private _catalogSettled: boolean;
+  /**
+   * True once the caller customized this router's registries (addModel,
+   * addBenchmark*): the check still runs, but its result never swaps the
+   * customized registries for fresh ones.
+   */
+  private _customized = false;
+  private _userRegistry: ModelRegistry | null;
+  private _userBenchmarkRegistry: BenchmarkRegistry | null;
 
   constructor(opts?: {
     config?: Partial<TryaiiDreConfig>;
     registry?: ModelRegistry;
     benchmarkRegistry?: BenchmarkRegistry;
     embeddingProvider?: BaseEmbeddingProvider;
+    /**
+     * The catalog bundle to route on (a CatalogBundle or a bundle directory).
+     * Default: the default catalog -- see `resolveBundle`. Models, benchmark
+     * taxonomy, ranges, weights and centroids all come from it unless
+     * `registry` / `benchmarkRegistry` override them.
+     */
+    bundle?: BundleLike | null;
+    /**
+     * Which catalog to use when `bundle` is not given (contract section 5):
+     * 'auto' (default) -- the full catalog when logged in (`tryaii login`;
+     * downloaded and checked at most once a day), else the starter catalog;
+     * 'starter' -- always the packaged starter catalog, no network; 'full' --
+     * like auto, but throws LoginRequiredError when not logged in.
+     *
+     * The constructor is sync, so it starts from the local cache; the first
+     * `route()` (or `await router.ready()`) completes the daily check and may
+     * switch to a freshly downloaded catalog. It throws SessionEndedError when
+     * the stored session was rejected by the server.
+     */
+    catalog?: CatalogMode;
   }) {
     this._config = createDefaultConfig(opts?.config);
 
-    // Model registry
-    this._registry = opts?.registry ?? ModelRegistry.default();
+    const catalog = opts?.catalog ?? 'auto';
+    assertCatalogMode(catalog);
+    this._catalogMode = catalog;
+    this._catalogSettled = opts?.bundle != null || catalog === 'starter';
+    this._userRegistry = opts?.registry ?? null;
+    this._userBenchmarkRegistry = opts?.benchmarkRegistry ?? null;
 
-    // Benchmark registry
-    this._benchmarkRegistry = opts?.benchmarkRegistry ?? BenchmarkRegistry.default();
-
-    // Scoring engine with normalizer from benchmark registry
-    const normalizer = this._benchmarkRegistry.getNormalizer();
-    this._scoringEngine = new ScoringEngine(normalizer);
+    // The catalog this router routes on: an explicit bundle wins; otherwise
+    // `catalog` picks it (offline here, completed by ready()).
+    this._applyBundle(resolveBundle(opts?.bundle, catalog));
 
     // Embedding provider (lazy -- only initialized when needed)
     this._embeddingProvider = opts?.embeddingProvider ?? null;
+  }
+
+  /** (Re)build the registries and scoring engine from `bundle`. */
+  private _applyBundle(bundle: CatalogBundle): void {
+    this._bundle = bundle;
+    // Model registry
+    this._registry = this._userRegistry ?? ModelRegistry.fromBundle(bundle);
+    // Benchmark registry
+    this._benchmarkRegistry = this._userBenchmarkRegistry ?? BenchmarkRegistry.fromBundle(bundle);
+    // Scoring engine with normalizer from benchmark registry
+    this._scoringEngine = new ScoringEngine(this._benchmarkRegistry.getNormalizer());
+    // Centroids / classifier follow the bundle (rebuilt lazily).
+    this._centroidLoader = null;
+    this._classifier = null;
+  }
+
+  /**
+   * Complete the catalog selection (contract section 5): with catalog 'auto'
+   * or 'full' and no explicit bundle, run the daily check -- refresh the
+   * session, download a new full catalog if there is one -- and switch to
+   * the result. `route()` calls this; call it yourself to have `models` /
+   * `benchmarks` reflect the final catalog before the first route. Throws
+   * SessionEndedError / LoginRequiredError.
+   */
+  async ready(): Promise<this> {
+    if (!this._catalogSettled) {
+      const bundle = await selectedBundle(this._catalogMode);
+      // A router customized with addModel / addBenchmarkSync keeps its
+      // registries (the check above still ran: session end still throws).
+      if (!this._catalogSettled && !this._customized && bundle !== this._bundle) {
+        this._applyBundle(bundle);
+      }
+      this._catalogSettled = true;
+    }
+    return this;
   }
 
   /**
@@ -139,7 +215,8 @@ export class Router {
 
     this._centroidLoader = new CentroidLoader(
       this._embeddingProvider,
-      centroidFilePath(this._config),
+      centroidFilePath(this._config, this._bundle),
+      this._bundle,
     );
 
     return this._centroidLoader;
@@ -179,6 +256,7 @@ export class Router {
    */
   async route(prompt: string, opts?: RouteOptions): Promise<RouteResult> {
     prompt = Router._normalizePrompt(prompt);
+    await this.ready();
     const classifier = this._ensureClassifier();
     const classification = await classifier.classifyAsync(prompt);
     return this._buildResult(classification, opts);
@@ -192,6 +270,11 @@ export class Router {
    * `LocalEmbeddingProvider` is async-only, so calling `routeSync()` on a
    * default `Router` will fail. Inject a sync provider (e.g. a custom
    * cached provider) to use this path.
+   *
+   * Catalog: `routeSync()` never runs the (async) daily catalog check, so it
+   * routes on the catalog the constructor picked from the local cache (or on
+   * the one a previous `route()` / `ready()` settled on) and cannot detect a
+   * session that ended -- `await router.ready()` once first for that.
    */
   routeSync(prompt: string, opts?: RouteOptions): RouteResult {
     prompt = Router._normalizePrompt(prompt);
@@ -260,6 +343,10 @@ export class Router {
       classification.benchmarkScores,
       priorities,
       topK,
+      // Coverage is a property of each benchmark against the whole routable
+      // catalog, not of this call's (possibly filtered) candidate set, so it
+      // comes from the registry rather than from `models`.
+      this._registry.benchmarkCoverage(),
     );
 
     const best = scores[0]?.modelId ?? '';
@@ -286,6 +373,7 @@ export class Router {
     capabilities?: string[];
     description?: string;
   }): ModelInfo {
+    this._customized = true; // a customized router keeps its catalog
     return this._registry.add(opts);
   }
 
@@ -313,6 +401,7 @@ export class Router {
     minScore = 0,
     maxScore = 100,
   ): Promise<void> {
+    await this.ready();
     this._registerBenchmark(name, queries, description, minScore, maxScore);
     const loader = this._ensureCentroidLoader();
     await loader.addBenchmarkCentroidAsync(name, queries);
@@ -333,6 +422,7 @@ export class Router {
     minScore = 0,
     maxScore = 100,
   ): void {
+    this._customized = true; // a customized router keeps its catalog
     this._registerBenchmark(name, queries, description, minScore, maxScore);
     const loader = this._ensureCentroidLoader();
     if (this._embeddingProvider !== null && !this._embeddingProvider.supportsSync) {
@@ -353,6 +443,7 @@ export class Router {
     minScore: number,
     maxScore: number,
   ): void {
+    this._customized = true;
     const benchmark: BenchmarkDefinition = {
       name,
       description,
@@ -366,6 +457,11 @@ export class Router {
 
     const normalizer = this._benchmarkRegistry.getNormalizer();
     this._scoringEngine = new ScoringEngine(normalizer);
+  }
+
+  /** The catalog bundle this router routes on. */
+  get bundle(): CatalogBundle {
+    return this._bundle;
   }
 
   /** Access the model registry. */

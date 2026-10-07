@@ -72,6 +72,48 @@ def wait_seconds() -> int:
 # State file
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Catalog (docs/catalog/CONTRACT-catalog-v1.md section 5)
+# ---------------------------------------------------------------------------
+# The daemon routes on exactly the catalog the CLI selected: the client
+# passes it in TRYAII_DAEMON_CATALOG ("starter" or the absolute directory of
+# a cached full-catalog version) and the daemon records "<kind>:<version>" in
+# its state file. A daemon on another catalog (or a pre-catalog daemon with
+# no "catalog" key) is stopped and replaced.
+
+CATALOG_ENV = "TRYAII_DAEMON_CATALOG"
+
+
+def catalog_key(bundle) -> str:
+    """``"<kind>:<version>"`` of a CatalogBundle."""
+    return f"{bundle.kind}:{bundle.version}"
+
+
+def catalog_spec(bundle) -> Optional[str]:
+    """What to hand the daemon for ``bundle``: "starter", the full bundle's
+    directory, or None when it cannot be reloaded from disk."""
+    if bundle is None or bundle.kind == "starter":
+        return "starter"
+    return str(bundle.directory) if bundle.directory is not None else None
+
+
+def bundle_from_spec(spec: Optional[str]):
+    """Inverse of :func:`catalog_spec` (server side). Empty = starter."""
+    from tryaii.catalog.bundle import load_bundle, starter_bundle
+    from tryaii.catalog.client import full_dir
+
+    if not spec or spec == "starter":
+        return starter_bundle()
+    # A directory of the full-catalog cache is a cache load: its signature is
+    # re-verified (catalog contract section 6). Other paths are the caller's
+    # own bundles (Router(bundle=...)), loaded as given.
+    try:
+        in_cache = Path(spec).resolve().is_relative_to(full_dir().resolve())
+    except (OSError, ValueError):
+        in_cache = False
+    return load_bundle(spec, verify_signature=in_cache)
+
+
 def state_path(config) -> Path:
     return Path(config.data_dir) / f"daemon-{RUNTIME}.json"
 
@@ -144,11 +186,12 @@ def _request(state: dict, payload: dict, timeout: float) -> dict:
 # Discovery
 # ---------------------------------------------------------------------------
 
-def _live_state(config) -> Optional[dict]:
-    """Return the state of a running daemon matching this runtime + model.
+def _live_state(config, catalog: Optional[str] = None) -> Optional[dict]:
+    """Return the state of a running daemon matching this runtime + model
+    (+ catalog key, when given).
 
-    Returns None if there is no state file, it belongs to another runtime or
-    embedding model, or the process does not answer a ping.
+    Returns None if there is no state file, it belongs to another runtime,
+    embedding model or catalog, or the process does not answer a ping.
     """
     state = read_state(config)
     if not state:
@@ -156,6 +199,8 @@ def _live_state(config) -> Optional[dict]:
     if state.get("runtime") != RUNTIME:
         return None
     if state.get("embeddingModel") != config.embedding_model:
+        return None
+    if catalog is not None and state.get("catalog") != catalog:
         return None
     try:
         resp = _request(state, {"cmd": "ping"}, timeout=5)
@@ -210,7 +255,7 @@ def _release_spawn_lock(config) -> None:
         pass
 
 
-def _spawn_serve(config) -> subprocess.Popen:
+def _spawn_serve(config, catalog_spec_value: str = "starter") -> subprocess.Popen:
     """Launch a detached server process for this config.
 
     Runs the server module directly (`python -m tryaii.server`) rather than a
@@ -222,6 +267,7 @@ def _spawn_serve(config) -> subprocess.Popen:
     env = os.environ.copy()
     env["TRYAII_DRE_EMBEDDING_MODEL"] = config.embedding_model
     env["TRYAII_DRE_DATA_DIR"] = str(config.data_dir)
+    env[CATALOG_ENV] = catalog_spec_value
     # The serve process must never try to start a daemon of its own.
     env["TRYAII_NO_DAEMON"] = "1"
 
@@ -253,6 +299,7 @@ def ensure_daemon(
     autostart: bool = True,
     wait_timeout: Optional[float] = None,
     on_starting=None,
+    bundle=None,
 ) -> Optional[dict]:
     """Return the state of a live daemon, starting one if needed.
 
@@ -262,15 +309,34 @@ def ensure_daemon(
         wait_timeout: Seconds to wait for a freshly-spawned daemon to warm up.
         on_starting: Optional zero-arg callback invoked once while waiting, so
             callers can print a "starting..." notice.
+        bundle: The catalog the daemon must route on (default: starter). A
+            daemon running on another catalog kind/version is stopped and a
+            new one started.
 
     Returns the state dict on success, or None if no daemon could be reached
     (caller should fall back to in-process routing).
     """
-    info = _live_state(config)
+    from tryaii.catalog.bundle import starter_bundle
+
+    bundle = bundle if bundle is not None else starter_bundle()
+    key = catalog_key(bundle)
+    spec = catalog_spec(bundle)
+    if spec is None:
+        return None  # an in-memory-only bundle cannot be handed to a daemon
+    info = _live_state(config, key)
     if info:
         return info
     if not autostart:
         return None
+    other = _live_state(config)
+    if other is not None and other.get("catalog") != key:
+        # Alive, same runtime + model, but another catalog: replace it --
+        # unless a concurrent CLI already replaced it with one on our catalog
+        # (stop() rereads the state file and keeps a daemon on `key`).
+        stop(config, keep_catalog=key)
+        info = _live_state(config, key)
+        if info:
+            return info
 
     # The lock and log files live in the data dir, so it must exist before we
     # try to create them (first-ever run starts from nothing).
@@ -280,12 +346,17 @@ def ensure_daemon(
     proc = None
     try:
         if acquired:
+            # A concurrent CLI may have started the right daemon (and released
+            # the lock) since we looked: never clobber a live one on `key`.
+            info = _live_state(config, key)
+            if info:
+                return info
             # Drop any stale state so we only accept the new daemon's readiness.
             clear_state(config)
-            proc = _spawn_serve(config)
+            proc = _spawn_serve(config, spec)
         notified = False
         while time.monotonic() < deadline:
-            info = _live_state(config)
+            info = _live_state(config, key)
             if info:
                 return info
             if proc is not None and proc.poll() is not None:
@@ -301,10 +372,18 @@ def ensure_daemon(
             _release_spawn_lock(config)
 
 
-def stop(config) -> bool:
-    """Stop the daemon. Returns True if one was running."""
+def stop(config, keep_catalog: Optional[str] = None) -> bool:
+    """Stop the daemon. Returns True if one was running.
+
+    ``keep_catalog``: a catalog key (``"<kind>:<version>"``); when the state
+    file -- reread here -- already names that catalog, the daemon is left
+    running (it was started by a concurrent CLI on the catalog the caller
+    wants) and False is returned.
+    """
     state = read_state(config)
     if not state:
+        return False
+    if keep_catalog is not None and state.get("catalog") == keep_catalog:
         return False
     stopped = False
     try:

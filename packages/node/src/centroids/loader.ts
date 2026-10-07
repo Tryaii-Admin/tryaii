@@ -3,28 +3,20 @@
  *
  * Loading priority:
  *   1. In-memory cache (already loaded)
- *   2. User's cache directory (previously generated for their model)
- *   3. Bundled static file (ships with package for default model -- zero delay)
- *   4. Generate from training queries (only if using a non-default model)
+ *   2. User's cache directory (previously generated for their model), when its
+ *      benchmark set matches the catalog bundle's
+ *   3. The catalog bundle's centroids.json (when built for this embedding
+ *      model -- zero delay)
+ *   4. Generate from the bundle's training queries (non-default embedding model)
  */
 
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { existsSync, readdirSync, unlinkSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 
+import { CatalogBundle, resolveBundle } from '../catalog/bundle.js';
+import type { BundleLike } from '../catalog/bundle.js';
 import { BaseEmbeddingProvider } from '../embeddings/base.js';
-import { CentroidGenerator, TRAINING_QUERIES_PATH } from './generator.js';
-
-const currentDir = dirname(fileURLToPath(import.meta.url));
-
-/** Path to bundled centroids (ships with the package). */
-const BUNDLED_CENTROIDS_DIR = join(currentDir, 'data');
-
-/** Get path to the bundled centroid file for a given model. */
-function bundledCentroidPath(modelName: string): string {
-  const safeName = modelName.replace(/\//g, '__');
-  return join(BUNDLED_CENTROIDS_DIR, `centroids_${safeName}.json`);
-}
+import { CentroidGenerator } from './generator.js';
 
 /**
  * Stable fingerprint of the benchmark set present in a centroid file.
@@ -39,15 +31,13 @@ export function benchmarkFingerprint(benchmarkNames: Iterable<string>): string {
 }
 
 /**
- * Fingerprint of the bundled default benchmark set, derived from the shipped
- * training queries. A centroid file whose benchmark set doesn't match this was
- * built against a different benchmark set and must be regenerated. Mirrors the
- * Python SDK's `CentroidGenerator.default_benchmark_fingerprint()`.
+ * Fingerprint of a catalog's benchmark set, derived from its training queries.
+ * A centroid file whose benchmark set doesn't match this was built against a
+ * different benchmark set (or catalog) and must be regenerated. Mirrors the
+ * Python SDK's `CentroidGenerator.default_benchmark_fingerprint(bundle)`.
  */
-function defaultBenchmarkFingerprint(): string {
-  const raw = readFileSync(TRAINING_QUERIES_PATH, 'utf-8');
-  const data = JSON.parse(raw) as { benchmarks: Record<string, unknown> };
-  return benchmarkFingerprint(Object.keys(data.benchmarks));
+export function defaultBenchmarkFingerprint(bundle?: BundleLike | null): string {
+  return benchmarkFingerprint(Object.keys(resolveBundle(bundle).trainingQueries.benchmarks));
 }
 
 /**
@@ -68,23 +58,60 @@ function providerDimensionKnown(provider: BaseEmbeddingProvider): boolean {
 /**
  * Manages centroid lifecycle: load, validate, regenerate.
  *
- * For the default embedding model (all-MiniLM-L6-v2), centroids are
- * bundled with the package -- zero first-run delay. For other models,
- * centroids are generated on first use and cached to disk.
+ * For the catalog bundle's embedding model (all-MiniLM-L6-v2), centroids ship
+ * in the bundle -- zero first-run delay. For other models, centroids are
+ * generated from the bundle's training queries on first use and cached to
+ * disk. `bundle` (a CatalogBundle or directory) defaults to the default
+ * catalog -- see `resolveBundle`.
  */
 export class CentroidLoader {
   private _provider: BaseEmbeddingProvider;
   private _centroids: Record<string, number[]> | null = null;
   private _generator: CentroidGenerator;
   private _userCachePath: string | null;
+  private _bundle: CatalogBundle;
 
   constructor(
     embeddingProvider: BaseEmbeddingProvider,
     userCachePath?: string,
+    bundle?: BundleLike | null,
   ) {
     this._provider = embeddingProvider;
-    this._generator = new CentroidGenerator(embeddingProvider);
+    this._bundle = resolveBundle(bundle);
+    this._generator = new CentroidGenerator(embeddingProvider, this._bundle);
     this._userCachePath = userCachePath ?? null;
+  }
+
+  /** The catalog bundle this loader serves. */
+  get bundle(): CatalogBundle {
+    return this._bundle;
+  }
+
+  /** This loader's user centroid cache path (null = no disk cache). */
+  get cachePath(): string | null {
+    return this._userCachePath;
+  }
+
+  /**
+   * Write the user cache. When the path is keyed by catalog
+   * (`centroids_<model>__<kind>-<version>.json`, see centroidFilePath), drop
+   * this model's caches for older versions of the same catalog kind -- a
+   * full catalog update makes them unreachable.
+   */
+  private _saveUserCache(centroids: Record<string, number[]>, path: string): void {
+    this._generator.save(centroids, path);
+    const file = basename(path);
+    const match = /^(centroids_.+__(?:starter|full)-).+\.json$/.exec(file);
+    if (!match) return;
+    try {
+      for (const entry of readdirSync(dirname(path))) {
+        if (entry !== file && entry.startsWith(match[1]) && entry.endsWith('.json')) {
+          unlinkSync(join(dirname(path), entry));
+        }
+      }
+    } catch {
+      // best effort
+    }
   }
 
   /**
@@ -130,9 +157,8 @@ export class CentroidLoader {
       }
     }
 
-    // 2. Try bundled static centroids (ships with package)
-    const bundledPath = bundledCentroidPath(this._provider.modelName);
-    const loaded = this._tryLoad(bundledPath);
+    // 2. Try the catalog bundle's centroids (built for its embedding model)
+    const loaded = this._tryBundle();
     if (loaded !== null) {
       this._centroids = loaded;
       return this._centroids;
@@ -146,35 +172,49 @@ export class CentroidLoader {
 
     try {
       const { centroids, metadata } = CentroidGenerator.load(path);
-
-      const savedModel = metadata.model ?? '';
-      const savedDim = metadata.dimension ?? 0;
-
-      // Model name must always match.
-      if (savedModel !== this._provider.modelName) {
-        return null;
-      }
-
-      // Dimension check: skip while the provider hasn't reported a real
-      // dimension (it may still be returning a hardcoded fallback). Otherwise
-      // a non-default-dimension file would be wrongly rejected/accepted.
-      if (providerDimensionKnown(this._provider) && savedDim !== this._provider.dimension) {
-        return null;
-      }
-
-      // Benchmark-set check: fingerprint the benchmarks actually present in the
-      // file and compare against the expected default set. Computing from the
-      // file's own keys (rather than a stored metadata value that older/bundled
-      // files lack) lets pre-fingerprint bundled files load while still
-      // regenerating a file built against a different benchmark set.
-      if (benchmarkFingerprint(Object.keys(centroids)) !== defaultBenchmarkFingerprint()) {
-        return null;
-      }
-
-      return centroids;
+      return this._validated(centroids, metadata ?? {});
     } catch {
       return null;
     }
+  }
+
+  /** The catalog bundle's centroids, when they fit the current provider. */
+  private _tryBundle(): Record<string, number[]> | null {
+    const data = this._bundle.centroids;
+    // Copy the vectors: callers (addBenchmarkCentroid) mutate the returned map.
+    const centroids: Record<string, number[]> = {};
+    for (const [name, vector] of Object.entries(data.centroids)) centroids[name] = [...vector];
+    return this._validated(centroids, data.metadata ?? {});
+  }
+
+  /** `centroids` when they fit the provider and the catalog bundle, else null. */
+  private _validated(
+    centroids: Record<string, number[]>,
+    metadata: { model?: string; dimension?: number },
+  ): Record<string, number[]> | null {
+    const savedModel = metadata.model ?? '';
+    const savedDim = metadata.dimension ?? 0;
+
+    // Model name must always match.
+    if (savedModel !== this._provider.modelName) {
+      return null;
+    }
+
+    // Dimension check: skip while the provider hasn't reported a real
+    // dimension (it may still be returning a hardcoded fallback). Otherwise
+    // a non-default-dimension file would be wrongly rejected/accepted.
+    if (providerDimensionKnown(this._provider) && savedDim !== this._provider.dimension) {
+      return null;
+    }
+
+    // Benchmark-set check: fingerprint the benchmarks actually present and
+    // compare against the catalog bundle's set, so a user cache generated for
+    // another catalog (or another benchmark set) is never used.
+    if (benchmarkFingerprint(Object.keys(centroids)) !== defaultBenchmarkFingerprint(this._bundle)) {
+      return null;
+    }
+
+    return centroids;
   }
 
   private _regenerate(): Record<string, number[]> {
@@ -182,7 +222,7 @@ export class CentroidLoader {
 
     // Save to user cache for future runs
     if (this._userCachePath) {
-      this._generator.save(centroids, this._userCachePath);
+      this._saveUserCache(centroids, this._userCachePath);
     }
 
     this._centroids = centroids;
@@ -193,7 +233,7 @@ export class CentroidLoader {
     const centroids = await this._generator.generateAsync();
 
     if (this._userCachePath) {
-      this._generator.save(centroids, this._userCachePath);
+      this._saveUserCache(centroids, this._userCachePath);
     }
 
     this._centroids = centroids;
@@ -209,7 +249,7 @@ export class CentroidLoader {
     const centroids = this._generator.generate(customQueries);
 
     if (this._userCachePath) {
-      this._generator.save(centroids, this._userCachePath);
+      this._saveUserCache(centroids, this._userCachePath);
     }
 
     this._centroids = centroids;
@@ -234,7 +274,7 @@ export class CentroidLoader {
 
     // Save updated centroids to user cache
     if (this._userCachePath) {
-      this._generator.save(centroids, this._userCachePath);
+      this._saveUserCache(centroids, this._userCachePath);
     }
 
     return newCentroid;
@@ -251,7 +291,7 @@ export class CentroidLoader {
     centroids[benchmarkName] = newCentroid;
 
     if (this._userCachePath) {
-      this._generator.save(centroids, this._userCachePath);
+      this._saveUserCache(centroids, this._userCachePath);
     }
 
     return newCentroid;
@@ -263,7 +303,7 @@ export class CentroidLoader {
     if (benchmarkName in centroids) {
       delete centroids[benchmarkName];
       if (this._userCachePath) {
-        this._generator.save(centroids, this._userCachePath);
+        this._saveUserCache(centroids, this._userCachePath);
       }
       return true;
     }

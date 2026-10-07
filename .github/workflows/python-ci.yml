@@ -41,6 +41,22 @@ jobs:
       - name: Lint with ruff
         run: ruff check tryaii/ tests/
 
+      # The cross-CLI parity suites (cachelint/diagnose/designpartner, starter
+      # routing parity) run the Node build and skip without it: build it on
+      # one matrix entry so they actually run there.
+      - name: Set up Node 22 (cross-CLI parity)
+        if: matrix.python-version == '3.12'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build the Node CLI (cross-CLI parity)
+        if: matrix.python-version == '3.12'
+        working-directory: packages/node
+        run: |
+          npm install
+          npm run build
+
       - name: Run tests
         run: pytest tests/ -v --tb=short
 

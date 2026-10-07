@@ -1,6 +1,6 @@
 {
   "name": "tryaii",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "AI model router for Node.js and TypeScript with benchmark, cost, and speed-based ranking",
   "type": "module",
   "main": "dist/index.js",
@@ -39,6 +39,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:dist": "node ./scripts/verify-dist.mjs",
+    "verify:release": "node ./scripts/verify-dist.mjs --release",
     "lint": "eslint src/ --ext .ts"
   },
   "keywords": [

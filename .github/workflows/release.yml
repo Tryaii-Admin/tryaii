@@ -87,6 +87,13 @@ jobs:
           fi
           echo "All version spots match v$EXPECTED"
 
+      # Catalog contract section 6: a released package must trust production
+      # catalog-signing keys only: fails if shared/catalog/trusted_keys.json (or
+      # a packaged copy) lists a development key or no production key
+      # (see scripts/check-release-keys.py).
+      - name: Release guard -- catalog signing keys are production-only
+        run: python3 scripts/check-release-keys.py
+
       # ---------------------------------------------------------------- node
       - name: Set up Node 22
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -101,9 +108,9 @@ jobs:
         working-directory: packages/node
         run: npm run build
 
-      - name: Verify node dist artifacts
+      - name: "Verify node dist artifacts (release mode: production keys only)"
         working-directory: packages/node
-        run: npm run verify:dist
+        run: npm run verify:release
 
       - name: Pack and check node tarball
         working-directory: packages/node

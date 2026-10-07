@@ -13,16 +13,16 @@
           "provider_key": "openai",
           "upstream": null
         },
-        "resolved_model_id": "gpt-4o",
+        "resolved_model_id": "openai/gpt-4o",
         "declared_model": "gpt-4o",
         "output_tokens": 400,
         "calls_per_day": 2000,
         "classification": {
           "benchmark_similarities": {
-            "HumanEval": 0.78,
-            "SWE-bench": 0.62,
-            "LiveBench": 0.41,
-            "MMLU": 0.3
+            "LiveCodeBench": 0.78,
+            "SciCode": 0.62,
+            "Terminal-bench-Hard": 0.41,
+            "MMLU-Pro": 0.3
           }
         },
         "priorities": {
@@ -45,9 +45,9 @@
           "cache_savings_usd": 112.5
         },
         "swap": {
-          "model_id": "gpt-5-nano",
-          "cost_per_call_usd": 0.0002,
-          "monthly_savings_usd": 468
+          "model_id": "deepseek/deepseek-v4-flash",
+          "cost_per_call_usd": 0.0001,
+          "monthly_savings_usd": 474
         }
       }
     },
@@ -56,8 +56,8 @@
       "description": "SPEC §2.4: no cache context -> chars/4 estimate; no traffic -> monthly itemized as insufficient; no ranking -> swap null -> ok.",
       "input": {
         "canonical_text": "user: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-        "resolved_model_id": "claude-sonnet-4-5-20250929",
-        "declared_model": "claude-sonnet-4-5-20250929",
+        "resolved_model_id": "anthropic/claude-sonnet-4.5",
+        "declared_model": "claude-sonnet-4.5",
         "output_tokens": 500
       },
       "expected": {
@@ -85,7 +85,7 @@
           "provider_key": "openrouter",
           "upstream": "anthropic"
         },
-        "resolved_model_id": "claude-sonnet-4-5-20250929",
+        "resolved_model_id": "anthropic/claude-sonnet-4.5",
         "declared_model": "anthropic/claude-sonnet-4.5",
         "output_tokens": 300,
         "calls_per_day": 500
@@ -117,7 +117,7 @@
           "provider_key": "openai",
           "upstream": null
         },
-        "resolved_model_id": "gpt-4o-mini",
+        "resolved_model_id": "openai/gpt-4o-mini",
         "declared_model": "gpt-4o-mini",
         "output_tokens": 200,
         "calls_per_day": 100
@@ -178,7 +178,7 @@
       "name": "no-prompt",
       "description": "SPEC §2.4: nothing to count -> insufficient_data with the no-prompt reason.",
       "input": {
-        "resolved_model_id": "gpt-4o",
+        "resolved_model_id": "openai/gpt-4o",
         "declared_model": "gpt-4o",
         "output_tokens": 500
       },

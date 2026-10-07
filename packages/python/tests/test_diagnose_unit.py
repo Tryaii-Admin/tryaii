@@ -58,6 +58,46 @@ def test_resolve_exact_wins_over_normalization():
     assert resolve_model_id("gpt-x.1", registry) == ("gpt-x.1", "exact")
 
 
+def _registry_of(*model_ids: str) -> ModelRegistry:
+    registry = ModelRegistry()
+    for model_id in model_ids:
+        registry.add(model_id, "TestCo")
+    return registry
+
+
+def test_resolve_alias_never_overrides_an_exact_or_tail_match():
+    # A catalog that carries the dated id itself: the exact / tail steps win
+    # and the alias fallback (which would strip the date) is never consulted.
+    registry = _registry_of("anthropic/claude-sonnet-4.5",
+                            "anthropic/claude-sonnet-4-5-20250929",
+                            "x-ai/grok-4", "x-ai/grok-4-latest")
+    assert resolve_model_id("anthropic/claude-sonnet-4-5-20250929", registry) == (
+        "anthropic/claude-sonnet-4-5-20250929", "exact")
+    assert resolve_model_id("claude-sonnet-4-5-20250929", registry) == (
+        "anthropic/claude-sonnet-4-5-20250929", "normalized")
+    assert resolve_model_id("grok-4-latest", registry) == ("x-ai/grok-4-latest", "normalized")
+
+
+def test_resolve_alias_only_lands_on_models_in_the_registry():
+    # Table hit whose slug is absent, and a stripped base matching nothing.
+    registry = _registry_of("mistralai/mistral-large-2512")
+    assert resolve_model_id("mistral-large-latest", registry) == (None, "none")
+    assert resolve_model_id("claude-sonnet-4-5-20250929", registry) == (None, "none")
+
+
+def test_resolve_alias_strip_rule_and_ambiguity():
+    registry = _registry_of("acme/foo-2", "acme/foo.3", "other/foo-3")
+    # Not in the slug table: the date / -latest suffix is dropped once.
+    assert resolve_model_id("foo-2-20250101", registry) == ("acme/foo-2", "alias")
+    assert resolve_model_id("foo@20250101", registry) == (None, "none")
+    assert resolve_model_id("FOO-2-LATEST", registry) == ("acme/foo-2", "alias")
+    # Two catalog ids share the stripped tail -> never guessed.
+    assert resolve_model_id("foo-3-latest", registry) == (None, "none")
+    # Only a compact 20YYMMDD date counts; other trailing numbers stay.
+    assert resolve_model_id("foo-2-2025-01-01", registry) == (None, "none")
+    assert resolve_model_id("foo-2-12345678", registry) == (None, "none")
+
+
 # ---------------------------------------------------------------------------
 # model_fit — recommended_same_price band edges (SPEC §2.2.1)
 # ---------------------------------------------------------------------------

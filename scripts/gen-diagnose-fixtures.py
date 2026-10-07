@@ -12,7 +12,7 @@ contract for the TypeScript port (see shared/diagnose/SPEC.md §5).
 
 All suites are routing-free: model_fit cases always use the site
 `_classification` seam, so no fixture ever needs the embedding model.
-Catalog syncs (shared/models/default_models.json) are expected to churn the
+Starter catalog updates (shared/catalog/starter) are expected to churn the
 modelfit/cost/check suites — regenerate and review alongside the sync.
 
 Usage:

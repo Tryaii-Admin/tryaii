@@ -73,8 +73,20 @@ export function centroidsDir(config: TryaiiDreConfig): string {
   return join(config.dataDir, 'centroids');
 }
 
-/** Get the centroid file path for the current embedding model. */
-export function centroidFilePath(config: TryaiiDreConfig): string {
+/**
+ * User centroid cache path for the current embedding model AND catalog.
+ *
+ * With a bundle it is keyed by the catalog's kind + version too
+ * (`centroids_<model>__<kind>-<version>.json`), so routing alternately on the
+ * starter and the full catalog never makes one overwrite (and regenerate) the
+ * other's cache. Without one: the unkeyed legacy name. Same names as the
+ * Python SDK's `TryaiiDreConfig.centroid_file_for`.
+ */
+export function centroidFilePath(
+  config: TryaiiDreConfig,
+  bundle?: { kind: string; version: string } | null,
+): string {
   const safeName = config.embeddingModel.replace(/\//g, '__');
-  return join(centroidsDir(config), `centroids_${safeName}.json`);
+  if (!bundle) return join(centroidsDir(config), `centroids_${safeName}.json`);
+  return join(centroidsDir(config), `centroids_${safeName}__${bundle.kind}-${bundle.version}.json`);
 }

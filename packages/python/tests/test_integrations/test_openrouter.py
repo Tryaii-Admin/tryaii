@@ -1,6 +1,6 @@
 """Tests for OpenRouter integration (mock-only, no real API calls)."""
 
-from tryaii.integrations.openrouter import MODEL_ID_TO_OPENROUTER
+from tryaii.integrations.openrouter import MODEL_ID_TO_OPENROUTER, OpenRouterIntegration
 
 
 class TestModelMapping:
@@ -16,17 +16,32 @@ class TestModelMapping:
         assert "gemini-2.5-pro" in MODEL_ID_TO_OPENROUTER
         assert "google/" in MODEL_ID_TO_OPENROUTER["gemini-2.5-pro"]
 
-    def test_all_default_models_have_mapping(self):
-        """Verify that all models in default registry have OpenRouter mappings."""
+    def test_all_default_models_resolve_to_openrouter_slugs(self):
+        """Every default-catalog id must resolve to an OpenRouter-usable slug.
+
+        The remote catalog ships OpenRouter-native `provider/model` ids, so the
+        resolver's identity fallback covers them; legacy bare ids (gpt-4o, ...)
+        still go through MODEL_ID_TO_OPENROUTER. Either way the resolved value
+        must be a provider-prefixed slug.
+        """
         from tryaii.registry.models import ModelRegistry
 
         registry = ModelRegistry.default()
-        unmapped = []
+        unresolvable = []
         for model_id in registry.model_ids:
-            if model_id not in MODEL_ID_TO_OPENROUTER:
-                unmapped.append(model_id)
+            slug = MODEL_ID_TO_OPENROUTER.get(model_id, model_id)
+            if "/" not in slug:
+                unresolvable.append(model_id)
 
-        # Allow some unmapped (new models may not have OpenRouter slugs yet)
-        # but the majority should be mapped
-        mapped_ratio = 1 - len(unmapped) / len(registry)
-        assert mapped_ratio >= 0.8, f"Too many unmapped models: {unmapped}"
+        assert not unresolvable, f"Models with no OpenRouter slug: {unresolvable}"
+
+    def test_resolve_model_passthrough_for_native_ids(self):
+        """`_resolve_model` must return OpenRouter-native ids unchanged."""
+        resolve = OpenRouterIntegration._resolve_model
+        assert resolve(None, "openai/gpt-5") == "openai/gpt-5"
+        assert resolve(None, "qwen/qwen3.7-max") == "qwen/qwen3.7-max"
+
+    def test_resolve_model_maps_legacy_ids(self):
+        """Legacy bare ids still translate through MODEL_ID_TO_OPENROUTER."""
+        resolve = OpenRouterIntegration._resolve_model
+        assert resolve(None, "gpt-4o") == "openai/gpt-4o"

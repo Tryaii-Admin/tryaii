@@ -1,117 +1,17 @@
 /**
- * Standard benchmark definitions -- the 12 benchmarks shipped with TryAii.
+ * Standard benchmark definitions -- the benchmarks of the packaged starter catalog.
+ *
+ * The benchmark taxonomy (names, descriptions, broad/sub categories, families,
+ * importance weights, random-chance floors) is catalog data: it lives in each
+ * catalog bundle's benchmarks.json (docs/catalog/CONTRACT-catalog-v1.md,
+ * Appendix A), with its normalization ranges in normalization_ranges.json.
+ * `STANDARD_BENCHMARKS` is the packaged starter bundle's set, kept for
+ * backwards compatibility; use `BenchmarkRegistry.fromBundle(bundle)` for any
+ * other catalog. Mirrors the Python package's `standard.py`.
  */
 
-import { NormalizationRange } from '../scoring/benchmarks.js';
+import { starterBundle } from '../catalog/bundle.js';
+import { definitionsFromBundle } from './registry.js';
 import type { BenchmarkDefinition } from './registry.js';
 
-export const STANDARD_BENCHMARKS: BenchmarkDefinition[] = [
-  {
-    name: 'MMLU',
-    description: 'Academic knowledge across 57 subjects',
-    trainingQueries: [], // Loaded from trainingQueries.json at runtime
-    normalization: new NormalizationRange(40, 96),
-    broadCategory: 'EDUCATIONAL',
-    subcategories: ['ACADEMIC_INSTRUCTION', 'RESEARCH_METHODOLOGY'],
-    metadata: {},
-  },
-  {
-    name: 'HellaSwag',
-    description: 'Commonsense reasoning about everyday situations',
-    trainingQueries: [],
-    normalization: new NormalizationRange(68, 99),
-    broadCategory: 'CONVERSATIONAL',
-    subcategories: ['PERSONAL_ADVICE'],
-    metadata: {},
-  },
-  {
-    name: 'HumanEval',
-    description: 'Code generation and programming tasks',
-    trainingQueries: [],
-    normalization: new NormalizationRange(30, 97),
-    broadCategory: 'TECHNICAL',
-    subcategories: ['CODE_TECHNICAL'],
-    metadata: {},
-  },
-  {
-    name: 'SWE-bench',
-    description: 'Real-world software engineering and debugging',
-    trainingQueries: [],
-    normalization: new NormalizationRange(8, 86),
-    broadCategory: 'TECHNICAL',
-    subcategories: ['CODE_TECHNICAL', 'DATA_SCIENCE'],
-    metadata: {},
-  },
-  {
-    name: 'TruthfulQA',
-    description: 'Truthful and accurate question answering',
-    trainingQueries: [],
-    normalization: new NormalizationRange(40, 86),
-    broadCategory: 'CONVERSATIONAL',
-    subcategories: ['PERSONAL_ADVICE'],
-    metadata: {},
-  },
-  {
-    name: 'ARC',
-    description: 'Science exam questions requiring reasoning',
-    trainingQueries: [],
-    normalization: new NormalizationRange(70, 96),
-    broadCategory: 'EDUCATIONAL',
-    subcategories: ['ACADEMIC_INSTRUCTION', 'STUDY_ASSISTANCE'],
-    metadata: {},
-  },
-  {
-    name: 'GSM8K',
-    description: 'Grade school math word problems',
-    trainingQueries: [],
-    normalization: new NormalizationRange(65, 99),
-    broadCategory: 'TECHNICAL',
-    subcategories: ['MATHEMATICAL_SCIENTIFIC'],
-    metadata: {},
-  },
-  {
-    name: 'DROP',
-    description: 'Reading comprehension requiring arithmetic and reasoning',
-    trainingQueries: [],
-    normalization: new NormalizationRange(48, 91),
-    broadCategory: 'TECHNICAL',
-    subcategories: ['MATHEMATICAL_SCIENTIFIC', 'DATA_SCIENCE'],
-    metadata: {},
-  },
-  {
-    name: 'SuperGLUE',
-    description: 'Natural language understanding tasks',
-    trainingQueries: [],
-    normalization: new NormalizationRange(48, 95),
-    broadCategory: 'BUSINESS',
-    subcategories: ['PROFESSIONAL_COMMUNICATION'],
-    metadata: {},
-  },
-  {
-    name: 'Chatbot Arena (LMSys)',
-    description: 'Human-rated conversational quality',
-    trainingQueries: [],
-    normalization: new NormalizationRange(1300, 1520),
-    broadCategory: 'CONVERSATIONAL',
-    subcategories: ['PERSONAL_ADVICE', 'RECOMMENDATIONS'],
-    metadata: {},
-  },
-  {
-    name: 'MT-Bench',
-    description: 'Multi-turn conversation and instruction following',
-    trainingQueries: [],
-    normalization: new NormalizationRange(6, 10),
-    broadCategory: 'CREATIVE',
-    subcategories: ['WRITING_LITERARY'],
-    metadata: {},
-  },
-  {
-    name: 'LiveBench',
-    description: 'Fresh, contamination-resistant evaluation tasks',
-    trainingQueries: [],
-    normalization: new NormalizationRange(58, 84),
-    broadCategory: 'TECHNICAL',
-    subcategories: ['CODE_TECHNICAL', 'MATHEMATICAL_SCIENTIFIC'],
-    metadata: {},
-  },
-];
+export const STANDARD_BENCHMARKS: BenchmarkDefinition[] = definitionsFromBundle(starterBundle());

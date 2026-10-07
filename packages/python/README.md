@@ -8,8 +8,8 @@ from tryaii import DREClient, Router
 router = Router()
 result = router.route("Write a Python function to merge sorted arrays")
 
-print(result.best_model)     # "gpt-5.2"
-print(result.best_reasoning) # "Quality: 0.94 on [HumanEval (93%), SWE-bench (87%)]"
+print(result.best_model)     # e.g. "anthropic/claude-opus-5.5"
+print(result.best_reasoning) # "q'=0.98 (4 real of 5) | imputed: 1/5 | cost 0.2066 ($12.00/M) | ..."
 
 client = DREClient(api_key="sk-or-...")
 response = client.chat("Write a quicksort implementation")
@@ -57,6 +57,29 @@ result = router.route(
 )
 ```
 
+## Model catalog
+
+The package ships a **starter catalog**: 45 well-known models from OpenAI, Anthropic,
+Google, DeepSeek, xAI and Mistral, scored on 16 benchmarks. It works offline with no
+account. Log in (free, with your tryaii.com Google account) to route on the **full
+catalog of 322 models**:
+
+```bash
+tryaii login     # device sign-in: open the printed URL in any browser and approve the code
+tryaii whoami    # the signed-in account and the downloaded catalog release
+tryaii logout    # remove the credentials and the downloaded catalog
+```
+
+After login the full catalog downloads automatically, is refreshed at most once a day,
+cached under `~/.tryaii/catalog/` (or `TRYAII_DRE_DATA_DIR`), and used only after its
+Ed25519 signature checks out. In code:
+
+```python
+Router()                    # catalog="auto": full when logged in, else starter
+Router(catalog="starter")   # always the packaged catalog, no network
+Router(catalog="full")      # raises LoginRequiredError when not logged in
+```
+
 ## CLI
 
 Installing the package adds a `tryaii` command (same surface as the Node SDK). It opens
@@ -70,6 +93,7 @@ tryaii models --provider anthropic        # add --json for machine-readable outp
 tryaii benchmarks --json
 tryaii setup                               # download the embedding model + warm centroids
 tryaii cachelint request.json              # pre-flight prompt-cache analysis (warn-only)
+tryaii login                               # free: unlock the full model catalog
 ```
 
 | Command | Key options |
@@ -86,6 +110,8 @@ cache predictions against the response `usage` — warn-only and fail-open.
 | `models` | `--provider <name>`, `--json` |
 | `benchmarks` | `--json` |
 | `setup` / `regenerate` | `--model <name>` |
+| `login` / `logout` | none |
+| `whoami` | `--json` |
 
 Global flags: `--no-banner` (or `TRYAII_NO_BANNER=1`), `NO_COLOR=1`, `-v/--verbose`,
 `-V/--version`. All flags work in any position and match the npm CLI.

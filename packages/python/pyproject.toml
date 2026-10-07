@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tryaii"
-version = "0.5.1"
+version = "0.6.0"
 description = "TryAii Diff Routing Engine -- Embedding-based AI model router. Understands your prompt semantically and routes to the best model based on benchmarks, cost, speed, and quality."
 readme = "README.md"
 license = "Apache-2.0"
@@ -105,6 +105,12 @@ ignore = [
 "tryaii/cachelint/analyzer.py" = ["E501"]
 "tryaii/cachelint/detectors.py" = ["E501"]
 "tryaii/cachelint/report.py" = ["E501"]
+# Contract black-box and catalog-client tests assert verbatim CLI output and
+# wire payloads; keeping each expected string on one line keeps it greppable
+# against the contract docs.
+"tests/test_auth_contract_blackbox.py" = ["E501"]
+"tests/test_catalog_contract_blackbox.py" = ["E501"]
+"tests/test_catalog_client.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

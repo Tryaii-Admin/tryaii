@@ -13,10 +13,10 @@ const summary: DashboardSummary = {
   totalPrompts: 120, successCount: 118, errorCount: 2,
   distinctModels: 7, avgRouteMs: 41.2, totalRouteMs: 4944,
   priorities: { quality: 5, cost: 1, speed: 1 },
-  distribution: [{ model: 'claude-sonnet-4-5-20250929', count: 60, pct: 50.85 }, /* ... */],
+  distribution: [{ model: 'anthropic/claude-fable-5', count: 60, pct: 50.85 }, /* ... */],
   byCategory: [{ category: 'code', count: 80,
                  topModels: [{ model: '...', count: 40, pct: 50 }],
-                 topBenchmarks: [{ name: 'HumanEval', avgScore: 0.91 }] }],
+                 topBenchmarks: [{ name: 'LiveCodeBench', avgScore: 0.91 }] }],
 };
 
 const html = renderDashboard(summary, 'prompts.json',

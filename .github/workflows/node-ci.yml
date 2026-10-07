@@ -35,6 +35,10 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      # The CLI black-box suites (auth/catalog contract) spawn dist/cli.js.
+      - name: Build
+        run: npm run build
+
       - name: Run tests
         run: npx vitest run
 
