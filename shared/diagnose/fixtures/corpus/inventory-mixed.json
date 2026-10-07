@@ -17,7 +17,7 @@
         ]
       },
       "_classification": {
-        "benchmark_similarities": { "MMLU": 0.55, "Chatbot Arena (LMSys)": 0.48, "DROP": 0.4 },
+        "benchmark_similarities": { "MMLU-Pro": 0.55, "Chatbot Arena Elo": 0.48, "LegalBench": 0.4 },
         "broad_category": "analysis",
         "subcategory": "summarization",
         "confidence": 0.83
@@ -29,7 +29,7 @@
       "line": 17,
       "prompt": "Answer the FAQ question briefly.",
       "_classification": {
-        "benchmark_similarities": { "Chatbot Arena (LMSys)": 0.66, "MT-Bench": 0.5 },
+        "benchmark_similarities": { "Chatbot Arena Elo": 0.66, "IFBench": 0.5 },
         "broad_category": "conversation",
         "subcategory": "chat",
         "confidence": 0.71
@@ -46,7 +46,7 @@
       "model": "claude-9-mega",
       "prompt": "Write the weekly report intro.",
       "_classification": {
-        "benchmark_similarities": { "MMLU": 0.5, "TruthfulQA": 0.3 },
+        "benchmark_similarities": { "MMLU-Pro": 0.5, "GPQA": 0.3 },
         "broad_category": "writing",
         "subcategory": "business-writing",
         "confidence": 0.62

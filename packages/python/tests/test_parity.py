@@ -16,25 +16,25 @@ from tryaii.benchmarks.standard import STANDARD_BENCHMARKS
 from tryaii.scoring.benchmarks import NORMALIZATION_RANGES
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-NODE_PRESET = (
-    REPO_ROOT
-    / "packages"
-    / "node"
-    / "src"
-    / "registry"
-    / "presets"
-    / "defaultModels.json"
+# The packages' built-in routing data is the starter catalog bundle
+# (docs/catalog/CONTRACT-catalog-v1.md); shared/catalog/starter is its master.
+SHARED_STARTER = REPO_ROOT / "shared" / "catalog" / "starter"
+PY_STARTER = REPO_ROOT / "packages" / "python" / "tryaii" / "catalog" / "data" / "starter"
+NODE_STARTER = REPO_ROOT / "packages" / "node" / "src" / "catalog" / "data" / "starter"
+STARTER_FILES = (
+    "manifest.json",
+    "models.json",
+    "benchmarks.json",
+    "normalization_ranges.json",
+    "centroids.json",
+    "training_queries.json",
 )
-PY_PRESET = (
-    REPO_ROOT
-    / "packages"
-    / "python"
-    / "tryaii"
-    / "registry"
-    / "presets"
-    / "default_models.json"
-)
+NODE_PRESET = NODE_STARTER / "models.json"
+PY_PRESET = PY_STARTER / "models.json"
 NODE_CLI = REPO_ROOT / "packages" / "node" / "src" / "cli.ts"
+SHARED_RANGES = SHARED_STARTER / "normalization_ranges.json"
+PY_RANGES = PY_STARTER / "normalization_ranges.json"
+NODE_RANGES = NODE_STARTER / "normalization_ranges.json"
 
 
 def _by_model_id(raw: dict | list) -> dict[str, dict]:
@@ -44,7 +44,7 @@ def _by_model_id(raw: dict | list) -> dict[str, dict]:
 
 
 def test_preset_model_data_identical_across_sdks():
-    """The Node and Python default model presets must be byte-for-byte equal data.
+    """The Node and Python starter catalogs' models must be equal data.
 
     Pricing feeds cost scoring + the budget knapsack and benchmark scores feed
     quality scoring, so any divergence routes the same prompt to different models
@@ -81,6 +81,14 @@ def test_preset_model_data_identical_across_sdks():
             diffs.append(
                 f"{model_id}.latency: node={n.get('latency')} py={p.get('latency')}"
             )
+        # tokens_per_second and ttft_ms are the two inputs to the continuous
+        # speed score; this test used to compare pricing/benchmarks/latency
+        # only, so it would not have caught a drift in either of them.
+        for field in ("tokens_per_second", "ttft_ms"):
+            if n.get(field) != p.get(field):
+                diffs.append(
+                    f"{model_id}.{field}: node={n.get(field)} py={p.get(field)}"
+                )
 
     assert not diffs, "Node/Python preset data diverged:\n" + "\n".join(diffs)
 
@@ -105,6 +113,52 @@ def test_standalone_ranges_match_standard_benchmarks():
                 f"standard=({bench.normalization.min_score}, {bench.normalization.max_score})"
             )
     assert not diffs, "NORMALIZATION_RANGES disagree with STANDARD_BENCHMARKS:\n" + "\n".join(diffs)
+
+
+def test_normalization_ranges_identical_across_sdks():
+    """Both SDKs must ship byte-identical copies of the starter range table.
+
+    The ranges used to be hand-duplicated in benchmarks.py and benchmarks.ts,
+    guarded only by a Python-to-Python test -- a silent-drift surface with no
+    cross-language guard at all. They are now generated once, built into
+    shared/catalog/starter/normalization_ranges.json and copied verbatim by
+    scripts/sync-shared.py, so an un-synced edit is a byte difference here.
+    """
+    assert SHARED_RANGES.exists(), "shared/catalog/starter/normalization_ranges.json missing"
+    master = SHARED_RANGES.read_bytes()
+
+    for label, path in (("python", PY_RANGES), ("node", NODE_RANGES)):
+        if not path.exists():
+            pytest.skip(f"{label} range copy not present (partial checkout)")
+        assert path.read_bytes() == master, (
+            f"{label} copy of normalization_ranges.json differs from shared/ -- "
+            "run python scripts/sync-shared.py"
+        )
+
+
+def test_normalization_ranges_match_packaged_json():
+    """NORMALIZATION_RANGES must be exactly what the packaged JSON says.
+
+    Guards the import-time load: a stale in-memory table (or a renamed field)
+    would silently score every model against the wrong scale.
+    """
+    data = json.loads(PY_RANGES.read_text(encoding="utf-8"))
+    entries = data["benchmarks"]
+
+    assert set(NORMALIZATION_RANGES) == set(entries), (
+        "NORMALIZATION_RANGES keys differ from the JSON: "
+        f"only in table={sorted(set(NORMALIZATION_RANGES) - set(entries))}, "
+        f"only in json={sorted(set(entries) - set(NORMALIZATION_RANGES))}"
+    )
+
+    diffs: list[str] = []
+    for name, entry in sorted(entries.items()):
+        rng = NORMALIZATION_RANGES[name]
+        actual = (rng.min_score, rng.max_score, rng.description)
+        expected = (entry["lo"], entry["hi"], entry["description"])
+        if actual != expected:
+            diffs.append(f"{name}: table={actual} json={expected}")
+    assert not diffs, "NORMALIZATION_RANGES disagree with the packaged JSON:\n" + "\n".join(diffs)
 
 
 def _node_template_literal(source: str, const_name: str) -> str:
@@ -152,6 +206,9 @@ COMMAND_HELP_CONSTANTS = {
     "benchmarks": "HELP_BENCHMARKS",
     "setup": "HELP_SETUP",
     "regenerate": "HELP_REGENERATE",
+    "login": "HELP_LOGIN",
+    "logout": "HELP_LOGOUT",
+    "whoami": "HELP_WHOAMI",
     "help": "HELP_HELP",
 }
 
@@ -414,3 +471,98 @@ def test_diagnose_packed_data_matches_shared_masters(filename):
         + ", ".join(stale)
         + " -- run scripts/sync-shared.py"
     )
+
+
+# --- Catalog bundle data parity --------------------------------------------
+#
+# The starter catalog bundle (six files) is copied into both SDKs by
+# scripts/sync-shared.py. Routing decisions are only cross-SDK identical if all
+# copies are byte-identical; the manifest pins each data file's sha256, so the
+# loaders also refuse a copy that was edited in place.
+
+NODE_TRAINING = NODE_STARTER / "training_queries.json"
+PY_TRAINING = PY_STARTER / "training_queries.json"
+NODE_CENTROIDS = NODE_STARTER / "centroids.json"
+PY_CENTROIDS = PY_STARTER / "centroids.json"
+SHARED = REPO_ROOT / "shared"
+
+
+def test_training_queries_identical_across_sdks():
+    """Different training queries would build different centroids per SDK."""
+    if not NODE_TRAINING.exists():
+        pytest.skip("Node training queries not present (python-only checkout)")
+    assert NODE_TRAINING.read_bytes() == PY_TRAINING.read_bytes()
+
+
+def test_centroids_identical_across_sdks():
+    """Different centroids classify the same prompt differently per SDK."""
+    if not NODE_CENTROIDS.exists():
+        pytest.skip("Node centroids not present (python-only checkout)")
+    assert NODE_CENTROIDS.read_bytes() == PY_CENTROIDS.read_bytes()
+
+
+@pytest.mark.parametrize("filename", STARTER_FILES)
+def test_starter_bundle_identical_across_sdks(filename):
+    node_copy = NODE_STARTER / filename
+    if not node_copy.exists():
+        pytest.skip("Node starter bundle not present (python-only checkout)")
+    assert node_copy.read_bytes() == (PY_STARTER / filename).read_bytes(), (
+        f"{filename} differs between the SDKs -- run python scripts/sync-shared.py"
+    )
+
+
+def test_trusted_catalog_keys_identical_across_sdks():
+    """Catalog contract section 6: both SDKs must trust exactly the same
+    catalog-signing keys (shared/catalog/trusted_keys.json, copied by
+    scripts/sync-shared.py)."""
+    master = SHARED / "catalog" / "trusted_keys.json"
+    py_copy = PY_STARTER.parent / "trusted_keys.json"
+    node_copy = NODE_STARTER.parent / "trusted_keys.json"
+    assert py_copy.read_bytes() == master.read_bytes(), "run python scripts/sync-shared.py"
+    if not node_copy.exists():
+        pytest.skip("Node package data not present (python-only checkout)")
+    assert node_copy.read_bytes() == master.read_bytes(), "run python scripts/sync-shared.py"
+
+
+def test_package_data_matches_shared_master():
+    """shared/ is the master copy; the bundled package files must match it.
+
+    A drift here means someone edited a package copy directly instead of
+    editing shared/ and running scripts/sync-shared.py.
+    """
+    shared_map = {SHARED_STARTER / name: PY_STARTER / name for name in STARTER_FILES}
+    if not SHARED.exists():
+        pytest.skip("shared/ not present (packaged checkout)")
+    for master, copy in shared_map.items():
+        assert master.read_bytes() == copy.read_bytes(), f"{copy} drifted from {master}"
+
+
+# The FULL catalog must never be package data again: these are the paths the
+# pre-bundle releases shipped it under, in both SDKs.
+_RETIRED_FULL_DATA = (
+    "packages/python/tryaii/registry/presets/default_models.json",
+    "packages/python/tryaii/scoring/data/normalization_ranges.json",
+    "packages/python/tryaii/centroids/data/centroids_all-MiniLM-L6-v2.json",
+    "packages/python/tryaii/centroids/data/training_queries.json",
+    "packages/node/src/registry/presets/defaultModels.json",
+    "packages/node/src/scoring/data/normalization_ranges.json",
+    "packages/node/src/centroids/data/centroids_all-MiniLM-L6-v2.json",
+    "packages/node/src/centroids/data/trainingQueries.json",
+)
+
+
+@pytest.mark.parametrize("relative", _RETIRED_FULL_DATA)
+def test_full_catalog_is_not_package_data(relative):
+    assert not (REPO_ROOT / relative).exists(), (
+        f"{relative} is back -- the full catalog must not ship in the package "
+        "(it is downloaded after login); package data is the starter bundle only"
+    )
+
+
+def test_packaged_starter_is_a_starter_bundle():
+    """The bundle shipped in the package is the small starter catalog."""
+    manifest = json.loads((PY_STARTER / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["kind"] == "starter"
+    assert manifest["counts"]["models"] <= 60
+    assert manifest["counts"]["benchmarks"] <= 16
+    assert manifest["full_counts"]["models"] > manifest["counts"]["models"]

@@ -1,8 +1,22 @@
 """
 User priority system for model selection.
 
-Priorities let users express what matters to them (quality, cost, speed)
-on a 1-5 scale. These get transformed into weights that influence scoring.
+Priorities let users express what matters to them (quality, cost, speed) on a
+1-5 scale. Under ``satisficing-v1`` (see ``scoring/engine.py``) they are used in
+two distinct ways:
+
+* **cost and speed** become the in-band ranker weights ``wc = (cost - 1) / 4``
+  and ``ws = (speed - 1) / 4`` -- exactly :attr:`Priorities.cost_weight` and
+  :attr:`Priorities.speed_weight`. A priority of 1 switches its term off
+  completely; when both are 1 there is no secondary term at all and routing is
+  strict quality.
+* **quality** is used *only* through the band width,
+  ``eps = EPS_UNIT * ((cost - 1) + (speed - 1)) / quality``. It is not a weight
+  in the score. :attr:`Priorities.quality_weight` survives for
+  backward-compatible reporting and for the all-no-signal fallback path.
+
+Values are clamped to 1..5 and rounded half-up, which the Node SDK's
+``Math.round`` depends on for parity.
 """
 
 from __future__ import annotations
@@ -47,27 +61,31 @@ class Priorities:
     def quality_weight(self) -> float:
         """Quality weight: 0.3 (priority 1) .. 1.2 (priority 5).
 
-        Quality always keeps a baseline influence so a prompt is never scored on
-        cost/speed alone -- this also guarantees the weight total is never zero
-        (no divide-by-zero in scoring even when cost and speed are both fully
-        suppressed).
+        **Not used by the satisficing ranker** -- quality enters the algorithm
+        only through the band width ``eps`` (see ``engine.quality_tolerance``).
+        Kept for backward-compatible reporting, and used by the all-no-signal
+        fallback path, where it guarantees the weight total is never zero.
         """
         return 0.3 + ((self.quality - 1) / 4) * 0.9
 
     @property
     def cost_weight(self) -> float:
-        """Cost weight: 0 (priority 1) .. 1.0 (priority 5).
+        """``wc``, the in-band cost weight: 0 (priority 1) .. 1.0 (priority 5).
 
         Fully suppressible -- a priority of 1 removes cost from the decision
-        entirely, so e.g. ``Priorities(5, 1, 1)`` is a true quality-only route
-        (previously cost/speed kept a 0.28 floor that let a cheaper model
-        out-rank a higher-quality one).
+        entirely, so e.g. ``Priorities(5, 1, 1)`` is a true quality-only route.
+        Inside the band the two weights are renormalised (``sec`` is divided by
+        ``wc + ws``), so ``sec`` means the same thing at (1,5,1), (3,3,3) and
+        (1,1,5); only their *ratio* matters there.
         """
         return ((self.cost - 1) / 4) * 1.0
 
     @property
     def speed_weight(self) -> float:
-        """Speed weight: 0 (priority 1) .. 1.0 (priority 5). Suppressible, like cost."""
+        """``ws``, the in-band speed weight: 0 (priority 1) .. 1.0 (priority 5).
+
+        Suppressible exactly like :attr:`cost_weight`.
+        """
         return ((self.speed - 1) / 4) * 1.0
 
     def to_dict(self) -> dict[str, int]:

@@ -15,6 +15,9 @@ import { fileURLToPath } from 'node:url';
 import type { ClassificationResult } from './classifiers/base.js';
 import { createDefaultConfig, type TryaiiDreConfig } from './config.js';
 import {
+  bundleFromSpec,
+  CATALOG_ENV,
+  catalogKey,
   clearState,
   idleSeconds,
   readState,
@@ -36,6 +39,12 @@ export interface ServeOptions {
   router?: RouterLike;
   log?: (message: string) => void;
   onReady?: (state: DaemonState) => void;
+  /**
+   * "starter" or a full-catalog version directory (default: the
+   * TRYAII_DAEMON_CATALOG env var the spawning client sets; empty = starter).
+   * Recorded as "<kind>:<version>" in the state file.
+   */
+  catalog?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,6 +132,7 @@ async function handle(
         runtime: state.runtime,
         version: state.version,
         embeddingModel: state.embeddingModel,
+        catalog: state.catalog,
         pid: state.pid,
         uptimeMs: Date.now() - state.startedAtMs,
       };
@@ -157,9 +167,14 @@ export async function serve(
   const idle = opts.idleTimeout ?? idleSeconds();
   const log = opts.log ?? ((m: string) => process.stdout.write(m + '\n'));
 
+  const bundle = bundleFromSpec(opts.catalog ?? process.env[CATALOG_ENV]);
+
   let router = opts.router;
   if (!router) {
-    const real = new Router({ config: { embeddingModel: cfg.embeddingModel, dataDir: cfg.dataDir } });
+    const real = new Router({
+      config: { embeddingModel: cfg.embeddingModel, dataDir: cfg.dataDir },
+      bundle,
+    });
     log(`[daemon] loading embedding model '${cfg.embeddingModel}' (one-time)...`);
     const started = Date.now();
     await real.route('warmup', { topK: 1 });
@@ -250,6 +265,7 @@ export async function serve(
         runtime: RUNTIME,
         version: version(),
         embeddingModel: cfg.embeddingModel,
+        catalog: catalogKey(bundle),
         host: addr.address,
         port: addr.port,
         token,

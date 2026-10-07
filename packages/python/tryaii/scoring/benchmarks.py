@@ -10,10 +10,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from tryaii.catalog.bundle import CatalogBundle, starter_bundle
+
 
 @dataclass
 class NormalizationRange:
     """Min/max range for normalizing a benchmark score to 0-1."""
+
     min_score: float
     max_score: float
     description: str = ""
@@ -26,58 +29,69 @@ class NormalizationRange:
         return max(0.0, min(1.0, normalized))
 
 
-# Standard benchmark normalization ranges.
-# Fit to the observed min/max of the shipped model catalog so it spreads across
-# most of 0-1. Loose ranges crush frontier models into a narrow high band where
-# quality can't differentiate them and routing collapses onto cost/speed; re-fit
-# when the catalog changes substantially. Keep in sync with STANDARD_BENCHMARKS
-# (guarded by test_parity.py::test_standalone_ranges_match_standard_benchmarks).
-NORMALIZATION_RANGES: dict[str, NormalizationRange] = {
-    "MMLU": NormalizationRange(40, 96, "Academic knowledge across 57 subjects"),
-    "HellaSwag": NormalizationRange(68, 99, "Commonsense reasoning"),
-    "HumanEval": NormalizationRange(30, 97, "Code generation"),
-    "SWE-bench": NormalizationRange(8, 86, "Real-world software engineering"),
-    "TruthfulQA": NormalizationRange(40, 86, "Truthful question answering"),
-    "ARC": NormalizationRange(70, 96, "Science exam questions"),
-    "GSM8K": NormalizationRange(65, 99, "Grade school math"),
-    "DROP": NormalizationRange(48, 91, "Reading comprehension with arithmetic"),
-    "SuperGLUE": NormalizationRange(48, 95, "Natural language understanding"),
-    "Chatbot Arena (LMSys)": NormalizationRange(1300, 1520, "Human-rated chat quality"),
-    "MT-Bench": NormalizationRange(6, 10, "Multi-turn conversation quality"),
-    "LiveBench": NormalizationRange(58, 84, "Fresh, contamination-resistant evaluation"),
-}
-
-
-# Per-benchmark importance weights ("trust" multipliers), orthogonal to
-# prompt-similarity: the weight multiplies into the similarity weight in the
-# scoring engine, so a higher weight pulls model ranking harder toward that
-# benchmark. Weight 1.0 is neutral, and an all-1.0 (or empty) table reproduces
-# the old similarity-only behaviour exactly.
+# Benchmark data -- ranges, importance weights and plausibility floors -- is
+# CATALOG data, not code: it comes from the active catalog bundle
+# (docs/catalog/CONTRACT-catalog-v1.md; ``normalization_ranges.json`` and
+# ``benchmarks.json``), so the same engine code routes the starter and the full
+# catalog. The module-level tables below are derived from the *packaged starter
+# bundle* and are kept for backwards compatibility; a Router built on another
+# bundle gets its tables through ``BenchmarkNormalizer.from_bundle`` /
+# ``BenchmarkRegistry.from_bundle`` instead.
 #
-# Left empty here: the weight *values* are a property of the shipped catalog
-# (which benchmarks are saturated/gamed vs contamination-resistant) and belong
-# with the catalog data, so the default catalog stays neutral. Keys, when set,
-# must be benchmark names present in NORMALIZATION_RANGES.
-BENCHMARK_WEIGHTS: dict[str, float] = {}
+# Ranges are generated when the catalog is built (lo = p25 of a benchmark's
+# real scores across the routable full catalog, hi = their max) and shipped
+# identically in every bundle, so a model scores the same on both catalogs for
+# every benchmark they share.
+#
+# Scales differ per benchmark and are NOT all 0-100:
+#   - Chatbot Arena variants are ELO ratings.
+#   - LiveBench and its sub-tracks are 0-1 fractions.
+#   - The rest are 0-100 accuracy percentages.
+# Out-of-range outliers simply clamp to [0, 1].
+#
+# Importance weights (``benchmarks.json`` ``weight``) are the "how much do we
+# trust this benchmark as a routing signal" axis, orthogonal to the prompt's
+# similarity to the benchmark: higher pulls model ranking harder, 1.0 is
+# neutral. Random-chance floors (``random_chance_floor``) mark scores below a
+# multiple-choice benchmark's random baseline as corrupt; they are dropped on
+# load (see ``is_implausible_benchmark_score``).
 
-# Weight used for any benchmark with no explicit entry (neutral).
+
+def ranges_from_bundle(bundle: CatalogBundle) -> dict[str, NormalizationRange]:
+    """``{benchmark: NormalizationRange}`` from a bundle's normalization_ranges.json."""
+    return {
+        name: NormalizationRange(entry["lo"], entry["hi"], entry.get("description", ""))
+        for name, entry in bundle.range_entries().items()
+    }
+
+
+_STARTER = starter_bundle()
+
+#: Normalization ranges of the packaged starter catalog.
+NORMALIZATION_RANGES: dict[str, NormalizationRange] = ranges_from_bundle(_STARTER)
+
+#: Importance weights of the packaged starter catalog's benchmarks.
+BENCHMARK_WEIGHTS: dict[str, float] = _STARTER.benchmark_weights()
+
+# Weight used for any benchmark with no explicit entry (neutral). Engine
+# semantics for custom / unknown benchmarks, not catalog data.
 DEFAULT_BENCHMARK_WEIGHT = 1.0
 
-# Plausibility floors for multiple-choice benchmarks: a real model cannot score
-# meaningfully below random chance, so a value under these floors is corrupt
-# data (e.g. a normalized sub-score of GPQA=1.3 where the real accuracy is ~90).
-# Such values are dropped on load (see ``is_implausible_benchmark_score``) so
-# they neither crater the model directly nor poison the imputation medians.
-#
-# Left empty here: floors are only needed for catalogs whose upstream sources
-# emit such corruption, so they ship with the catalog data. The mechanism is
-# always active and is a no-op while this table is empty.
-RANDOM_CHANCE_FLOORS: dict[str, float] = {}
+#: Random-chance floors of the packaged starter catalog's benchmarks.
+RANDOM_CHANCE_FLOORS: dict[str, float] = _STARTER.random_chance_floors()
 
 
-def is_implausible_benchmark_score(benchmark: str, raw_score: float) -> bool:
-    """True if a raw benchmark score is implausibly low for its scale (corrupt)."""
-    floor = RANDOM_CHANCE_FLOORS.get(benchmark)
+def is_implausible_benchmark_score(
+    benchmark: str,
+    raw_score: float,
+    floors: Optional[dict[str, float]] = None,
+) -> bool:
+    """True if a raw benchmark score is implausibly low for its scale (corrupt).
+
+    ``floors`` defaults to the starter catalog's ``RANDOM_CHANCE_FLOORS``; a
+    registry loading another bundle passes that bundle's floors.
+    """
+    floor = (RANDOM_CHANCE_FLOORS if floors is None else floors).get(benchmark)
     return floor is not None and raw_score < floor
 
 
@@ -90,9 +104,23 @@ class BenchmarkNormalizer:
     normalization ranges and weights.
     """
 
-    def __init__(self):
-        self._ranges: dict[str, NormalizationRange] = dict(NORMALIZATION_RANGES)
-        self._weights: dict[str, float] = dict(BENCHMARK_WEIGHTS)
+    def __init__(
+        self,
+        ranges: Optional[dict[str, NormalizationRange]] = None,
+        weights: Optional[dict[str, float]] = None,
+    ):
+        # Defaults: the packaged starter catalog's tables.
+        self._ranges: dict[str, NormalizationRange] = dict(
+            NORMALIZATION_RANGES if ranges is None else ranges
+        )
+        self._weights: dict[str, float] = dict(
+            BENCHMARK_WEIGHTS if weights is None else weights
+        )
+
+    @classmethod
+    def from_bundle(cls, bundle: CatalogBundle) -> BenchmarkNormalizer:
+        """A normalizer holding exactly one bundle's ranges and weights."""
+        return cls(ranges=ranges_from_bundle(bundle), weights=bundle.benchmark_weights())
 
     def normalize(self, benchmark: str, raw_score: float) -> float:
         """Normalize a raw benchmark score to 0-1."""

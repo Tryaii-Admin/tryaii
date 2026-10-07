@@ -64,20 +64,6 @@ PACKS = [
 TARGETS = [
     # (source, destinations...)
     (
-        SHARED / "models" / "default_models.json",
-        [
-            ROOT / "packages" / "python" / "tryaii" / "registry" / "presets" / "default_models.json",
-            ROOT / "packages" / "node" / "src" / "registry" / "presets" / "defaultModels.json",
-        ],
-    ),
-    (
-        SHARED / "training" / "training_queries.json",
-        [
-            ROOT / "packages" / "python" / "tryaii" / "centroids" / "data" / "training_queries.json",
-            ROOT / "packages" / "node" / "src" / "centroids" / "data" / "trainingQueries.json",
-        ],
-    ),
-    (
         SHARED / "cachelint" / "providers.json",
         [
             ROOT / "packages" / "python" / "tryaii" / "cachelint" / "data" / "providers.json",
@@ -105,12 +91,27 @@ TARGETS = [
             _NODE_DP_DATA / "questions.json",
         ],
     ),
+    # Trusted public keys for catalog signatures (catalog contract section 6).
+    # Released packages must list production keys only:
+    # scripts/check-release-keys.py.
+    (
+        SHARED / "catalog" / "trusted_keys.json",
+        [
+            ROOT / "packages" / "python" / "tryaii" / "catalog" / "data" / "trusted_keys.json",
+            ROOT / "packages" / "node" / "src" / "catalog" / "data" / "trusted_keys.json",
+        ],
+    ),
 ]
 
-# Centroids: copy all files in shared/centroids/ to both packages
-CENTROID_DESTS = [
-    ROOT / "packages" / "python" / "tryaii" / "centroids" / "data",
-    ROOT / "packages" / "node" / "src" / "centroids" / "data",
+# The starter catalog bundle (docs/catalog/CONTRACT-catalog-v1.md) is the
+# packages' built-in routing data: all six files of shared/catalog/starter/ are
+# copied byte-for-byte (their sha256 is pinned in the bundle manifest). The FULL
+# catalog is never copied into a package: it is built and signed separately and
+# downloaded by logged-in users.
+STARTER_BUNDLE = SHARED / "catalog" / "starter"
+STARTER_DESTS = [
+    ROOT / "packages" / "python" / "tryaii" / "catalog" / "data" / "starter",
+    ROOT / "packages" / "node" / "src" / "catalog" / "data" / "starter",
 ]
 
 
@@ -144,16 +145,17 @@ def sync():
             print(f"  {names} (packed) -> {dest.relative_to(ROOT)}")
             copied += 1
 
-    # Centroids (all files)
-    centroids_dir = SHARED / "centroids"
-    if centroids_dir.exists():
-        for centroid_file in centroids_dir.glob("*.json"):
-            for dest_dir in CENTROID_DESTS:
+    # Starter catalog bundle (all six files, byte-for-byte)
+    if STARTER_BUNDLE.exists():
+        for bundle_file in sorted(STARTER_BUNDLE.glob("*.json")):
+            for dest_dir in STARTER_DESTS:
                 dest_dir.mkdir(parents=True, exist_ok=True)
-                dest = dest_dir / centroid_file.name
-                shutil.copy2(centroid_file, dest)
-                print(f"  {centroid_file.name} -> {dest.relative_to(ROOT)}")
+                dest = dest_dir / bundle_file.name
+                shutil.copyfile(bundle_file, dest)
+                print(f"  catalog/starter/{bundle_file.name} -> {dest.relative_to(ROOT)}")
                 copied += 1
+    else:
+        print(f"  SKIP {STARTER_BUNDLE} (not found)")
 
     print(f"\nSynced {copied} files.")
 

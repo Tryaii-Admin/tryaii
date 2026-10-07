@@ -8,16 +8,16 @@
       "input": {
         "classification": {
           "benchmark_similarities": {
-            "HumanEval": 0.78,
-            "SWE-bench": 0.62,
-            "LiveBench": 0.41,
-            "MMLU": 0.3
+            "LiveCodeBench": 0.78,
+            "SciCode": 0.62,
+            "Terminal-bench-Hard": 0.41,
+            "MMLU-Pro": 0.3
           },
           "broad_category": "coding",
           "subcategory": "code-generation",
           "confidence": 0.87
         },
-        "resolved_model_id": "claude-fable-5",
+        "resolved_model_id": "anthropic/claude-fable-5",
         "declared_model": "claude-fable-5",
         "priorities": {
           "quality": 5,
@@ -28,93 +28,89 @@
       "expected": {
         "status": "ok",
         "reason": null,
-        "summary": "claude-fable-5 is a strong fit (rank 2 of 39)",
+        "summary": "anthropic/claude-fable-5 is a strong fit (rank 3 of 45)",
         "classification": {
           "broad_category": "coding",
           "subcategory": "code-generation",
           "confidence": 0.87
         },
-        "current_rank": 2,
-        "catalog_size": 39,
+        "current_rank": 3,
+        "catalog_size": 45,
         "current": {
-          "model_id": "claude-fable-5",
-          "quality_score": 0.9407,
-          "cost_score": 0.7,
-          "speed_score": 0.6
+          "model_id": "anthropic/claude-fable-5",
+          "quality_score": 0.9323,
+          "cost_score": 0.0739,
+          "speed_score": 0.2319
         },
         "recommended": {
-          "model_id": "gpt-5.5",
-          "quality_score": 0.9447,
-          "cost_score": 0.825,
-          "speed_score": 0.6,
+          "model_id": "anthropic/claude-fable-5.1",
+          "quality_score": 0.9551,
+          "cost_score": 0.0739,
+          "speed_score": 0.2547,
           "top_benchmarks": [
             [
-              "HumanEval",
-              0.9925
+              "LiveCodeBench",
+              1
             ],
             [
-              "SWE-bench",
-              0.9487
+              "SciCode",
+              0.8908
             ],
             [
-              "LiveBench",
-              0.8462
-            ],
-            [
-              "MMLU",
-              0.9464
+              "MMLU-Pro",
+              1
             ]
           ],
-          "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (95%)] | Cost efficiency: 0.83 | Speed: 0.60 (medium)"
+          "reasoning": "q'=0.96 (3 real of 4) | imputed: 1/4 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
         },
         "recommended_same_price": {
-          "model_id": "claude-fable-5",
-          "rank": 2,
-          "quality_score": 0.9407,
-          "cost_score": 0.7,
-          "speed_score": 0.6,
-          "is_current": true
+          "model_id": "anthropic/claude-fable-5.1",
+          "rank": 1,
+          "quality_score": 0.9551,
+          "cost_score": 0.0739,
+          "speed_score": 0.2547,
+          "is_current": false
         },
         "top": [
           {
             "rank": 1,
-            "model_id": "gpt-5.5",
-            "quality_score": 0.9447,
-            "cost_score": 0.825,
-            "speed_score": 0.6,
-            "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (95%)] | Cost efficiency: 0.83 | Speed: 0.60 (medium)"
+            "model_id": "anthropic/claude-fable-5.1",
+            "quality_score": 0.9551,
+            "cost_score": 0.0739,
+            "speed_score": 0.2547,
+            "reasoning": "q'=0.96 (3 real of 4) | imputed: 1/4 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 2,
-            "model_id": "claude-fable-5",
-            "quality_score": 0.9407,
-            "cost_score": 0.7,
-            "speed_score": 0.6,
-            "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (97%)] | Cost efficiency: 0.70 | Speed: 0.60 (medium)"
+            "model_id": "anthropic/claude-opus-5.5",
+            "quality_score": 0.9432,
+            "cost_score": 0.2066,
+            "speed_score": 0.4154,
+            "reasoning": "q'=0.94 (1 real of 4) | imputed: 3/4 | cost 0.2066 ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 3,
-            "model_id": "gpt-5.4",
-            "quality_score": 0.9275,
-            "cost_score": 0.9125,
-            "speed_score": 0.6,
-            "reasoning": "Quality: 0.93 on [HumanEval (99%), SWE-bench (93%)] | Cost efficiency: 0.91 | Speed: 0.60 (medium)"
+            "model_id": "anthropic/claude-fable-5",
+            "quality_score": 0.9323,
+            "cost_score": 0.0739,
+            "speed_score": 0.2319,
+            "reasoning": "q'=0.93 (4 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2319 (10.31 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 4,
-            "model_id": "claude-opus-4-8",
-            "quality_score": 0.9227,
-            "cost_score": 0.85,
-            "speed_score": 0.6,
-            "reasoning": "Quality: 0.92 on [HumanEval (97%), SWE-bench (96%)] | Cost efficiency: 0.85 | Speed: 0.60 (medium)"
+            "model_id": "google/gemini-3.1-pro-preview",
+            "quality_score": 0.8737,
+            "cost_score": 0.2846,
+            "speed_score": 0.3643,
+            "reasoning": "q'=0.87 (4 real of 4) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 5,
-            "model_id": "gpt-5.2",
-            "quality_score": 0.9095,
-            "cost_score": 0.9213,
-            "speed_score": 0.6,
-            "reasoning": "Quality: 0.91 on [HumanEval (97%), SWE-bench (92%)] | Cost efficiency: 0.92 | Speed: 0.60 (medium)"
+            "model_id": "google/gemini-3.8-flash",
+            "quality_score": 0.8679,
+            "cost_score": 0.4489,
+            "speed_score": 0.5353,
+            "reasoning": "q'=0.87 (3 real of 4) | imputed: 1/4 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
           }
         ]
       }
@@ -125,17 +121,17 @@
       "input": {
         "classification": {
           "benchmark_similarities": {
-            "HumanEval": 0.78,
-            "SWE-bench": 0.62,
-            "LiveBench": 0.41,
-            "MMLU": 0.3
+            "LiveCodeBench": 0.78,
+            "SciCode": 0.62,
+            "Terminal-bench-Hard": 0.41,
+            "MMLU-Pro": 0.3
           },
           "broad_category": "coding",
           "subcategory": "code-generation",
           "confidence": 0.87
         },
-        "resolved_model_id": "claude-opus-4-5-20251101",
-        "declared_model": "claude-opus-4-5-20251101",
+        "resolved_model_id": "anthropic/claude-opus-4.8",
+        "declared_model": "claude-opus-4-8",
         "priorities": {
           "quality": 5,
           "cost": 1,
@@ -145,93 +141,89 @@
       "expected": {
         "status": "finding",
         "reason": null,
-        "summary": "consider gpt-5.5 (current claude-opus-4-5-20251101 ranks 7 of 39)",
+        "summary": "consider anthropic/claude-fable-5.1 (current anthropic/claude-opus-4.8 ranks 6 of 45)",
         "classification": {
           "broad_category": "coding",
           "subcategory": "code-generation",
           "confidence": 0.87
         },
-        "current_rank": 7,
-        "catalog_size": 39,
+        "current_rank": 6,
+        "catalog_size": 45,
         "current": {
-          "model_id": "claude-opus-4-5-20251101",
-          "quality_score": 0.8912,
-          "cost_score": 0,
-          "speed_score": 0.3
+          "model_id": "anthropic/claude-opus-4.8",
+          "quality_score": 0.8366,
+          "cost_score": 0.1743,
+          "speed_score": 0.431
         },
         "recommended": {
-          "model_id": "gpt-5.5",
-          "quality_score": 0.9447,
-          "cost_score": 0.825,
-          "speed_score": 0.6,
+          "model_id": "anthropic/claude-fable-5.1",
+          "quality_score": 0.9551,
+          "cost_score": 0.0739,
+          "speed_score": 0.2547,
           "top_benchmarks": [
             [
-              "HumanEval",
-              0.9925
+              "LiveCodeBench",
+              1
             ],
             [
-              "SWE-bench",
-              0.9487
+              "SciCode",
+              0.8908
             ],
             [
-              "LiveBench",
-              0.8462
-            ],
-            [
-              "MMLU",
-              0.9464
+              "MMLU-Pro",
+              1
             ]
           ],
-          "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (95%)] | Cost efficiency: 0.83 | Speed: 0.60 (medium)"
+          "reasoning": "q'=0.96 (3 real of 4) | imputed: 1/4 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
         },
         "recommended_same_price": {
-          "model_id": "claude-opus-4-5-20251101",
-          "rank": 7,
-          "quality_score": 0.8912,
-          "cost_score": 0,
-          "speed_score": 0.3,
+          "model_id": "anthropic/claude-opus-4.8",
+          "rank": 6,
+          "quality_score": 0.8366,
+          "cost_score": 0.1743,
+          "speed_score": 0.431,
           "is_current": true
         },
         "top": [
           {
             "rank": 1,
-            "model_id": "gpt-5.5",
-            "quality_score": 0.9447,
-            "cost_score": 0.825,
-            "speed_score": 0.6,
-            "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (95%)] | Cost efficiency: 0.83 | Speed: 0.60 (medium)"
+            "model_id": "anthropic/claude-fable-5.1",
+            "quality_score": 0.9551,
+            "cost_score": 0.0739,
+            "speed_score": 0.2547,
+            "reasoning": "q'=0.96 (3 real of 4) | imputed: 1/4 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 2,
-            "model_id": "claude-fable-5",
-            "quality_score": 0.9407,
-            "cost_score": 0.7,
-            "speed_score": 0.6,
-            "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (97%)] | Cost efficiency: 0.70 | Speed: 0.60 (medium)"
+            "model_id": "anthropic/claude-opus-5.5",
+            "quality_score": 0.9432,
+            "cost_score": 0.2066,
+            "speed_score": 0.4154,
+            "reasoning": "q'=0.94 (1 real of 4) | imputed: 3/4 | cost 0.2066 ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 3,
-            "model_id": "gpt-5.4",
-            "quality_score": 0.9275,
-            "cost_score": 0.9125,
-            "speed_score": 0.6,
-            "reasoning": "Quality: 0.93 on [HumanEval (99%), SWE-bench (93%)] | Cost efficiency: 0.91 | Speed: 0.60 (medium)"
+            "model_id": "anthropic/claude-fable-5",
+            "quality_score": 0.9323,
+            "cost_score": 0.0739,
+            "speed_score": 0.2319,
+            "reasoning": "q'=0.93 (4 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2319 (10.31 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 4,
-            "model_id": "claude-opus-4-8",
-            "quality_score": 0.9227,
-            "cost_score": 0.85,
-            "speed_score": 0.6,
-            "reasoning": "Quality: 0.92 on [HumanEval (97%), SWE-bench (96%)] | Cost efficiency: 0.85 | Speed: 0.60 (medium)"
+            "model_id": "google/gemini-3.1-pro-preview",
+            "quality_score": 0.8737,
+            "cost_score": 0.2846,
+            "speed_score": 0.3643,
+            "reasoning": "q'=0.87 (4 real of 4) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 5,
-            "model_id": "gpt-5.2",
-            "quality_score": 0.9095,
-            "cost_score": 0.9213,
-            "speed_score": 0.6,
-            "reasoning": "Quality: 0.91 on [HumanEval (97%), SWE-bench (92%)] | Cost efficiency: 0.92 | Speed: 0.60 (medium)"
+            "model_id": "google/gemini-3.8-flash",
+            "quality_score": 0.8679,
+            "cost_score": 0.4489,
+            "speed_score": 0.5353,
+            "reasoning": "q'=0.87 (3 real of 4) | imputed: 1/4 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
           }
         ]
       }
@@ -242,16 +234,16 @@
       "input": {
         "classification": {
           "benchmark_similarities": {
-            "HumanEval": 0.78,
-            "SWE-bench": 0.62,
-            "LiveBench": 0.41,
-            "MMLU": 0.3
+            "LiveCodeBench": 0.78,
+            "SciCode": 0.62,
+            "Terminal-bench-Hard": 0.41,
+            "MMLU-Pro": 0.3
           },
           "broad_category": "coding",
           "subcategory": "code-generation",
           "confidence": 0.87
         },
-        "resolved_model_id": "gpt-4o",
+        "resolved_model_id": "openai/gpt-4o",
         "declared_model": "gpt-4o",
         "priorities": {
           "quality": 5,
@@ -262,93 +254,190 @@
       "expected": {
         "status": "finding",
         "reason": null,
-        "summary": "gpt-4o is a poor fit for this prompt (rank 27 of 39) — best: gpt-5.5",
+        "summary": "openai/gpt-4o is a poor fit for this prompt (rank 43 of 45) — best: anthropic/claude-fable-5.1",
         "classification": {
           "broad_category": "coding",
           "subcategory": "code-generation",
           "confidence": 0.87
         },
-        "current_rank": 27,
-        "catalog_size": 39,
+        "current_rank": 43,
+        "catalog_size": 45,
         "current": {
-          "model_id": "gpt-4o",
-          "quality_score": 0.6807,
-          "cost_score": 0.9375,
-          "speed_score": 0.6
+          "model_id": "openai/gpt-4o",
+          "quality_score": 0.0162,
+          "cost_score": 0.301,
+          "speed_score": 0.3502
         },
         "recommended": {
-          "model_id": "gpt-5.5",
-          "quality_score": 0.9447,
-          "cost_score": 0.825,
-          "speed_score": 0.6,
+          "model_id": "anthropic/claude-fable-5.1",
+          "quality_score": 0.9551,
+          "cost_score": 0.0739,
+          "speed_score": 0.2547,
           "top_benchmarks": [
             [
-              "HumanEval",
-              0.9925
+              "LiveCodeBench",
+              1
             ],
             [
-              "SWE-bench",
-              0.9487
+              "SciCode",
+              0.8908
             ],
             [
-              "LiveBench",
-              0.8462
-            ],
-            [
-              "MMLU",
-              0.9464
+              "MMLU-Pro",
+              1
             ]
           ],
-          "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (95%)] | Cost efficiency: 0.83 | Speed: 0.60 (medium)"
+          "reasoning": "q'=0.96 (3 real of 4) | imputed: 1/4 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
         },
         "recommended_same_price": {
-          "model_id": "gpt-5",
-          "rank": 8,
-          "quality_score": 0.8825,
-          "cost_score": 0.9437,
-          "speed_score": 0.6,
+          "model_id": "google/gemini-3.1-pro-preview",
+          "rank": 4,
+          "quality_score": 0.8737,
+          "cost_score": 0.2846,
+          "speed_score": 0.3643,
           "is_current": false
         },
         "top": [
           {
             "rank": 1,
-            "model_id": "gpt-5.5",
-            "quality_score": 0.9447,
-            "cost_score": 0.825,
-            "speed_score": 0.6,
-            "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (95%)] | Cost efficiency: 0.83 | Speed: 0.60 (medium)"
+            "model_id": "anthropic/claude-fable-5.1",
+            "quality_score": 0.9551,
+            "cost_score": 0.0739,
+            "speed_score": 0.2547,
+            "reasoning": "q'=0.96 (3 real of 4) | imputed: 1/4 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 2,
-            "model_id": "claude-fable-5",
-            "quality_score": 0.9407,
-            "cost_score": 0.7,
-            "speed_score": 0.6,
-            "reasoning": "Quality: 0.94 on [HumanEval (99%), SWE-bench (97%)] | Cost efficiency: 0.70 | Speed: 0.60 (medium)"
+            "model_id": "anthropic/claude-opus-5.5",
+            "quality_score": 0.9432,
+            "cost_score": 0.2066,
+            "speed_score": 0.4154,
+            "reasoning": "q'=0.94 (1 real of 4) | imputed: 3/4 | cost 0.2066 ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 3,
-            "model_id": "gpt-5.4",
-            "quality_score": 0.9275,
-            "cost_score": 0.9125,
-            "speed_score": 0.6,
-            "reasoning": "Quality: 0.93 on [HumanEval (99%), SWE-bench (93%)] | Cost efficiency: 0.91 | Speed: 0.60 (medium)"
+            "model_id": "anthropic/claude-fable-5",
+            "quality_score": 0.9323,
+            "cost_score": 0.0739,
+            "speed_score": 0.2319,
+            "reasoning": "q'=0.93 (4 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2319 (10.31 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 4,
-            "model_id": "claude-opus-4-8",
-            "quality_score": 0.9227,
-            "cost_score": 0.85,
-            "speed_score": 0.6,
-            "reasoning": "Quality: 0.92 on [HumanEval (97%), SWE-bench (96%)] | Cost efficiency: 0.85 | Speed: 0.60 (medium)"
+            "model_id": "google/gemini-3.1-pro-preview",
+            "quality_score": 0.8737,
+            "cost_score": 0.2846,
+            "speed_score": 0.3643,
+            "reasoning": "q'=0.87 (4 real of 4) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 5,
-            "model_id": "gpt-5.2",
-            "quality_score": 0.9095,
-            "cost_score": 0.9213,
-            "speed_score": 0.6,
-            "reasoning": "Quality: 0.91 on [HumanEval (97%), SWE-bench (92%)] | Cost efficiency: 0.92 | Speed: 0.60 (medium)"
+            "model_id": "google/gemini-3.8-flash",
+            "quality_score": 0.8679,
+            "cost_score": 0.4489,
+            "speed_score": 0.5353,
+            "reasoning": "q'=0.87 (3 real of 4) | imputed: 1/4 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
+          }
+        ]
+      }
+    },
+    {
+      "name": "resolved-unranked",
+      "description": "SPEC §2.2: a resolved id that is absent from the ranking (here: not in this catalog, so the engine never scored it) -> insufficient_data with the no-benchmark-signal reason; the recommendation payload is still full.",
+      "input": {
+        "classification": {
+          "benchmark_similarities": {
+            "LiveCodeBench": 0.78,
+            "SciCode": 0.62,
+            "Terminal-bench-Hard": 0.41,
+            "MMLU-Pro": 0.3
+          },
+          "broad_category": "coding",
+          "subcategory": "code-generation",
+          "confidence": 0.87
+        },
+        "resolved_model_id": "anthropic/claude-3-haiku",
+        "declared_model": "claude-3-haiku-20240307",
+        "priorities": {
+          "quality": 5,
+          "cost": 1,
+          "speed": 1
+        }
+      },
+      "expected": {
+        "status": "insufficient_data",
+        "reason": "model 'anthropic/claude-3-haiku' has no benchmark signal for this prompt",
+        "summary": "recommended: anthropic/claude-fable-5.1 (no current model to compare)",
+        "classification": {
+          "broad_category": "coding",
+          "subcategory": "code-generation",
+          "confidence": 0.87
+        },
+        "current_rank": null,
+        "catalog_size": 45,
+        "current": null,
+        "recommended": {
+          "model_id": "anthropic/claude-fable-5.1",
+          "quality_score": 0.9551,
+          "cost_score": 0.0739,
+          "speed_score": 0.2547,
+          "top_benchmarks": [
+            [
+              "LiveCodeBench",
+              1
+            ],
+            [
+              "SciCode",
+              0.8908
+            ],
+            [
+              "MMLU-Pro",
+              1
+            ]
+          ],
+          "reasoning": "q'=0.96 (3 real of 4) | imputed: 1/4 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+        },
+        "recommended_same_price": null,
+        "top": [
+          {
+            "rank": 1,
+            "model_id": "anthropic/claude-fable-5.1",
+            "quality_score": 0.9551,
+            "cost_score": 0.0739,
+            "speed_score": 0.2547,
+            "reasoning": "q'=0.96 (3 real of 4) | imputed: 1/4 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+          },
+          {
+            "rank": 2,
+            "model_id": "anthropic/claude-opus-5.5",
+            "quality_score": 0.9432,
+            "cost_score": 0.2066,
+            "speed_score": 0.4154,
+            "reasoning": "q'=0.94 (1 real of 4) | imputed: 3/4 | cost 0.2066 ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
+          },
+          {
+            "rank": 3,
+            "model_id": "anthropic/claude-fable-5",
+            "quality_score": 0.9323,
+            "cost_score": 0.0739,
+            "speed_score": 0.2319,
+            "reasoning": "q'=0.93 (4 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2319 (10.31 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+          },
+          {
+            "rank": 4,
+            "model_id": "google/gemini-3.1-pro-preview",
+            "quality_score": 0.8737,
+            "cost_score": 0.2846,
+            "speed_score": 0.3643,
+            "reasoning": "q'=0.87 (4 real of 4) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+          },
+          {
+            "rank": 5,
+            "model_id": "google/gemini-3.8-flash",
+            "quality_score": 0.8679,
+            "cost_score": 0.4489,
+            "speed_score": 0.5353,
+            "reasoning": "q'=0.87 (3 real of 4) | imputed: 1/4 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
           }
         ]
       }
@@ -359,10 +448,10 @@
       "input": {
         "classification": {
           "benchmark_similarities": {
-            "HumanEval": 0.78,
-            "SWE-bench": 0.62,
-            "LiveBench": 0.41,
-            "MMLU": 0.3
+            "LiveCodeBench": 0.78,
+            "SciCode": 0.62,
+            "Terminal-bench-Hard": 0.41,
+            "MMLU-Pro": 0.3
           },
           "broad_category": "coding",
           "subcategory": "code-generation",
@@ -379,81 +468,77 @@
       "expected": {
         "status": "insufficient_data",
         "reason": "unknown model 'claude-9-mega'",
-        "summary": "recommended: claude-haiku-4-5-20251001 (no current model to compare)",
+        "summary": "recommended: google/gemini-3.8-flash (no current model to compare)",
         "classification": {
           "broad_category": "coding",
           "subcategory": "code-generation",
           "confidence": 0.87
         },
         "current_rank": null,
-        "catalog_size": 39,
+        "catalog_size": 45,
         "current": null,
         "recommended": {
-          "model_id": "claude-haiku-4-5-20251001",
-          "quality_score": 0.7321,
-          "cost_score": 0.97,
-          "speed_score": 1,
+          "model_id": "google/gemini-3.8-flash",
+          "quality_score": 0.8679,
+          "cost_score": 0.4489,
+          "speed_score": 0.5353,
           "top_benchmarks": [
             [
-              "HumanEval",
-              0.8701
+              "LiveCodeBench",
+              0.9794
             ],
             [
-              "SWE-bench",
-              0.8372
+              "SciCode",
+              0.704
             ],
             [
-              "LiveBench",
-              0.5146
-            ],
-            [
-              "MMLU",
-              0.4536
+              "MMLU-Pro",
+              0.8834
             ]
           ],
-          "reasoning": "Quality: 0.73 on [HumanEval (87%), SWE-bench (84%)] | Cost efficiency: 0.97 | Speed: 1.00 (very fast)"
+          "reasoning": "q'=0.87 (3 real of 4) | imputed: 1/4 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.09 vs anthropic/claude-fable-5.1"
         },
         "recommended_same_price": null,
         "top": [
           {
             "rank": 1,
-            "model_id": "claude-haiku-4-5-20251001",
-            "quality_score": 0.7321,
-            "cost_score": 0.97,
-            "speed_score": 1,
-            "reasoning": "Quality: 0.73 on [HumanEval (87%), SWE-bench (84%)] | Cost efficiency: 0.97 | Speed: 1.00 (very fast)"
+            "model_id": "google/gemini-3.8-flash",
+            "quality_score": 0.8679,
+            "cost_score": 0.4489,
+            "speed_score": 0.5353,
+            "reasoning": "q'=0.87 (3 real of 4) | imputed: 1/4 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.09 vs anthropic/claude-fable-5.1"
           },
           {
             "rank": 2,
-            "model_id": "gemini-3-flash-preview",
-            "quality_score": 0.8115,
-            "cost_score": 0.996,
-            "speed_score": 0.8,
-            "reasoning": "Quality: 0.81 on [HumanEval (87%), SWE-bench (90%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+            "model_id": "google/gemini-3-flash-preview",
+            "quality_score": 0.8303,
+            "cost_score": 0.4853,
+            "speed_score": 0.3702,
+            "reasoning": "q'=0.83 (2 real of 4) | imputed: 2/4 | cost 0.4853 ($1.75/M) | speed 0.3702 (5.45 s to 300 tok) | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.09 vs anthropic/claude-fable-5.1"
           },
           {
             "rank": 3,
-            "model_id": "gpt-5.4-nano",
-            "quality_score": 0.6752,
-            "cost_score": 0.9928,
-            "speed_score": 1,
-            "reasoning": "Quality: 0.68 on [HumanEval (81%), SWE-bench (67%)] | Cost efficiency: 0.99 | Speed: 1.00 (very fast)"
+            "model_id": "openai/gpt-5.5",
+            "quality_score": 0.8241,
+            "cost_score": 0.152,
+            "speed_score": 0.5105,
+            "reasoning": "q'=0.82 (4 real of 4) | cost 0.1520 ($17.50/M) | speed 0.5105 (2.86 s to 300 tok) | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.09 vs anthropic/claude-fable-5.1"
           },
           {
             "rank": 4,
-            "model_id": "gpt-5-mini",
-            "quality_score": 0.8025,
-            "cost_score": 0.9888,
-            "speed_score": 0.8,
-            "reasoning": "Quality: 0.80 on [HumanEval (87%), SWE-bench (81%)] | imputed: 1/4 | Cost efficiency: 0.99 | Speed: 0.80 (fast)"
+            "model_id": "google/gemini-3.1-pro-preview",
+            "quality_score": 0.8737,
+            "cost_score": 0.2846,
+            "speed_score": 0.3643,
+            "reasoning": "q'=0.87 (4 real of 4) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.09 vs anthropic/claude-fable-5.1"
           },
           {
             "rank": 5,
-            "model_id": "gpt-5-nano",
-            "quality_score": 0.6611,
-            "cost_score": 0.9978,
-            "speed_score": 1,
-            "reasoning": "Quality: 0.66 on [HumanEval (75%), SWE-bench (60%)] | imputed: 1/4 | Cost efficiency: 1.00 | Speed: 1.00 (very fast)"
+            "model_id": "anthropic/claude-opus-5.5",
+            "quality_score": 0.9432,
+            "cost_score": 0.2066,
+            "speed_score": 0.4154,
+            "reasoning": "q'=0.94 (1 real of 4) | imputed: 3/4 | cost 0.2066 ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.09 vs anthropic/claude-fable-5.1"
           }
         ]
       }
@@ -464,9 +549,9 @@
       "input": {
         "classification": {
           "benchmark_similarities": {
-            "Chatbot Arena (LMSys)": 0.7,
-            "MT-Bench": 0.65,
-            "MMLU": 0.4
+            "Chatbot Arena Elo": 0.7,
+            "IFBench": 0.65,
+            "MMLU-Pro": 0.4
           },
           "broad_category": "conversation",
           "subcategory": "chat",
@@ -476,77 +561,73 @@
       "expected": {
         "status": "insufficient_data",
         "reason": "no model declared",
-        "summary": "recommended: gemini-3-flash-preview (no current model to compare)",
+        "summary": "recommended: google/gemini-3.8-flash (no current model to compare)",
         "classification": {
           "broad_category": "conversation",
           "subcategory": "chat",
           "confidence": 0.74
         },
         "current_rank": null,
-        "catalog_size": 39,
+        "catalog_size": 45,
         "current": null,
         "recommended": {
-          "model_id": "gemini-3-flash-preview",
-          "quality_score": 0.7951,
-          "cost_score": 0.996,
-          "speed_score": 0.8,
+          "model_id": "google/gemini-3.8-flash",
+          "quality_score": 0.9191,
+          "cost_score": 0.4489,
+          "speed_score": 0.5353,
           "top_benchmarks": [
             [
-              "Chatbot Arena (LMSys)",
-              0.75
+              "Chatbot Arena Elo",
+              0.954
             ],
             [
-              "MT-Bench",
-              0.8
-            ],
-            [
-              "MMLU",
-              0.8661
+              "MMLU-Pro",
+              0.8834
             ]
           ],
-          "reasoning": "Quality: 0.80 on [Chatbot Arena (LMSys) (75%), MT-Bench (80%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+          "reasoning": "q'=0.92 (2 real of 3) | imputed: 1/3 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5"
         },
         "recommended_same_price": null,
         "top": [
           {
             "rank": 1,
-            "model_id": "gemini-3-flash-preview",
-            "quality_score": 0.7951,
-            "cost_score": 0.996,
-            "speed_score": 0.8,
-            "reasoning": "Quality: 0.80 on [Chatbot Arena (LMSys) (75%), MT-Bench (80%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+            "model_id": "google/gemini-3.8-flash",
+            "quality_score": 0.9191,
+            "cost_score": 0.4489,
+            "speed_score": 0.5353,
+            "reasoning": "q'=0.92 (2 real of 3) | imputed: 1/3 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5"
           },
           {
             "rank": 2,
-            "model_id": "gemini-3.5-flash",
-            "quality_score": 0.8155,
-            "cost_score": 0.9475,
-            "speed_score": 0.8,
-            "reasoning": "Quality: 0.82 on [Chatbot Arena (LMSys) (77%), MT-Bench (83%)] | Cost efficiency: 0.95 | Speed: 0.80 (fast)"
+            "model_id": "google/gemini-3.5-flash",
+            "quality_score": 0.8502,
+            "cost_score": 0.3263,
+            "speed_score": 0.4802,
+            "reasoning": "q'=0.85 (3 real of 3) | cost 0.3263 ($5.25/M) | speed 0.4802 (3.29 s to 300 tok) | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5"
           },
           {
             "rank": 3,
-            "model_id": "grok-4-1-fast-reasoning-latest",
-            "quality_score": 0.7816,
-            "cost_score": 0.9965,
-            "speed_score": 0.8,
-            "reasoning": "Quality: 0.78 on [Chatbot Arena (LMSys) (70%), MT-Bench (75%)] | Cost efficiency: 1.00 | Speed: 0.80 (fast)"
+            "model_id": "google/gemini-3.1-pro-preview",
+            "quality_score": 0.8769,
+            "cost_score": 0.2846,
+            "speed_score": 0.3643,
+            "reasoning": "q'=0.88 (3 real of 3) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5"
           },
           {
             "rank": 4,
-            "model_id": "gpt-5.4",
-            "quality_score": 0.9263,
-            "cost_score": 0.9125,
-            "speed_score": 0.6,
-            "reasoning": "Quality: 0.93 on [Chatbot Arena (LMSys) (89%), MT-Bench (96%)] | Cost efficiency: 0.91 | Speed: 0.60 (medium)"
+            "model_id": "anthropic/claude-opus-5.5",
+            "quality_score": 0.9557,
+            "cost_score": 0.2066,
+            "speed_score": 0.4154,
+            "reasoning": "q'=0.96 (1 real of 3) | imputed: 2/3 | cost 0.2066 ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5"
           },
           {
             "rank": 5,
-            "model_id": "grok-4.3",
-            "quality_score": 0.8775,
-            "cost_score": 0.9812,
-            "speed_score": 0.6,
-            "reasoning": "Quality: 0.88 on [Chatbot Arena (LMSys) (86%), MT-Bench (85%)] | Cost efficiency: 0.98 | Speed: 0.60 (medium)"
+            "model_id": "anthropic/claude-fable-5.1",
+            "quality_score": 0.9443,
+            "cost_score": 0.0739,
+            "speed_score": 0.2547,
+            "reasoning": "q'=0.94 (2 real of 3) | imputed: 1/3 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5"
           }
         ]
       }

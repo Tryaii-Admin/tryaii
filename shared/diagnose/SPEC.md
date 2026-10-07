@@ -87,10 +87,34 @@ Resolution of a site's `model` string against the routing registry
    step 3 on both sides) → the mapped registry id.
 3. **normalized**: `norm(model) == norm(registry_id)` for exactly one
    registry id, where `norm` = trim, lowercase, collapse `[ ._/]+` runs to
-   `-` (the cachelint `norm_model` rule). If the model contains `/`, the
-   text after the LAST `/` is also tried under the same rule. Ambiguous
-   (2+ registry hits) resolves to nothing.
-4. otherwise unresolved → `resolved_model_id: null`.
+   `-` (the cachelint `norm_model` rule). If that finds nothing, the text
+   after the LAST `/` of the model (or the whole model when it has no `/`)
+   is compared under the same rule with the text after the LAST `/` of
+   each registry id, so a bare `gpt-4o` resolves to the provider-prefixed
+   `openai/gpt-4o`. Ambiguous (2+ registry hits) resolves to nothing.
+4. **alias** (fallback for provider-native API ids, consulted ONLY when
+   steps 1–3 found nothing and step 3 was not ambiguous). Let `tail` be the
+   text after the LAST `/` of the model (the whole model when it has no
+   `/`), trimmed:
+   a. the first `MODEL_ID_TO_OPENROUTER` entry (in table order) whose KEY
+      satisfies `norm(key) == norm(tail)` AND whose slug is itself a registry
+      id (`get_model(slug)`) → that slug. (`claude-sonnet-4-5-20250929` →
+      `anthropic/claude-sonnet-4.5`, `grok-4-latest` → `x-ai/grok-4`,
+      `mistral-medium-2508` → `mistralai/mistral-medium-3.1`.) A slug that is
+      not in the active catalog is skipped, never substituted.
+   b. else remove ONE trailing version suffix from `lowercase(tail)` — the
+      regex `(?:[-@]20[0-9]{6}|-latest)$`, i.e. a compact `-YYYYMMDD` /
+      Vertex-style `@YYYYMMDD` date or `-latest` — and, if something was
+      removed and the rest is non-empty, compare `norm(rest)` with the text
+      after the LAST `/` of each registry id under `norm` (step 3's tail
+      rule). Exactly one hit → that id; 0 or 2+ → nothing. Dash-vs-dot
+      versions (`4-5` vs `4.5`) need no special case: `norm` maps both to
+      `4-5`. Other date shapes (OpenAI's `-2024-08-06`) are NOT stripped.
+5. otherwise unresolved → `resolved_model_id: null`.
+
+The resolver also reports the step that matched (`exact` / `slug` /
+`normalized` / `alias` / `none`; the `resolve` fixture suite pins it). It
+never appears in the findings document.
 
 No fuzzy matching. Unresolved models degrade honestly (§2.2, §2.4).
 

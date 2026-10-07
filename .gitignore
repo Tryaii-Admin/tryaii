@@ -55,7 +55,7 @@ packages/python/CENTROIDS_AND_UPDATES.md
 # named eval at any depth — see the /cache/ note below for the same gotcha).
 /eval/
 
-# Local benchmark snapshot cache (fetched from the tryaii-bench API).
+# Local benchmark snapshot cache.
 # Anchored with a leading slash to the repo root so it does NOT match the
 # packages/python/tryaii/cache/ submodule. Hatchling honors .gitignore at
 # build time, and an unanchored `cache/` dropped that submodule from the 0.2.0
@@ -79,3 +79,10 @@ stories.json
 
 # tryaii designpartner state (local)
 /.tryaii/
+
+# Catalog bundles built by scripts/build-catalog-bundles.py (full = never committed)
+/build/catalog/
+
+# Catalog signing keys (scripts/gen-catalog-signing-key.py default output). NEVER commit a private key.
+/build/keys/
+*.pem

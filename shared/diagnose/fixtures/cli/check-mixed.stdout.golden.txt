@@ -7,7 +7,7 @@ diagnose: 3 site(s) analyzed, 1 skipped
 
 monthly estimates (1 site(s) with traffic data):
   est. cost           $312.00
-  swap savings        $306.00
+  swap savings        $312.00
 
 -> out/fixture-run/inventory.json
 -> out/fixture-run/findings.json

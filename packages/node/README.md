@@ -19,7 +19,7 @@ import { DREClient, Priorities, Router } from 'tryaii';
 const router = new Router();
 
 const result = await router.route('Write a Python function to sort an array');
-console.log(result.bestModel);     // e.g., "gpt-5.2"
+console.log(result.bestModel);     // e.g., "anthropic/claude-opus-5.5"
 console.log(result.scores[0]);     // Full scoring breakdown
 
 // Route with custom priorities
@@ -33,6 +33,33 @@ const client = new DREClient({ apiKey: process.env.OPENROUTER_API_KEY });
 const response = await client.chat('Write a quicksort implementation');
 console.log(response.content);
 ```
+
+## Model catalog
+
+The package ships a **starter catalog**: 45 well-known models from OpenAI, Anthropic,
+Google, DeepSeek, xAI and Mistral, scored on 16 benchmarks. It works offline with no
+account. Log in (free, with your tryaii.com Google account) to route on the **full
+catalog of 322 models**:
+
+```bash
+tryaii login     # device sign-in: open the printed URL in any browser and approve the code
+tryaii whoami    # the signed-in account and the downloaded catalog release
+tryaii logout    # remove the credentials and the downloaded catalog
+```
+
+After login the full catalog downloads automatically, is refreshed at most once a day,
+cached under `~/.tryaii/catalog/` (or `TRYAII_DRE_DATA_DIR`), and used only after its
+Ed25519 signature checks out. In code:
+
+```typescript
+new Router();                          // catalog 'auto': full when logged in, else starter
+new Router({ catalog: 'starter' });    // always the packaged catalog, no network
+new Router({ catalog: 'full' });       // throws LoginRequiredError when not logged in
+await router.ready();                  // optional: finish the daily catalog check up front
+```
+
+The constructor starts from the locally cached catalog; the first `route()` (or
+`await router.ready()`) completes the at-most-daily check.
 
 ## CLI
 
@@ -48,6 +75,7 @@ tryaii models --provider anthropic        # add --json for machine-readable outp
 tryaii benchmarks --json
 tryaii setup                               # download the embedding model + warm centroids
 tryaii cachelint request.json              # pre-flight prompt-cache analysis (warn-only)
+tryaii login                               # free: unlock the full model catalog
 ```
 
 | Command | Key options |
@@ -64,6 +92,8 @@ every outgoing chat request and verify cache predictions against the response
 | `models` | `--provider <name>`, `--json` |
 | `benchmarks` | `--json` |
 | `setup` / `regenerate` | `--model <name>` |
+| `login` / `logout` | none |
+| `whoami` | `--json` |
 
 Global flags: `--no-banner` (or `TRYAII_NO_BANNER=1`), `NO_COLOR=1`, `-v/--verbose`,
 `-V/--version`. All flags work in any position and match the PyPI CLI. See the
@@ -108,7 +138,7 @@ new Priorities(4, 2, 3)   // quality=4, cost=2, speed=3
 router.addModel({
   modelId: 'my-custom-model',
   provider: 'custom',
-  benchmarks: { 'HumanEval': 85, 'MMLU': 80 },
+  benchmarks: { 'LiveCodeBench': 85, 'MMLU-Pro': 80 },
   pricing: [0.001, 0.002],  // [input, output] per 1k tokens
   latency: 'fast',
 });
@@ -188,10 +218,10 @@ User Prompt
      |
      v
 [Classifier] --> benchmark similarity scores
-     |              (HumanEval: 0.8, MMLU: 0.3, ...)
+     |              (LiveCodeBench: 0.8, MMLU-Pro: 0.3, ...)
      v
-[ScoringEngine] --> weighted scores per model
-     |              (quality * qW + cost * cW + speed * sW)
+[ScoringEngine] --> quality sets a tolerance band below the best model;
+     |              cost and speed rank the models inside it
      v
 [RouteResult] --> best model + reasoning
 ```

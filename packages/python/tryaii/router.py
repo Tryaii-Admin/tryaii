@@ -6,7 +6,7 @@ Usage:
 
     router = Router()
     result = router.route("Write a Python function to merge sorted arrays")
-    print(result.best_model)     # "gpt-5.2"
+    print(result.best_model)     # "openai/gpt-5.2"
     print(result.scores[:3])     # Top 3 with scores and reasoning
 """
 
@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from tryaii.benchmarks.registry import BenchmarkRegistry
+from tryaii.catalog.bundle import CatalogBundle, resolve_bundle
+from tryaii.catalog.client import CATALOG_MODES
 from tryaii.centroids.loader import CentroidLoader
 from tryaii.classifiers.base import MAX_PROMPT_LENGTH, ClassificationResult
 from tryaii.classifiers.embedding import EmbeddingClassifier
@@ -80,10 +82,24 @@ class Router:
 
     Args:
         config: Configuration overrides. If None, uses defaults.
-        registry: Model registry. If None, loads the default 35+ models.
-        benchmark_registry: Benchmark definitions. If None, uses standard 12.
+        registry: Model registry. If None, the catalog bundle's models.
+        benchmark_registry: Benchmark definitions. If None, the catalog
+                            bundle's benchmarks.
         embedding_provider: Custom embedding provider. If None, uses local
                            sentence-transformers (all-MiniLM-L6-v2).
+        bundle: The catalog bundle to route on (a CatalogBundle or a bundle
+                directory). If None, the default catalog -- see
+                :func:`tryaii.catalog.resolve_bundle`. Models, benchmark
+                taxonomy, ranges, weights and centroids all come from it unless
+                ``registry`` / ``benchmark_registry`` override them.
+        catalog: Which catalog to use when ``bundle`` is None:
+                 ``"auto"`` (default) -- the full catalog when logged in
+                 (``tryaii login``; downloaded and checked at most once a
+                 day), else the starter catalog; ``"starter"`` -- always the
+                 packaged starter catalog, no network; ``"full"`` -- like
+                 auto, but raises ``LoginRequiredError`` when not logged in.
+                 Raises ``SessionEndedError`` when the stored session was
+                 rejected by the server.
     """
 
     def __init__(
@@ -92,14 +108,26 @@ class Router:
         registry: Optional[ModelRegistry] = None,
         benchmark_registry: Optional[BenchmarkRegistry] = None,
         embedding_provider=None,
+        bundle=None,
+        catalog: str = "auto",
     ):
         self._config = config or TryaiiDreConfig()
 
+        # The catalog this router routes on (contract section 5): an explicit
+        # ``bundle`` wins; otherwise ``catalog`` picks it -- "auto" (full when
+        # logged in, else starter), "starter" or "full".
+        if catalog not in CATALOG_MODES:
+            raise ValueError(
+                f"catalog must be one of {', '.join(CATALOG_MODES)}; got {catalog!r}")
+        self._bundle: CatalogBundle = resolve_bundle(bundle, catalog=catalog)
+
         # Model registry
-        self._registry = registry or ModelRegistry.default()
+        self._registry = registry or ModelRegistry.from_bundle(self._bundle)
 
         # Benchmark registry
-        self._benchmark_registry = benchmark_registry or BenchmarkRegistry.default()
+        self._benchmark_registry = (
+            benchmark_registry or BenchmarkRegistry.from_bundle(self._bundle)
+        )
 
         # Scoring engine with normalizer from benchmark registry
         normalizer = self._benchmark_registry.get_normalizer()
@@ -136,6 +164,7 @@ class Router:
             self._centroid_loader = CentroidLoader(
                 config=self._config,
                 embedding_provider=self._embedding_provider,
+                bundle=self._bundle,
             )
 
             self._classifier = EmbeddingClassifier(
@@ -206,6 +235,10 @@ class Router:
             benchmark_similarities=classification.benchmark_scores,
             priorities=priorities,
             top_k=top_k,
+            # Coverage is a property of the benchmark against the whole
+            # routable catalog, not of this call's (possibly filtered)
+            # candidate set, so it comes from the registry.
+            benchmark_coverage=self._registry.benchmark_coverage(),
         )
 
         best = scores[0].model_id if scores else ""
@@ -266,6 +299,11 @@ class Router:
             self._classifier._classification_cache.clear()
 
         logger.info(f"Added custom benchmark: {name} ({len(queries)} queries)")
+
+    @property
+    def bundle(self) -> CatalogBundle:
+        """The catalog bundle this router routes on."""
+        return self._bundle
 
     @property
     def models(self) -> ModelRegistry:

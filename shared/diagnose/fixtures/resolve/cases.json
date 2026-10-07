@@ -4,24 +4,24 @@
   "cases": [
     {
       "name": "exact",
-      "description": "SPEC §2.1 step 1: an exact registry id resolves as-is.",
+      "description": "A catalog id as-is resolves exactly.",
       "input": {
-        "model": "gpt-4o"
+        "model": "openai/gpt-4o"
       },
       "expected": {
-        "model_id": "gpt-4o",
+        "model_id": "openai/gpt-4o",
         "method": "exact"
       }
     },
     {
-      "name": "openrouter-slug",
-      "description": "SPEC §2.1 step 2: an OpenRouter slug maps back to the registry id via MODEL_ID_TO_OPENROUTER.",
+      "name": "bare-name",
+      "description": "A bare model name (what SDK calls carry) resolves to the single provider-prefixed catalog id via the tail rule.",
       "input": {
-        "model": "anthropic/claude-sonnet-4.5"
+        "model": "gpt-4o"
       },
       "expected": {
-        "model_id": "claude-sonnet-4-5-20250929",
-        "method": "slug"
+        "model_id": "openai/gpt-4o",
+        "method": "normalized"
       }
     },
     {
@@ -31,7 +31,7 @@
         "model": "GPT-4O"
       },
       "expected": {
-        "model_id": "gpt-4o",
+        "model_id": "openai/gpt-4o",
         "method": "normalized"
       }
     },
@@ -42,7 +42,7 @@
         "model": "myorg/gpt-4o"
       },
       "expected": {
-        "model_id": "gpt-4o",
+        "model_id": "openai/gpt-4o",
         "method": "normalized"
       }
     },
@@ -53,7 +53,128 @@
         "model": "claude.sonnet.4.6"
       },
       "expected": {
-        "model_id": "claude-sonnet-4-6",
+        "model_id": "anthropic/claude-sonnet-4.6",
+        "method": "normalized"
+      }
+    },
+    {
+      "name": "alias-dated-anthropic",
+      "description": "SPEC §2.1 step 4a: an Anthropic dated API id resolves through the SDK's native-id -> OpenRouter slug table when that slug is in the catalog.",
+      "input": {
+        "model": "claude-sonnet-4-5-20250929"
+      },
+      "expected": {
+        "model_id": "anthropic/claude-sonnet-4.5",
+        "method": "alias"
+      }
+    },
+    {
+      "name": "alias-dated-anthropic-prefixed",
+      "description": "SPEC §2.1 step 4: the fallback works on the text after the last '/', so a provider-prefixed dated id resolves too.",
+      "input": {
+        "model": "anthropic/claude-opus-4-5-20251101"
+      },
+      "expected": {
+        "model_id": "anthropic/claude-opus-4.5",
+        "method": "alias"
+      }
+    },
+    {
+      "name": "alias-dated-vertex",
+      "description": "SPEC §2.1 step 4b: a Vertex-style '@YYYYMMDD' date suffix is dropped and the tail rule retried (dash-vs-dot via norm).",
+      "input": {
+        "model": "claude-haiku-4-5@20251001"
+      },
+      "expected": {
+        "model_id": "anthropic/claude-haiku-4.5",
+        "method": "alias"
+      }
+    },
+    {
+      "name": "alias-latest-table",
+      "description": "SPEC §2.1 step 4a: an xAI '-latest' alias resolves through the slug table.",
+      "input": {
+        "model": "grok-4-latest"
+      },
+      "expected": {
+        "model_id": "x-ai/grok-4",
+        "method": "alias"
+      }
+    },
+    {
+      "name": "alias-latest-suffix",
+      "description": "SPEC §2.1 step 4b: a '-latest' suffix is dropped and the tail rule retried (grok-4-1-fast -> x-ai/grok-4.1-fast).",
+      "input": {
+        "model": "grok-4-1-fast-latest"
+      },
+      "expected": {
+        "model_id": "x-ai/grok-4.1-fast",
+        "method": "alias"
+      }
+    },
+    {
+      "name": "alias-table-undated",
+      "description": "SPEC §2.1 step 4a: a table id with no strippable suffix (mistral-medium-2508) still maps to its catalog slug.",
+      "input": {
+        "model": "mistral-medium-2508"
+      },
+      "expected": {
+        "model_id": "mistralai/mistral-medium-3.1",
+        "method": "alias"
+      }
+    },
+    {
+      "name": "alias-target-not-in-catalog",
+      "description": "SPEC §2.1 step 4: the table target (mistralai/mistral-large) is not in this catalog and stripping finds no single model — never guessed to a sibling (mistral-large-2512).",
+      "input": {
+        "model": "mistral-large-latest"
+      },
+      "expected": {
+        "model_id": null,
+        "method": "none"
+      }
+    },
+    {
+      "name": "alias-openai-dashed-date-unresolved",
+      "description": "SPEC §2.1 step 4b: only a compact YYYYMMDD date is stripped; an OpenAI dashed snapshot date is left alone and stays unresolved.",
+      "input": {
+        "model": "gpt-4o-2024-08-06"
+      },
+      "expected": {
+        "model_id": null,
+        "method": "none"
+      }
+    },
+    {
+      "name": "alias-unknown-dated-unresolved",
+      "description": "SPEC §2.1: stripping a date from an unknown model still finds nothing — it resolves to nothing, not to a nearby model.",
+      "input": {
+        "model": "claude-9-mega-20250101"
+      },
+      "expected": {
+        "model_id": null,
+        "method": "none"
+      }
+    },
+    {
+      "name": "alias-unknown-latest-unresolved",
+      "description": "SPEC §2.1: stripping '-latest' from an unknown model still finds nothing.",
+      "input": {
+        "model": "claude-9-mega-latest"
+      },
+      "expected": {
+        "model_id": null,
+        "method": "none"
+      }
+    },
+    {
+      "name": "earlier-step-wins",
+      "description": "SPEC §2.1: the fallback is consulted only when steps 1-3 find nothing — an undated id that matches via the tail rule keeps method 'normalized'.",
+      "input": {
+        "model": "claude-sonnet-4-5"
+      },
+      "expected": {
+        "model_id": "anthropic/claude-sonnet-4.5",
         "method": "normalized"
       }
     },

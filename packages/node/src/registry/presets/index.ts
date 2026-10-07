@@ -1,11 +1,13 @@
 /**
- * Preset model registry data paths.
+ * Preset model registry data paths (kept for backwards compatibility).
+ *
+ * The default models are the packaged starter catalog bundle's models.json;
+ * see `catalog/bundle.ts`.
  */
 
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
-const currentDir = dirname(fileURLToPath(import.meta.url));
+import { STARTER_BUNDLE_DIR } from '../../catalog/bundle.js';
 
-/** Path to the default models JSON file. */
-export const DEFAULT_MODELS_PATH = join(currentDir, 'defaultModels.json');
+/** Path to the default (starter catalog) models JSON file. */
+export const DEFAULT_MODELS_PATH = join(STARTER_BUNDLE_DIR, 'models.json');

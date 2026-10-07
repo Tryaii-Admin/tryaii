@@ -1,6 +1,6 @@
 # Priorities
 
-`Priorities` expresses how much you care about quality, cost, and speed — each on a 1–5 scale (1 = don't care, 3 = balanced, 5 = critical). Exported from the package root in both SDKs, along with `DEFAULT_PRIORITIES` (3/3/3).
+`Priorities` expresses how much you care about quality, cost, and speed — each on a 1–5 scale (1 = minimum influence, 3 = balanced, 5 = critical). Under [`satisficing-v1`](scoring.md) the three axes do *different kinds* of work: cost and speed are the weights of the in-band ranker, while quality sets the width of the quality band and nothing else. The class is exported from the package root in both SDKs, along with `DEFAULT_PRIORITIES` (3/3/3).
 
 ```python
 from tryaii import Priorities
@@ -24,17 +24,26 @@ Priorities.fromDict({ quality: 5 });
 - Non-numeric values → `TypeError` (Python) / coerced (Node).
 - Values are rounded **half-up** (both SDKs deliberately match `Math.round`, not Python banker's rounding) and clamped to [1, 5] — out-of-range inputs never error.
 
-## How priorities become weights
+## How priorities drive the decision
 
-Each axis maps to a scoring weight; quality has a higher floor so it always retains influence:
+**Cost and speed become the in-band ranker's weights.** Inside the quality band, a model is ranked on `sec = (wc·U_c + ws·U_s) / (wc + ws)` — a weighted *average*, so only the ratio of the two matters:
 
 | Weight | Formula | Effective range |
 |---|---|---|
-| quality | `0.3 + (quality/5) × 0.9` | 0.48 – 1.2 |
-| cost | `0.1 + (cost/5) × 0.9` | 0.28 – 1.0 |
-| speed | `0.1 + (speed/5) × 0.9` | 0.28 – 1.0 |
+| cost (`wc`) | `(cost − 1)/4` | 0 – 1.0 |
+| speed (`ws`) | `(speed − 1)/4` | 0 – 1.0 |
 
-Final score per model: `(q·qW + c·cW + s·sW) / (qW + cW + sW)` — see [scoring](scoring.md).
+**Quality enters only through the band width.** It is not a weight in the score:
+
+```
+eps = 0.102 × ((cost − 1) + (speed − 1)) / quality        # in q' units
+```
+
+`eps` is how much quality the router may give up to get something cheaper or faster. It is linear in `(cost−1)+(speed−1)` and inversely proportional to the quality priority, and it is **0 exactly when cost and speed are both 1** — the same condition that switches the secondary term off, which is what makes `Priorities.performance()` (`5/1/1`) a true quality-only route. Priority 3/3/3 gives `wc = ws = 0.5` and `eps = 0.136`.
+
+`quality_weight` / `qualityWeight` (`0.3 + 0.9 × (quality − 1)/4`, range 0.3–1.2) is still exported, but the ranker does **not** use it: it survives for backward-compatible reporting and for the all-no-signal fallback path. `scoring/priorities.py` / `scoring/priorities.ts` are the source of truth.
+
+Final score per model: `q'` at `5/1/1`, `0.5 + 0.5·sec` in band, `0.5·q'` out of band — see [scoring](scoring.md).
 
 ## Where priorities apply
 

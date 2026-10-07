@@ -43,8 +43,8 @@ class TestModelRegistry:
     def test_default_loads_models(self):
         registry = ModelRegistry.default()
         assert len(registry) > 30
-        assert "gpt-4o" in registry
-        assert "claude-opus-4-5-20251101" in registry
+        assert "openai/gpt-4o" in registry
+        assert "anthropic/claude-opus-4.5" in registry
 
     def test_add_and_get_model(self):
         registry = ModelRegistry()
@@ -76,8 +76,8 @@ class TestModelRegistry:
 
     def test_filter_by_provider(self):
         registry = ModelRegistry.default()
-        anthropic = registry.filter(provider="Anthropic")
-        assert all(m.provider == "Anthropic" for m in anthropic)
+        anthropic = registry.filter(provider="Anthropic")  # case-insensitive
+        assert all(m.provider == "anthropic" for m in anthropic)
         assert len(anthropic) >= 3
 
     def test_filter_by_capability(self):
@@ -94,7 +94,7 @@ class TestModelRegistry:
         registry = ModelRegistry.default()
         ids = registry.model_ids
         assert isinstance(ids, list)
-        assert "gpt-4o" in ids
+        assert "openai/gpt-4o" in ids
 
     def test_export_import_json(self):
         registry = ModelRegistry()
@@ -122,9 +122,9 @@ class TestModelRegistry:
     def test_default_preset_has_all_providers(self):
         registry = ModelRegistry.default()
         providers = {m.provider for m in registry.all_models}
-        assert "OpenAI" in providers
-        assert "Anthropic" in providers
-        assert "Google" in providers
-        assert "DeepSeek" in providers
-        assert "xAI" in providers
-        assert "Mistral" in providers
+        assert "openai" in providers
+        assert "anthropic" in providers
+        assert "google" in providers
+        assert "deepseek" in providers
+        assert "x-ai" in providers
+        assert "mistralai" in providers

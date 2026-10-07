@@ -1,6 +1,6 @@
 # `tryaii route` — route one prompt
 
-Classify a prompt with local embeddings and print the top-K model recommendations. No API key needed; nothing is called.
+Classify a prompt with local embeddings and print the top-K model recommendations. No API key needed; no model is called.
 
 ```bash
 tryaii route "Write a Python function to merge sorted arrays" --quality=5 --cost=1
@@ -37,7 +37,9 @@ Top 5 Recommendations:
      Reason: <scoring reasoning>
 ```
 
-Scores are relative per call (rescaled into 0.1–0.95 across the candidate set) — don't compare them across different prompts.
+`Score` is meaningful within one call only: models inside the quality band score in `[0.5, 1.0]`, models outside it below 0.5 (see [scoring](../sdk/routing/scoring.md)) — don't compare it across different prompts. `Quality`, `Cost` and `Speed` are the per-model utilities and are comparable across calls.
+
+`route` uses the catalog in use: the 45-model starter catalog shipped in the package, or the full catalog after [`tryaii login`](login.md). When nobody is logged in, a one-line login hint is printed to stderr at most once a day (`TRYAII_NO_BANNER` silences it).
 
 ## Exit codes
 

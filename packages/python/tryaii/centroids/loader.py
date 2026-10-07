@@ -3,9 +3,11 @@ Centroid loader -- handles lazy initialization and model compatibility.
 
 Loading priority:
     1. In-memory cache (already loaded)
-    2. User's ~/.tryaii/centroids/ (previously generated for their model)
-    3. Bundled static file (ships with package for default model -- zero delay)
-    4. Generate from training queries (only if using a non-default model)
+    2. User's ~/.tryaii/centroids/ (previously generated for their model and
+       this catalog kind+version), when its benchmark set matches the bundle's
+    3. The catalog bundle's centroids.json (when built for this embedding
+       model -- zero delay)
+    4. Generate from the bundle's training queries (non-default embedding model)
 """
 
 from __future__ import annotations
@@ -17,40 +19,36 @@ from typing import Optional
 
 import numpy as np
 
+from tryaii.catalog.bundle import CatalogBundle, resolve_bundle
 from tryaii.centroids.generator import CentroidGenerator, benchmark_fingerprint
 from tryaii.config import TryaiiDreConfig
 from tryaii.embeddings.base import BaseEmbeddingProvider
 
 logger = logging.getLogger("tryaii.centroids")
 
-# Path to bundled centroids (ships with the package)
-BUNDLED_CENTROIDS_DIR = Path(__file__).parent / "data"
-
-
-def _bundled_centroid_path(model_name: str) -> Path:
-    """Path to the bundled centroid file for a given model."""
-    safe_name = model_name.replace("/", "__")
-    return BUNDLED_CENTROIDS_DIR / f"centroids_{safe_name}.json"
-
 
 class CentroidLoader:
     """
     Manages centroid lifecycle: load, validate, regenerate.
 
-    For the default embedding model (all-MiniLM-L6-v2), centroids are
-    bundled with the package -- zero first-run delay. For other models,
-    centroids are generated on first use and cached to disk.
+    For the catalog bundle's embedding model (all-MiniLM-L6-v2), centroids
+    ship in the bundle -- zero first-run delay. For other models, centroids
+    are generated from the bundle's training queries on first use and cached
+    to disk. ``bundle`` (a CatalogBundle or bundle directory) defaults to the
+    default catalog -- see :func:`tryaii.catalog.resolve_bundle`.
     """
 
     def __init__(
         self,
         config: TryaiiDreConfig,
         embedding_provider: BaseEmbeddingProvider,
+        bundle=None,
     ):
         self._config = config
         self._provider = embedding_provider
+        self._bundle: CatalogBundle = resolve_bundle(bundle)
         self._centroids: Optional[dict[str, np.ndarray]] = None
-        self._generator = CentroidGenerator(embedding_provider)
+        self._generator = CentroidGenerator(embedding_provider, bundle=self._bundle)
         # Guards lazy load/regenerate so concurrent asyncio.to_thread workers
         # don't each load the model / generate centroids.
         self._lock = threading.Lock()
@@ -72,20 +70,19 @@ class CentroidLoader:
 
             # 1. Try user's cached centroids (~/.tryaii/centroids/)
             self._config.ensure_dirs()
-            user_path = self._config.centroid_file
+            user_path = self.cache_path
             loaded = self._try_load(user_path)
             if loaded is not None:
                 self._centroids = loaded
                 return self._centroids
 
-            # 2. Try bundled static centroids (ships with package)
-            bundled_path = _bundled_centroid_path(self._provider.model_name)
-            loaded = self._try_load(bundled_path)
+            # 2. Try the catalog bundle's centroids (built for its embedding model)
+            loaded = self._try_bundle()
             if loaded is not None:
                 self._centroids = loaded
                 logger.info(
-                    f"Loaded bundled centroids for {self._provider.model_name} "
-                    f"({len(loaded)} benchmarks)"
+                    f"Loaded {self._bundle.kind} catalog centroids for "
+                    f"{self._provider.model_name} ({len(loaded)} benchmarks)"
                 )
                 return self._centroids
 
@@ -99,45 +96,86 @@ class CentroidLoader:
 
         try:
             centroids, metadata = CentroidGenerator.load(path)
-
-            saved_model = metadata.get("model", "")
-            saved_dim = metadata.get("dimension", 0)
-
-            # Validate model + dimension.
-            if (saved_model != self._provider.model_name
-                    or saved_dim != self._provider.dimension):
-                logger.debug(
-                    f"Centroid mismatch at {path} "
-                    f"(saved: {saved_model}/{saved_dim}, "
-                    f"current: {self._provider.model_name}/{self._provider.dimension})"
-                )
-                return None
-
-            # Validate the benchmark set. We fingerprint the benchmarks actually
-            # present in the file (not a stored metadata value -- older/bundled
-            # files predate fingerprinting and have none) and compare against the
-            # expected default set. This regenerates a file built against a
-            # different benchmark set (the real risk) while still loading
-            # pre-fingerprint bundled files whose benchmark set is unchanged.
-            actual_fingerprint = benchmark_fingerprint(centroids.keys())
-            expected_fingerprint = self._expected_fingerprint()
-            if actual_fingerprint != expected_fingerprint:
-                logger.debug(
-                    f"Centroid benchmark-set mismatch at {path} "
-                    f"(file fingerprint: {actual_fingerprint!r}, "
-                    f"expected: {expected_fingerprint!r})"
-                )
-                return None
-
-            logger.debug(f"Loaded {len(centroids)} centroids from {path}")
-            return centroids
+            return self._validated(centroids, metadata, str(path))
         except Exception as e:
             logger.warning(f"Failed to load centroids from {path}: {e}")
             return None
 
+    def _try_bundle(self) -> Optional[dict[str, np.ndarray]]:
+        """The catalog bundle's centroids, when they fit the current provider."""
+        data = self._bundle.centroids
+        centroids = {
+            name: np.array(vector, dtype=np.float32)
+            for name, vector in data["centroids"].items()
+        }
+        return self._validated(
+            centroids, data.get("metadata", {}), f"the {self._bundle.kind} catalog bundle"
+        )
+
+    def _validated(
+        self, centroids: dict[str, np.ndarray], metadata: dict, source: str
+    ) -> Optional[dict[str, np.ndarray]]:
+        """``centroids`` when they fit the provider and the bundle, else None."""
+        saved_model = metadata.get("model", "")
+        saved_dim = metadata.get("dimension", 0)
+
+        # Validate model + dimension.
+        if (saved_model != self._provider.model_name
+                or saved_dim != self._provider.dimension):
+            logger.debug(
+                f"Centroid mismatch at {source} "
+                f"(saved: {saved_model}/{saved_dim}, "
+                f"current: {self._provider.model_name}/{self._provider.dimension})"
+            )
+            return None
+
+        # Validate the benchmark set. We fingerprint the benchmarks actually
+        # present (not a stored metadata value -- older files predate
+        # fingerprinting and have none) and compare against the catalog
+        # bundle's set, so a user cache generated for another catalog (or
+        # another benchmark set) is never used.
+        actual_fingerprint = benchmark_fingerprint(centroids.keys())
+        expected_fingerprint = self._expected_fingerprint()
+        if actual_fingerprint != expected_fingerprint:
+            logger.debug(
+                f"Centroid benchmark-set mismatch at {source} "
+                f"(file fingerprint: {actual_fingerprint!r}, "
+                f"expected: {expected_fingerprint!r})"
+            )
+            return None
+
+        logger.debug(f"Loaded {len(centroids)} centroids from {source}")
+        return centroids
+
     def _expected_fingerprint(self) -> str:
-        """Fingerprint of the benchmark set this loader expects on disk."""
-        return CentroidGenerator.default_benchmark_fingerprint()
+        """Fingerprint of the catalog bundle's benchmark set."""
+        return CentroidGenerator.default_benchmark_fingerprint(self._bundle)
+
+    @property
+    def cache_path(self) -> Path:
+        """This loader's user centroid cache: keyed by embedding model and by
+        the catalog's kind + version (see ``TryaiiDreConfig.centroid_file_for``)."""
+        return self._config.centroid_file_for(self._bundle)
+
+    def _save(self, centroids: dict[str, np.ndarray]) -> None:
+        """Write the user cache and drop this model's caches for older
+        versions of the same catalog kind (a full catalog update makes them
+        unreachable)."""
+        path = self.cache_path
+        self._generator.save(centroids, path)
+        safe_name = self._config.embedding_model.replace("/", "__")
+        prefix = f"centroids_{safe_name}__{self._bundle.kind}-"
+        try:
+            for stale in path.parent.glob(f"{prefix}*.json"):
+                if stale.name != path.name:
+                    stale.unlink()
+        except OSError:
+            pass
+
+    @property
+    def bundle(self) -> CatalogBundle:
+        """The catalog bundle this loader serves."""
+        return self._bundle
 
     def _regenerate(self) -> dict[str, np.ndarray]:
         """Generate centroids from training queries and save to user cache."""
@@ -149,10 +187,10 @@ class CentroidLoader:
         centroids = self._generator.generate(show_progress=True)
 
         # Save to user cache for future runs
-        self._generator.save(centroids, self._config.centroid_file)
+        self._save(centroids)
         self._centroids = centroids
 
-        logger.info(f"Centroids saved to {self._config.centroid_file}")
+        logger.info(f"Centroids saved to {self.cache_path}")
         return centroids
 
     def regenerate(
@@ -168,7 +206,7 @@ class CentroidLoader:
         centroids = self._generator.generate(
             training_queries=custom_queries, show_progress=True
         )
-        self._generator.save(centroids, self._config.centroid_file)
+        self._save(centroids)
         self._centroids = centroids
         return centroids
 
@@ -193,7 +231,7 @@ class CentroidLoader:
 
         # Save updated centroids to user cache
         self._config.ensure_dirs()
-        self._generator.save(centroids, self._config.centroid_file)
+        self._save(centroids)
         logger.info(f"Added custom benchmark '{benchmark_name}' with {len(queries)} queries")
 
         return new_centroid
@@ -204,7 +242,7 @@ class CentroidLoader:
         if benchmark_name in centroids:
             del centroids[benchmark_name]
             self._config.ensure_dirs()
-            self._generator.save(centroids, self._config.centroid_file)
+            self._save(centroids)
             return True
         return False
 

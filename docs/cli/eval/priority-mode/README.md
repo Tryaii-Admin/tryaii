@@ -21,7 +21,7 @@ tryaii eval prompts.json --cost=5 --top-k=3 -o runs/cheap
 - One warmup route runs first so the per-row `routeMs` timings exclude model download/centroid loading.
 - Progress prints at every ~10% threshold: `[eval] routed 12/120 (10%)`.
 - **Per-prompt errors are caught**: a failing prompt becomes a row with empty routing fields plus an `error` message ([row schema](../outputs/results-jsonl.md#error-rows)), and the run continues. The run only exits 1 if *every* prompt failed.
-- Scores within a row are relative (rescaled 0.1–0.95 across that prompt's candidates) — compare models *within* a row, and use the distribution in [`summary.json`](../outputs/summary-json.md) to compare across the dataset.
+- Scores within a row are relative (in-band contenders score 0.5–1.0, the rest below 0.5; see [scoring](../../../sdk/routing/scoring.md)) — compare models *within* a row, and use the distribution in [`summary.json`](../outputs/summary-json.md) to compare across the dataset.
 
 ## Console output
 
@@ -41,7 +41,7 @@ Distinct models: 6
 Avg route time : 38.4 ms
 
 Top recommended models:
-  gemini-2.5-flash-lite                       64  (53.33%)
+  google/gemini-2.5-flash-lite                64  (53.33%)
   ...
 [eval] per-prompt results -> ...\results.jsonl
 [eval] summary            -> ...\summary.json

@@ -80,8 +80,17 @@ class TestCentroidGenerator:
         Path(path).unlink()
 
     def test_generate_default_queries(self):
+        from tryaii.catalog import starter_bundle
+
         centroids = self.generator.generate(show_progress=False)
-        # Should load from bundled training_queries.json
-        assert len(centroids) >= 10  # 12 standard benchmarks
+        # Defaults to the default catalog's (packaged starter) training queries.
+        assert set(centroids) == set(starter_bundle().benchmark_names)
+        assert "GPQA" in centroids
+        assert "LiveCodeBench" in centroids
+
+    def test_generate_default_queries_of_a_given_bundle(self, full_bundle):
+        generator = CentroidGenerator(self.provider, bundle=full_bundle)
+        centroids = generator.generate(show_progress=False)
+        assert set(centroids) == set(full_bundle.benchmark_names)
         assert "MMLU" in centroids
         assert "HumanEval" in centroids

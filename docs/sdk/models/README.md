@@ -20,10 +20,10 @@
 
 ```python
 from tryaii import ModelRegistry
-registry = ModelRegistry.default()        # bundled 39-model preset
+registry = ModelRegistry.default()        # the default catalog: 45-model starter, or the full catalog after `tryaii login`
 registry = ModelRegistry()                # or start empty and add your own
 registry.add("gpt-4o-mini", provider="OpenAI",
-             benchmarks={"HumanEval": 87.2, "MMLU": 70.0},
+             benchmarks={"LiveCodeBench": 62.0, "MMLU-Pro": 76.0},
              pricing=(0.00015, 0.0006),   # (input_per_1k, output_per_1k) USD
              latency="very fast", capabilities=["fast-response"])
 ```
@@ -32,7 +32,7 @@ registry.add("gpt-4o-mini", provider="OpenAI",
 import { ModelRegistry } from 'tryaii';
 const registry = ModelRegistry.default();
 registry.add({ modelId: 'gpt-4o-mini', provider: 'OpenAI',
-               benchmarks: { HumanEval: 87.2 }, pricing: [0.00015, 0.0006],
+               benchmarks: { LiveCodeBench: 62.0 }, pricing: [0.00015, 0.0006],
                latency: 'very fast', capabilities: ['fast-response'] });
 ```
 
@@ -44,7 +44,7 @@ registry.add({ modelId: 'gpt-4o-mini', provider: 'OpenAI',
 | `filter(provider?, capability?, max_input_cost?, latency?)` | provider: case-insensitive equality; capability: exact membership; `max_input_cost`/`maxInputCost`: `input_per_1k ≤` (unpriced models excluded); latency: exact tier |
 | `all_models` / `allModels` · `model_ids` / `modelIds` | Properties |
 | `len(registry)` / `registry.length` · `in` / `has(id)` | |
-| `load_preset(name="default")` / `loadPreset(name)` | Loads a bundled preset; only `default` ships — anything else raises `FileNotFoundError` / throws. See [presets](presets.md). |
+| `load_preset(name="default", include_free=False)` / `loadPreset(name, { includeFree: false })` | Loads the default catalog's models (kept for backwards compatibility; only `default` exists). The opt-in flag includes ephemeral `:free` variants. See [default catalog](presets.md). |
 | `export_json(path)` (Python, atomic write) / `exportJson()` (Node, returns the object) | Serialize the registry |
 
 ## Using a custom registry
@@ -59,4 +59,4 @@ router = Router(registry=registry)
 const router = new Router({ registry });
 ```
 
-To make custom models *callable* through OpenRouter, their IDs must be valid OpenRouter slugs or appear in `MODEL_ID_TO_OPENROUTER` — see [openrouter](../client/openrouter.md). For scoring to have signal, give custom models scores on the [registered benchmarks](../benchmarks/README.md); models without any overlapping benchmark fall back to neutral quality.
+To make custom models *callable* through OpenRouter, their IDs must be valid OpenRouter slugs or appear in `MODEL_ID_TO_OPENROUTER` — see [openrouter](../client/openrouter.md). For meaningful quality differentiation, give custom models scores on the [registered benchmarks](../benchmarks/README.md); missing relevant scores are otherwise imputed from the model's known level and registry medians.

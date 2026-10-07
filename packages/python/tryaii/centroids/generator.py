@@ -20,12 +20,14 @@ from typing import Optional
 
 import numpy as np
 
+from tryaii.catalog.bundle import STARTER_BUNDLE_DIR, CatalogBundle, resolve_bundle
 from tryaii.embeddings.base import BaseEmbeddingProvider
 
 logger = logging.getLogger("tryaii.centroids")
 
-# Bundled training queries
-TRAINING_QUERIES_PATH = Path(__file__).parent / "data" / "training_queries.json"
+# Training queries of the packaged starter catalog (kept for backwards
+# compatibility; the generator reads its catalog bundle's training queries).
+TRAINING_QUERIES_PATH = STARTER_BUNDLE_DIR / "training_queries.json"
 
 
 def benchmark_fingerprint(benchmark_names) -> str:
@@ -55,8 +57,15 @@ class CentroidGenerator:
         centroids = generator.load("path/to.json") # Load from disk
     """
 
-    def __init__(self, embedding_provider: BaseEmbeddingProvider):
+    def __init__(
+        self,
+        embedding_provider: BaseEmbeddingProvider,
+        bundle: Optional[CatalogBundle] = None,
+    ):
         self._provider = embedding_provider
+        # The catalog whose training queries are the defaults (None = the
+        # default catalog, resolved lazily).
+        self._bundle = bundle
 
     def generate(
         self,
@@ -169,7 +178,7 @@ class CentroidGenerator:
         # Write to temp file then atomically rename
         fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
         try:
-            with os.fdopen(fd, "w") as f:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(data, f)
             os.replace(tmp_path, path)
         except BaseException:
@@ -186,7 +195,7 @@ class CentroidGenerator:
         Returns:
             Tuple of (centroids dict, metadata dict).
         """
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
 
         centroids = {
@@ -197,18 +206,12 @@ class CentroidGenerator:
         return centroids, data.get("metadata", {})
 
     def _load_default_queries(self) -> dict[str, list[str]]:
-        """Load bundled training queries."""
-        with open(TRAINING_QUERIES_PATH) as f:
-            data = json.load(f)
-
-        return {
-            name: bench_data["queries"]
-            for name, bench_data in data["benchmarks"].items()
-        }
+        """The catalog bundle's training queries."""
+        return resolve_bundle(self._bundle).training_query_map()
 
     @staticmethod
-    def default_benchmark_fingerprint() -> str:
-        """Fingerprint of the bundled default benchmark set."""
-        with open(TRAINING_QUERIES_PATH) as f:
-            data = json.load(f)
-        return benchmark_fingerprint(data["benchmarks"].keys())
+    def default_benchmark_fingerprint(bundle: Optional[CatalogBundle] = None) -> str:
+        """Fingerprint of a catalog's benchmark set (default: the default catalog)."""
+        return benchmark_fingerprint(
+            resolve_bundle(bundle).training_queries["benchmarks"].keys()
+        )

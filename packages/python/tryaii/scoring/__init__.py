@@ -6,11 +6,31 @@ from tryaii.scoring.benchmarks import (
     BenchmarkNormalizer,
     is_implausible_benchmark_score,
 )
-from tryaii.scoring.engine import ScoringEngine
+from tryaii.scoring.engine import (
+    COVERAGE_EXPONENT,
+    EPS_UNIT,
+    IMPUTED_TERM_WEIGHT,
+    P_HI,
+    P_LO,
+    T_HI,
+    T_LO,
+    ModelScore,
+    RegistryStats,
+    SatisficingCombination,
+    ScoringEngine,
+    cost_utility,
+    quality_tolerance,
+    registry_speed_stats,
+    satisficing_combine,
+    speed_utility,
+    speed_utility_from_t300,
+    t300_seconds,
+)
 from tryaii.scoring.priorities import DEFAULT_PRIORITIES, Priorities
 
 __all__ = [
     "ScoringEngine",
+    "ModelScore",
     "Priorities",
     "DEFAULT_PRIORITIES",
     "BenchmarkNormalizer",
@@ -19,4 +39,21 @@ __all__ = [
     "DEFAULT_BENCHMARK_WEIGHT",
     "RANDOM_CHANCE_FLOORS",
     "is_implausible_benchmark_score",
+    # satisficing-v1
+    "EPS_UNIT",
+    "IMPUTED_TERM_WEIGHT",
+    "COVERAGE_EXPONENT",
+    "P_LO",
+    "P_HI",
+    "T_LO",
+    "T_HI",
+    "RegistryStats",
+    "SatisficingCombination",
+    "satisficing_combine",
+    "cost_utility",
+    "speed_utility",
+    "speed_utility_from_t300",
+    "t300_seconds",
+    "quality_tolerance",
+    "registry_speed_stats",
 ]

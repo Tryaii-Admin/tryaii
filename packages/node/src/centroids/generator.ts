@@ -11,16 +11,17 @@
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
+import { CatalogBundle, STARTER_BUNDLE_DIR, resolveBundle } from '../catalog/bundle.js';
 import { BaseEmbeddingProvider } from '../embeddings/base.js';
-import type { CentroidsJson, TrainingQueriesJson } from '../types.js';
+import type { CentroidsJson } from '../types.js';
 import { vectorMean, vectorNormalize } from '../utils/math.js';
 
-const currentDir = dirname(fileURLToPath(import.meta.url));
-
-/** Path to bundled training queries. */
-export const TRAINING_QUERIES_PATH = join(currentDir, 'data', 'trainingQueries.json');
+/**
+ * Training queries of the packaged starter catalog (kept for backwards
+ * compatibility; the generator reads its catalog bundle's training queries).
+ */
+export const TRAINING_QUERIES_PATH = join(STARTER_BUNDLE_DIR, 'training_queries.json');
 
 /**
  * Generates and manages benchmark centroids.
@@ -32,9 +33,12 @@ export const TRAINING_QUERIES_PATH = join(currentDir, 'data', 'trainingQueries.j
  */
 export class CentroidGenerator {
   private _provider: BaseEmbeddingProvider;
+  /** The catalog whose training queries are the defaults (null = default catalog). */
+  private _bundle: CatalogBundle | null;
 
-  constructor(embeddingProvider: BaseEmbeddingProvider) {
+  constructor(embeddingProvider: BaseEmbeddingProvider, bundle?: CatalogBundle | null) {
     this._provider = embeddingProvider;
+    this._bundle = bundle ?? null;
   }
 
   /**
@@ -132,15 +136,8 @@ export class CentroidGenerator {
     };
   }
 
-  /** Load bundled training queries. */
+  /** The catalog bundle's training queries. */
   private _loadDefaultQueries(): Record<string, string[]> {
-    const raw = readFileSync(TRAINING_QUERIES_PATH, 'utf-8');
-    const data: TrainingQueriesJson = JSON.parse(raw);
-
-    const queries: Record<string, string[]> = {};
-    for (const [name, benchData] of Object.entries(data.benchmarks)) {
-      queries[name] = benchData.queries;
-    }
-    return queries;
+    return resolveBundle(this._bundle).trainingQueryMap();
   }
 }

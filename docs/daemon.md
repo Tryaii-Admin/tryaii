@@ -52,8 +52,9 @@ signals readiness. Shape:
 ```json
 {
   "runtime": "python",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "embeddingModel": "all-MiniLM-L6-v2",
+  "catalog": "starter:2026.10.07.1",
   "host": "127.0.0.1",
   "port": 0,
   "token": "<random hex>",
@@ -61,6 +62,14 @@ signals readiness. Shape:
   "startedAtMs": 0
 }
 ```
+
+`catalog` is `"<kind>:<version>"` of the catalog the daemon routes on
+(docs/catalog/CONTRACT-catalog-v1.md section 5). The CLI selects the catalog
+(starter, or the cached full catalog after `tryaii login`) and hands it to the
+daemon it starts in `TRYAII_DAEMON_CATALOG` (`starter` or the full catalog's
+version directory). A running daemon whose `catalog` differs from the CLI's
+selection -- another kind, a newer full release, or a daemon from before this
+key existed -- is stopped and replaced.
 
 ## Wire protocol
 
@@ -100,7 +109,7 @@ Response (route):
 ```
 
 Response (ping): `{"ok": true, "pong": true, "runtime": "...", "version": "...",
-"embeddingModel": "...", "pid": 0, "uptimeMs": 0}`.
+"embeddingModel": "...", "catalog": "<kind>:<version>", "pid": 0, "uptimeMs": 0}`.
 
 Response (shutdown): `{"ok": true, "bye": true}`.
 

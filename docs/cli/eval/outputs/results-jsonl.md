@@ -8,8 +8,8 @@ One JSON object per line, one line per prompt, in dataset order.
 |---|---|---|
 | `id`, `category`, `prompt` | string | From the [dataset](../dataset/README.md) (or defaults) |
 | `bestModel` | string | The selected model |
-| `bestScore` | number | The winner's `finalScore` (relative within the row, 0.1–0.95 rescale) |
-| `bestReasoning` | string | Scoring explanation, e.g. `Quality: 0.82 on [HumanEval (91%), SWE-bench (74%)] \| Cost efficiency: 0.95 \| Speed: 0.80 (fast)` |
+| `bestScore` | number | The winner's `finalScore` (comparable within the row only: in-band contenders score 0.5–1.0, see [scoring](../../../sdk/routing/scoring.md)) |
+| `bestReasoning` | string | Scoring explanation, e.g. `q'=0.89 (4 real of 5) \| imputed: 1/5 \| cost 0.4489 ($2.25/M) \| speed 0.5353 (2.55 s to 300 tok) \| within 0.136 of the best (0.95) \| ...` ([format](../../../sdk/routing/scoring.md#the-reasoning-string)) |
 | `topK` | array | `[{ "modelId", "finalScore" }]`, ranked — length per `--top-k` |
 | `topBenchmarks` | array | `[{ "name", "score" }]` — the prompt's 5 most similar benchmarks (cosine similarity, 4 dp) |
 | `broadCategory`, `subcategory` | string | Router's own classification (independent of your `category` label) |
@@ -19,11 +19,11 @@ One JSON object per line, one line per prompt, in dataset order.
 ## Priority-mode row
 
 ```json
-{"id":"q42","category":"code","prompt":"Write a SQL migration","bestModel":"claude-sonnet-4-5-20250929",
- "bestScore":0.95,"bestReasoning":"Quality: 0.89 on [SWE-bench (77%), HumanEval (93%)] | Cost efficiency: 0.82 | Speed: 0.60 (medium)",
- "topK":[{"modelId":"claude-sonnet-4-5-20250929","finalScore":0.95},{"modelId":"gpt-5.1","finalScore":0.87}],
- "topBenchmarks":[{"name":"SWE-bench","score":0.6112},{"name":"HumanEval","score":0.5984}],
- "broadCategory":"TECHNICAL","subcategory":"CODE_TECHNICAL","confidence":0.6112,"routeMs":38.21}
+{"id":"p1","category":"coding","prompt":"Fix the off-by-one error in this binary search","bestModel":"google/gemini-3.8-flash",
+ "bestScore":0.746,"bestReasoning":"q'=0.89 (4 real of 5) | imputed: 1/5 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.95) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.06 vs anthropic/claude-opus-5.5",
+ "topK":[{"modelId":"google/gemini-3.8-flash","finalScore":0.746},{"modelId":"openai/gpt-5.5","finalScore":0.6655}],
+ "topBenchmarks":[{"name":"Chatbot Arena Elo (Code)","score":0.2659},{"name":"LiveCodeBench","score":0.26}],
+ "broadCategory":"TECHNICAL","subcategory":"CODE_TECHNICAL","confidence":0.2659,"routeMs":24.0}
 ```
 
 ### Error rows
@@ -55,7 +55,7 @@ All common fields, plus:
 `topK` is the row's full quality ranking trimmed to `--top-k` — reporting only; selection happened in the knapsack.
 
 ```json
-{"id":"p3","category":"math","prompt":"...","bestModel":"gemini-2.5-flash","normalBestModel":"gpt-5.1",
+{"id":"p3","category":"math","prompt":"...","bestModel":"google/gemini-2.5-flash","normalBestModel":"openai/gpt-5.5",
  "budgetConstrained":true,"bestScore":0.78,"bestReasoning":"...","difficulty":0.1192,
  "estimatedCost":0.00041125,"cumulativeCost":0.00112375,"remainingBudget":0.49887625,
  "inputTokens":58,"outputTokens":2000,"topK":[...],"topBenchmarks":[...],

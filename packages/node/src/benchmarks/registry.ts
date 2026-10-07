@@ -9,7 +9,9 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
 import { BenchmarkNormalizer, NormalizationRange } from '../scoring/benchmarks.js';
-import { STANDARD_BENCHMARKS } from './standard.js';
+import { CatalogBundle, resolveBundle } from '../catalog/bundle.js';
+import type { BundleLike } from '../catalog/bundle.js';
+import type { CatalogMode } from '../catalog/client.js';
 
 /** Complete definition of a benchmark. */
 export interface BenchmarkDefinition {
@@ -33,6 +35,44 @@ export interface BenchmarkDefinition {
 
   /** Optional metadata. */
   metadata: Record<string, unknown>;
+
+  /**
+   * Catalog fields (benchmarks.json). `weight` undefined = keep the
+   * normalizer's default for this name; `randomChanceFloor` undefined/null = no
+   * floor. Not part of `benchmarkToDict` (the `tryaii benchmarks --json` shape
+   * is unchanged).
+   */
+  weight?: number;
+  randomChanceFloor?: number | null;
+  family?: string;
+}
+
+/**
+ * BenchmarkDefinitions for a bundle's benchmarks.json, in display order.
+ *
+ * The normalization range comes from the bundle's normalization_ranges.json
+ * (fallback 0-100 for a name it lacks); training queries stay empty -- the
+ * centroid generator reads them from the bundle when it needs them.
+ */
+export function definitionsFromBundle(bundle: CatalogBundle): BenchmarkDefinition[] {
+  const ranges = bundle.rangeEntries();
+  return bundle.benchmarkEntries.map((entry) => {
+    const rng = ranges[entry.name];
+    return {
+      name: entry.name,
+      description: entry.description ?? '',
+      trainingQueries: [],
+      normalization: rng
+        ? new NormalizationRange(rng.lo, rng.hi, rng.description ?? '')
+        : new NormalizationRange(0, 100),
+      broadCategory: entry.broad_category ?? 'TECHNICAL',
+      subcategories: [...(entry.subcategories ?? [])],
+      metadata: {},
+      weight: entry.weight,
+      randomChanceFloor: entry.random_chance_floor ?? null,
+      family: entry.family ?? '',
+    };
+  });
 }
 
 /** Create a BenchmarkDefinition from a plain object (e.g. loaded from JSON). */
@@ -49,6 +89,12 @@ export function benchmarkFromDict(d: Record<string, unknown>): BenchmarkDefiniti
     broadCategory: (d.broad_category as string) ?? (d.broadCategory as string) ?? 'TECHNICAL',
     subcategories: (d.subcategories as string[]) ?? [],
     metadata: (d.metadata as Record<string, unknown>) ?? {},
+    weight: (d.weight as number | undefined) ?? undefined,
+    randomChanceFloor:
+      (d.random_chance_floor as number | null | undefined) ??
+      (d.randomChanceFloor as number | null | undefined) ??
+      null,
+    family: (d.family as string) ?? '',
   };
 }
 
@@ -84,10 +130,20 @@ export class BenchmarkRegistry {
     this._benchmarks = new Map();
   }
 
-  /** Create registry with the standard 12 benchmarks. */
-  static default(): BenchmarkRegistry {
+  /**
+   * Create a registry pre-loaded with the default catalog's benchmarks.
+   *
+   * `bundle` (a CatalogBundle or bundle directory) overrides the default
+   * catalog -- see `resolveBundle`.
+   */
+  static default(bundle?: BundleLike | null, catalog: CatalogMode = 'auto'): BenchmarkRegistry {
+    return BenchmarkRegistry.fromBundle(resolveBundle(bundle, catalog));
+  }
+
+  /** Create a registry holding exactly one bundle's benchmarks. */
+  static fromBundle(bundle: CatalogBundle): BenchmarkRegistry {
     const registry = new BenchmarkRegistry();
-    for (const benchmark of STANDARD_BENCHMARKS) {
+    for (const benchmark of definitionsFromBundle(bundle)) {
       registry._benchmarks.set(benchmark.name, benchmark);
     }
     return registry;
@@ -139,8 +195,31 @@ export class BenchmarkRegistry {
         benchmark.normalization.maxScore,
         benchmark.description,
       );
+      if (benchmark.weight !== undefined) {
+        normalizer.registerWeight(name, benchmark.weight);
+      }
     }
     return normalizer;
+  }
+
+  /** `{name: floor}` for the registered benchmarks that declare one. */
+  randomChanceFloors(): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const [name, b] of this._benchmarks) {
+      if (b.randomChanceFloor !== undefined && b.randomChanceFloor !== null) {
+        out[name] = b.randomChanceFloor;
+      }
+    }
+    return out;
+  }
+
+  /** `{name: [broadCategory, primary subcategory]}` for the classifier. */
+  categories(): Record<string, [string, string]> {
+    const out: Record<string, [string, string]> = {};
+    for (const [name, b] of this._benchmarks) {
+      out[name] = [b.broadCategory, b.subcategories[0] ?? 'GENERAL'];
+    }
+    return out;
   }
 
   /**

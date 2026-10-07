@@ -99,6 +99,19 @@ class TryaiiDreConfig:
         safe_name = self.embedding_model.replace("/", "__")
         return self.centroids_dir / f"centroids_{safe_name}.json"
 
+    def centroid_file_for(self, bundle) -> Path:
+        """User centroid cache for the current embedding model AND catalog.
+
+        Keyed by the catalog's kind + version too (``centroids_<model>__<kind>-
+        <version>.json``), so routing alternately on the starter and the full
+        catalog never makes one overwrite (and regenerate) the other's cache.
+        ``bundle`` is a CatalogBundle; None = the unkeyed legacy name.
+        """
+        if bundle is None:
+            return self.centroid_file
+        safe_name = self.embedding_model.replace("/", "__")
+        return self.centroids_dir / f"centroids_{safe_name}__{bundle.kind}-{bundle.version}.json"
+
     def ensure_dirs(self):
         """Create data directories if they don't exist."""
         self.data_dir.mkdir(parents=True, exist_ok=True)

@@ -15,7 +15,7 @@ with OpenRouterIntegration(router, app_name="my-app") as openrouter:   # key fro
                            system_message="You are terse.", temperature=0, max_tokens=400)
     for chunk in openrouter.stream("Explain TCP vs UDP"):
         print(chunk, end="")
-    resp = openrouter.chat("Hello!", override_model="gpt-4o-mini")     # skip routing entirely
+    resp = openrouter.chat("Hello!", override_model="openai/gpt-4o-mini")  # skip routing entirely
 ```
 
 ```ts
@@ -40,7 +40,7 @@ for await (const chunk of integration.stream('Explain TCP vs UDP')) process.stdo
 
 ## Model ID mapping
 
-`MODEL_ID_TO_OPENROUTER` (exported in both SDKs) maps each of the 39 default-preset model IDs to its OpenRouter slug (e.g. `gpt-4o → openai/gpt-4o`, `claude-sonnet-4-5-20250929 → anthropic/claude-sonnet-4.5`). Unknown IDs pass through unchanged — so custom models work if their ID is already a valid OpenRouter slug.
+Current catalog IDs are already OpenRouter-native slugs (for example, `openai/gpt-5.5`) and pass through unchanged. `MODEL_ID_TO_OPENROUTER` is exported in both SDKs as a compatibility map for legacy bare IDs such as `gpt-4o`; unknown IDs also pass through unchanged, so custom models work when their IDs are valid OpenRouter slugs.
 
 ## API-key behavior differs by SDK
 

@@ -19,9 +19,11 @@ import {
   writeFileSync,
 } from 'node:fs';
 import * as net from 'node:net';
-import { join } from 'node:path';
+import { join, relative, resolve as resolvePath, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { CatalogBundle, loadBundle, starterBundle } from './catalog/bundle.js';
+import { fullDir } from './catalog/client.js';
 import type { TryaiiDreConfig } from './config.js';
 import type { ClassificationResult } from './classifiers/base.js';
 import type { RouteResult } from './router.js';
@@ -41,6 +43,8 @@ export interface DaemonState {
   runtime: string;
   version: string;
   embeddingModel: string;
+  /** "<kind>:<version>" of the catalog the daemon routes on. */
+  catalog?: string;
   host: string;
   port: number;
   token: string;
@@ -52,6 +56,47 @@ interface EnsureOptions {
   autostart?: boolean;
   waitTimeoutMs?: number;
   onStarting?: () => void;
+  /**
+   * The catalog the daemon must route on (default: starter). A daemon
+   * running on another catalog kind/version is stopped and a new one started.
+   */
+  bundle?: CatalogBundle | null;
+}
+
+// ---------------------------------------------------------------------------
+// Catalog (docs/catalog/CONTRACT-catalog-v1.md section 5)
+// ---------------------------------------------------------------------------
+// The daemon routes on exactly the catalog the CLI selected: the client passes
+// it in TRYAII_DAEMON_CATALOG ("starter" or the absolute directory of a cached
+// full-catalog version) and the daemon records "<kind>:<version>" in its state
+// file. A daemon on another catalog (or a pre-catalog daemon with no
+// "catalog" key) is stopped and replaced. Same as the Python SDK.
+
+export const CATALOG_ENV = 'TRYAII_DAEMON_CATALOG';
+
+/** "<kind>:<version>" of a CatalogBundle. */
+export function catalogKey(bundle: CatalogBundle): string {
+  return `${bundle.kind}:${bundle.version}`;
+}
+
+/**
+ * What to hand the daemon for `bundle`: "starter", the full bundle's
+ * directory, or null when it cannot be reloaded from disk.
+ */
+export function catalogSpec(bundle: CatalogBundle | null | undefined): string | null {
+  if (!bundle || bundle.kind === 'starter') return 'starter';
+  return bundle.directory ?? null;
+}
+
+/** Inverse of catalogSpec (server side). Empty = starter. */
+export function bundleFromSpec(spec: string | null | undefined): CatalogBundle {
+  if (!spec || spec === 'starter') return starterBundle();
+  // A directory of the full-catalog cache is a cache load: its signature is
+  // re-verified (catalog contract section 6). Other paths are the caller's
+  // own bundles (new Router({ bundle })), loaded as given.
+  const rel = relative(resolvePath(fullDir()), resolvePath(spec));
+  const inCache = rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+  return loadBundle(spec, { verifySignature: inCache });
 }
 
 // ---------------------------------------------------------------------------
@@ -173,12 +218,19 @@ const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 // Discovery
 // ---------------------------------------------------------------------------
 
-/** A running daemon matching this runtime + embedding model, or null. */
-export async function liveState(config: TryaiiDreConfig): Promise<DaemonState | null> {
+/**
+ * A running daemon matching this runtime + embedding model (+ catalog key,
+ * when given), or null.
+ */
+export async function liveState(
+  config: TryaiiDreConfig,
+  catalog?: string,
+): Promise<DaemonState | null> {
   const state = readState(config);
   if (!state) return null;
   if (state.runtime !== RUNTIME) return null;
   if (state.embeddingModel !== config.embeddingModel) return null;
+  if (catalog !== undefined && state.catalog !== catalog) return null;
   try {
     const resp = await request(state, { cmd: 'ping' }, 5000);
     return resp.ok ? state : null;
@@ -229,7 +281,7 @@ function releaseSpawnLock(config: TryaiiDreConfig): void {
   }
 }
 
-function spawnServe(config: TryaiiDreConfig): ChildProcess {
+function spawnServe(config: TryaiiDreConfig, catalogSpecValue = 'starter'): ChildProcess {
   mkdirSync(config.dataDir, { recursive: true });
   // Launch the server module directly as a detached process -- there is no
   // public `serve` subcommand. server.js reads its model + data dir from the
@@ -245,6 +297,7 @@ function spawnServe(config: TryaiiDreConfig): ChildProcess {
         ...process.env,
         TRYAII_DRE_EMBEDDING_MODEL: config.embeddingModel,
         TRYAII_DRE_DATA_DIR: config.dataDir,
+        [CATALOG_ENV]: catalogSpecValue,
         TRYAII_NO_DAEMON: '1',
       },
     },
@@ -263,9 +316,22 @@ export async function ensureDaemon(
   config: TryaiiDreConfig,
   opts: EnsureOptions = {},
 ): Promise<DaemonState | null> {
-  let info = await liveState(config);
+  const bundle = opts.bundle ?? starterBundle();
+  const key = catalogKey(bundle);
+  const spec = catalogSpec(bundle);
+  if (spec === null) return null; // an in-memory-only bundle cannot be handed to a daemon
+  let info = await liveState(config, key);
   if (info) return info;
   if (opts.autostart === false) return null;
+  const other = await liveState(config);
+  if (other !== null && other.catalog !== key) {
+    // Alive, same runtime + model, but another catalog: replace it -- unless
+    // a concurrent CLI already replaced it with one on our catalog (stop()
+    // rereads the state file and keeps a daemon on `key`).
+    await stop(config, { keepCatalog: key });
+    info = await liveState(config, key);
+    if (info) return info;
+  }
 
   // The lock and log files live in the data dir, so it must exist before we
   // try to create them (first-ever run starts from nothing).
@@ -275,12 +341,16 @@ export async function ensureDaemon(
   let child: ChildProcess | null = null;
   try {
     if (acquired) {
+      // A concurrent CLI may have started the right daemon (and released the
+      // lock) since we looked: never clobber a live one on `key`.
+      info = await liveState(config, key);
+      if (info) return info;
       clearState(config);
-      child = spawnServe(config);
+      child = spawnServe(config, spec);
     }
     let notified = false;
     while (Date.now() < deadline) {
-      info = await liveState(config);
+      info = await liveState(config, key);
       if (info) return info;
       if (child && child.exitCode !== null) return null;
       if (opts.onStarting && !notified) {
@@ -295,9 +365,21 @@ export async function ensureDaemon(
   }
 }
 
-export async function stop(config: TryaiiDreConfig): Promise<boolean> {
+/**
+ * Stop the daemon. Resolves true if one was running.
+ *
+ * `keepCatalog`: a catalog key (`<kind>:<version>`); when the state file --
+ * reread here -- already names that catalog, the daemon is left running (it
+ * was started by a concurrent CLI on the catalog the caller wants) and false
+ * is returned.
+ */
+export async function stop(
+  config: TryaiiDreConfig,
+  opts: { keepCatalog?: string } = {},
+): Promise<boolean> {
   const state = readState(config);
   if (!state) return false;
+  if (opts.keepCatalog !== undefined && state.catalog === opts.keepCatalog) return false;
   let stopped = false;
   try {
     const resp = await request(state, { cmd: 'shutdown' }, 5000);
@@ -330,6 +412,17 @@ interface SerializedScore {
   qualityContribution: number;
   costContribution: number;
   speedContribution: number;
+  // satisficing-v1 additions. Optional so a score serialized by an older
+  // daemon still deserializes (the defaults below describe "no band known").
+  bandBase?: number;
+  inBand?: boolean;
+  qualityTolerance?: number;
+  qualityBest?: number;
+  signalFlags?: string[];
+  qPrime?: number;
+  uCost?: number;
+  uSpeed?: number;
+  t300?: number | null;
   topBenchmarks: Array<[string, number]>;
   reasoning: string;
 }
@@ -353,7 +446,19 @@ export function deserializeRouteResult(data: SerializedResult): RouteResult {
     qualityContribution: s.qualityContribution,
     costContribution: s.costContribution,
     speedContribution: s.speedContribution,
+    bandBase: s.bandBase ?? 0,
+    inBand: s.inBand ?? false,
+    qualityTolerance: s.qualityTolerance ?? 0,
+    qualityBest: s.qualityBest ?? s.qualityScore,
+    signalFlags: s.signalFlags ?? [],
+    qPrime: s.qPrime ?? s.qualityScore,
+    uCost: s.uCost ?? s.costScore,
+    uSpeed: s.uSpeed ?? s.speedScore,
+    t300: s.t300 ?? null,
     topBenchmarks: (s.topBenchmarks ?? []).map(([name, value]) => [name, value] as [string, number]),
+    // Diagnostic only, deliberately not on the daemon wire -- a deserialized
+    // score reports no per-term weights rather than inventing them.
+    benchmarkWeights: {},
     reasoning: s.reasoning,
   }));
 
@@ -391,4 +496,28 @@ export async function routeViaDaemon(
   );
   if (!resp.ok) throw new Error(resp.error ?? 'daemon route failed');
   return deserializeRouteResult(resp.result as SerializedResult);
+}
+
+/**
+ * A routing function that goes through the daemon at `state` and, the first
+ * time a daemon request fails (it died mid-request, was replaced, answered an
+ * error), switches to the in-process route function `fallback()` builds --
+ * for that call and every later one.
+ */
+export function routeWithFallback(
+  state: DaemonState,
+  fallback: () => (prompt: string, priorities: Priorities, topK: number) => Promise<RouteResult>,
+): (prompt: string, priorities: Priorities, topK: number) => Promise<RouteResult> {
+  let inProcess: ((prompt: string, priorities: Priorities, topK: number) => Promise<RouteResult>) | null =
+    null;
+  return async (prompt, priorities, topK) => {
+    if (inProcess === null) {
+      try {
+        return await routeViaDaemon(state, prompt, priorities, topK);
+      } catch {
+        inProcess = fallback();
+      }
+    }
+    return inProcess(prompt, priorities, topK);
+  };
 }

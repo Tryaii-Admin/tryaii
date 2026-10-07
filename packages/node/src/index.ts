@@ -39,11 +39,38 @@ export { createDefaultConfig, DEFAULT_DATA_DIR, DEFAULT_EMBEDDING_MODEL } from '
 export type { TryaiiDreConfig, CacheConfig } from './config.js';
 
 // Registry
-export { ModelRegistry, ModelInfo, ModelPricing } from './registry/index.js';
+export {
+  ModelRegistry,
+  ModelInfo,
+  ModelPricing,
+  FREE_TIER_SUFFIX,
+  isFreeTier,
+  computeBenchmarkCoverage,
+} from './registry/index.js';
 
 // Scoring
-export { ScoringEngine, SPEED_SCORES } from './scoring/engine.js';
-export type { ModelScore } from './scoring/engine.js';
+export {
+  ScoringEngine,
+  EPS_UNIT,
+  PRICE_LO_PER_M,
+  PRICE_HI_PER_M,
+  T300_LO_S,
+  T300_HI_S,
+  FALLBACK_MEDIAN_TTFT_MS,
+  FALLBACK_P25_SPEED_UTILITY,
+  SIGNAL_FLAGS,
+  IMPUTED_TERM_WEIGHT,
+  COVERAGE_EXPONENT,
+  avgPricePer1k,
+  costUtility,
+  t300Seconds,
+  speedUtility,
+  speedUtilityFromT300,
+  registrySpeedStats,
+  qualityTolerance,
+  satisficingCombine,
+} from './scoring/engine.js';
+export type { ModelScore, RegistrySpeedStats, SpeedUtility, CombinedScore } from './scoring/engine.js';
 export { Priorities, DEFAULT_PRIORITIES } from './scoring/priorities.js';
 export type { PrioritiesData } from './scoring/priorities.js';
 export {
@@ -54,6 +81,7 @@ export {
   DEFAULT_BENCHMARK_WEIGHT,
   RANDOM_CHANCE_FLOORS,
   isImplausibleBenchmarkScore,
+  rangesFromBundle,
 } from './scoring/benchmarks.js';
 
 // Classifiers
@@ -68,6 +96,31 @@ export { LocalEmbeddingProvider } from './embeddings/local.js';
 // Centroids
 export { CentroidGenerator } from './centroids/generator.js';
 export { CentroidLoader } from './centroids/loader.js';
+
+// Catalog bundles
+export {
+  CatalogBundle,
+  BundleError,
+  BundleIntegrityError,
+  BundleSchemaError,
+  BundleSignatureError,
+  SUPPORTED_SCHEMA,
+  bundleFromTexts,
+  loadBundle,
+  resolveBundle,
+  starterBundle,
+  verifyManifestSignature,
+} from './catalog/bundle.js';
+export { TRUSTED_KEYS_ENV } from './catalog/signing.js';
+export type { BundleLike, BundleManifest, BenchmarkEntry, BenchmarksJson } from './catalog/bundle.js';
+export {
+  CATALOG_MODES,
+  CatalogError,
+  LoginRequiredError,
+  SessionEndedError,
+  selectCatalog,
+} from './catalog/client.js';
+export type { CatalogMode, CatalogNotice, CatalogSelection } from './catalog/client.js';
 
 // Benchmarks
 export { BenchmarkRegistry } from './benchmarks/registry.js';

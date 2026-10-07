@@ -19,19 +19,25 @@ import { vectorMean, vectorNormalize } from '../utils/math.js';
 import { BaseEmbeddingProvider } from '../embeddings/base.js';
 import { CentroidLoader, benchmarkFingerprint } from '../centroids/loader.js';
 import { STANDARD_BENCHMARKS } from '../benchmarks/standard.js';
+import { CatalogBundle } from '../catalog/bundle.js';
 
 /**
  * Benchmark -> [broadCategory, subcategory] mapping for display purposes.
  *
- * Derived from the standard benchmark definitions so the classifier's category
- * labels can never drift from the benchmark taxonomy (or its names). The
- * subcategory is the benchmark's primary (first) subcategory.
+ * Category labels are catalog data (benchmarks.json); this module-level table
+ * is the packaged starter catalog's and is kept for backwards compatibility. A
+ * classifier labels with its centroid loader's catalog bundle (see
+ * `EmbeddingClassifier`). The subcategory is the benchmark's primary (first)
+ * subcategory.
  */
 export const BENCHMARK_CATEGORIES: Record<string, [string, string]> = Object.fromEntries(
   STANDARD_BENCHMARKS.map(
     (b): [string, [string, string]] => [b.name, [b.broadCategory, b.subcategories[0] ?? 'GENERAL']],
   ),
 );
+
+/** Label for a top benchmark the catalog has no category for (custom benchmarks). */
+export const FALLBACK_CATEGORY: [string, string] = ['TECHNICAL', 'CODE_TECHNICAL'];
 
 /**
  * Logistic steepness for intrinsic difficulty. Only affects the spread of the
@@ -117,6 +123,7 @@ export class EmbeddingClassifier extends BaseClassifier {
   private _classificationCache: LRUCache<ClassificationResult>;
   private _easyCentroid: number[] | null = null;
   private _hardCentroid: number[] | null = null;
+  private _categories: Record<string, [string, string]>;
 
   constructor(
     embeddingProvider: BaseEmbeddingProvider,
@@ -125,11 +132,18 @@ export class EmbeddingClassifier extends BaseClassifier {
       embeddingCacheSize?: number;
       classificationCacheSize?: number;
       ttlSeconds?: number;
+      /** Category labels; default: the loader's catalog bundle, else the starter table. */
+      categories?: Record<string, [string, string]>;
     },
   ) {
     super();
     this._provider = embeddingProvider;
     this._centroidLoader = centroidLoader;
+    const bundle = (centroidLoader as { bundle?: unknown } | null)?.bundle;
+    this._categories = {
+      ...(opts?.categories ??
+        (bundle instanceof CatalogBundle ? bundle.benchmarkCategories() : BENCHMARK_CATEGORIES)),
+    };
 
     this._embeddingCache = new LRUCache<number[]>(
       opts?.embeddingCacheSize ?? 300,
@@ -234,7 +248,7 @@ export class EmbeddingClassifier extends BaseClassifier {
       }
     }
 
-    const categories = BENCHMARK_CATEGORIES[topBenchmark] ?? ['TECHNICAL', 'CODE_TECHNICAL'];
+    const categories = this._categories[topBenchmark] ?? FALLBACK_CATEGORY;
 
     const result: ClassificationResult = {
       benchmarkScores,

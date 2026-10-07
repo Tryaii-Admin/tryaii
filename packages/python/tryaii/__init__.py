@@ -26,6 +26,15 @@ from tryaii.budget import (
     estimate_tokens,
     route_dataset_with_budget,
 )
+from tryaii.catalog import (
+    BundleError,
+    BundleIntegrityError,
+    BundleSchemaError,
+    CatalogBundle,
+    LoginRequiredError,
+    SessionEndedError,
+    load_bundle,
+)
 from tryaii.client import DREClient
 from tryaii.config import TryaiiDreConfig
 from tryaii.registry.models import ModelInfo, ModelRegistry
@@ -36,7 +45,7 @@ from tryaii.scoring.priorities import DEFAULT_PRIORITIES, Priorities
 # configures handlers. Done after imports to keep module-level imports at top.
 logging.getLogger("tryaii").addHandler(logging.NullHandler())
 
-__version__ = "0.5.1"
+__version__ = "0.6.0"
 
 __all__ = [
     "Router",
@@ -46,6 +55,13 @@ __all__ = [
     "Priorities",
     "DEFAULT_PRIORITIES",
     "BenchmarkRegistry",
+    "CatalogBundle",
+    "load_bundle",
+    "BundleError",
+    "BundleIntegrityError",
+    "BundleSchemaError",
+    "SessionEndedError",
+    "LoginRequiredError",
     "TryaiiDreConfig",
     "DREClient",
     "AsyncDREClient",

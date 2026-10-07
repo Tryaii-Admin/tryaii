@@ -93,11 +93,11 @@ class TestRouter:
     def test_route_filter_provider(self, router):
         result = router.route(
             "Write code",
-            filter_provider="Anthropic",
+            filter_provider="Anthropic",  # case-insensitive
         )
         for score in result.scores:
             model = router.models.get_model(score.model_id)
-            assert model.provider == "Anthropic"
+            assert model.provider == "anthropic"
 
     def test_route_filter_max_cost(self, router):
         result = router.route(

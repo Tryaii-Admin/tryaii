@@ -83,6 +83,7 @@ def _handle(req: dict, router, token: str, state: dict) -> dict:
             "runtime": state["runtime"],
             "version": state["version"],
             "embeddingModel": state["embeddingModel"],
+            "catalog": state.get("catalog"),
             "pid": state["pid"],
             "uptimeMs": int(time.time() * 1000) - state["startedAtMs"],
         }
@@ -116,6 +117,7 @@ def serve(
     idle_timeout: Optional[int] = None,
     router=None,
     log: Optional[Callable[[str], None]] = None,
+    catalog: Optional[str] = None,
 ) -> None:
     """Run the routing daemon until idle or shut down.
 
@@ -126,6 +128,9 @@ def serve(
         router: Pre-built router (used by tests to skip the model load). When
             None, a Router is built from config and warmed.
         log: Optional line logger; defaults to stdout.
+        catalog: "starter" or a full-catalog version directory (default: the
+            TRYAII_DAEMON_CATALOG env var the spawning client sets; empty =
+            starter). Recorded as "<kind>:<version>" in the state file.
     """
     from tryaii import __version__
     from tryaii.config import TryaiiDreConfig
@@ -135,10 +140,13 @@ def serve(
     idle = idle_timeout if idle_timeout is not None else _daemon.idle_seconds()
     emit = log or (lambda msg: print(msg, flush=True))
 
+    spec = catalog if catalog is not None else os.environ.get(_daemon.CATALOG_ENV)
+    bundle = _daemon.bundle_from_spec(spec)
+
     if router is None:
         from tryaii import Priorities, Router
 
-        router = Router(config=config)
+        router = Router(config=config, bundle=bundle)
         emit(f"[daemon] loading embedding model '{config.embedding_model}' (one-time)...")
         started = time.time()
         router.route("warmup", priorities=Priorities(), top_k=1)
@@ -151,6 +159,7 @@ def serve(
         "runtime": _daemon.RUNTIME,
         "version": __version__,
         "embeddingModel": config.embedding_model,
+        "catalog": _daemon.catalog_key(bundle),
         "host": host,
         "port": port,
         "token": token,

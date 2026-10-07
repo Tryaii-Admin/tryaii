@@ -4,11 +4,14 @@
 
 ## Constructing
 
-All dependencies are injectable; defaults give you the bundled 39-model catalog, 12 standard benchmarks, and local embeddings (initialized lazily on first route).
+All dependencies are injectable; defaults give you the models and benchmarks of the [default catalog](../models/presets.md) and local embeddings (initialized lazily on first route). The default catalog is the 45-model, 16-benchmark **starter catalog** shipped in the package, or — after [`tryaii login`](../../cli/login.md) (free) — the **full catalog** of 322 routable models, downloaded and refreshed at most once a day. Ephemeral `:free` variants are never routed.
+
+`catalog` picks it: `"auto"` (default; full when logged in, else starter), `"starter"` (always the packaged catalog, no network) or `"full"` (raises `LoginRequiredError` when not logged in). A session the server rejected raises `SessionEndedError` (the local credentials and cached catalog are deleted; run `tryaii login` again). `bundle=` routes on a catalog bundle directory you loaded yourself. In Node the constructor starts from the local cache and the first `route()` (or `await router.ready()`) completes the daily check.
 
 ```python
 from tryaii import Router, TryaiiDreConfig
 router = Router()                                     # all defaults
+router = Router(catalog="starter")                    # packaged catalog, offline
 router = Router(config=TryaiiDreConfig(embedding_model="all-mpnet-base-v2"),
                 registry=my_registry,                 # ModelRegistry
                 benchmark_registry=my_benchmarks,     # BenchmarkRegistry
@@ -18,6 +21,7 @@ router = Router(config=TryaiiDreConfig(embedding_model="all-mpnet-base-v2"),
 ```ts
 import { Router } from 'tryaii';
 const router = new Router();                          // all defaults
+const offline = new Router({ catalog: 'starter' });   // packaged catalog, offline
 const custom = new Router({
   config: { embeddingModel: 'all-mpnet-base-v2' },    // Partial<TryaiiDreConfig>
   registry, benchmarkRegistry, embeddingProvider,
@@ -63,14 +67,14 @@ Behavior to know:
 
 ```python
 router.add_model("my-model", provider="custom",
-                 benchmarks={"HumanEval": 85}, pricing=(0.001, 0.002), latency="fast")
+                 benchmarks={"LiveCodeBench": 85}, pricing=(0.001, 0.002), latency="fast")
 router.add_benchmark("CustomerSupportQA", queries=[...10-20 prompts...],
                      description="...", min_score=0, max_score=100)
 ```
 
 ```ts
 router.addModel({ modelId: 'my-model', provider: 'custom',
-                  benchmarks: { HumanEval: 85 }, pricing: [0.001, 0.002], latency: 'fast' });
+                  benchmarks: { LiveCodeBench: 85 }, pricing: [0.001, 0.002], latency: 'fast' });
 await router.addBenchmark('CustomerSupportQA', queries, 'description', 0, 100);
 ```
 

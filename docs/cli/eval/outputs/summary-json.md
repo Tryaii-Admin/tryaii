@@ -14,14 +14,14 @@ Pretty-printed JSON describing the whole run. This exact shape also feeds the [d
   "totalRouteMs": 4944.0,
   "priorities": { "quality": 5, "cost": 1, "speed": 1 },
   "distribution": [
-    { "model": "claude-sonnet-4-5-20250929", "count": 60, "pct": 50.85 }
+    { "model": "anthropic/claude-fable-5", "count": 60, "pct": 50.85 }
   ],
   "byCategory": [
     {
       "category": "code",
       "count": 80,
       "topModels": [ { "model": "...", "count": 40, "pct": 50.0 } ],
-      "topBenchmarks": [ { "name": "HumanEval", "avgScore": 0.6021 } ]
+      "topBenchmarks": [ { "name": "LiveCodeBench", "avgScore": 0.26 } ]
     }
   ]
 }
