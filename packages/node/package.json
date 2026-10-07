@@ -1,6 +1,6 @@
 {
   "name": "tryaii",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "AI model router for Node.js and TypeScript with benchmark, cost, and speed-based ranking",
   "type": "module",
   "main": "dist/index.js",
@@ -53,12 +53,12 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tamirblu/Tryaii-RE.git",
+    "url": "git+https://github.com/Tryaii-Admin/tryaii.git",
     "directory": "packages/node"
   },
-  "homepage": "https://github.com/tamirblu/Tryaii-RE/tree/main/packages/node#readme",
+  "homepage": "https://github.com/Tryaii-Admin/tryaii/tree/main/packages/node#readme",
   "bugs": {
-    "url": "https://github.com/tamirblu/Tryaii-RE/issues"
+    "url": "https://github.com/Tryaii-Admin/tryaii/issues"
   },
   "dependencies": {
     "js-tiktoken": "^1.0.21",

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.1 (2026-10-07)
+
+First npm release of the 0.6 line: 0.6.0 was published to PyPI only. Features are
+listed under 0.6.0 below.
+
+- Package metadata (npm `repository`, `homepage`, `bugs`; PyPI project URLs) now
+  points to https://github.com/Tryaii-Admin/tryaii.
+
 ## 0.6.0 (2026-10-07)
 
 ### Highlights

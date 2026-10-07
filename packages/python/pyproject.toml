@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tryaii"
-version = "0.6.0"
+version = "0.6.1"
 description = "TryAii Diff Routing Engine -- Embedding-based AI model router. Understands your prompt semantically and routes to the best model based on benchmarks, cost, speed, and quality."
 readme = "README.md"
 license = "Apache-2.0"
@@ -70,10 +70,10 @@ dev = [
 tryaii = "tryaii.cli.main:cli"
 
 [project.urls]
-Homepage = "https://github.com/tamirblu/Tryaii-RE"
-Documentation = "https://github.com/tamirblu/Tryaii-RE#readme"
-Repository = "https://github.com/tamirblu/Tryaii-RE"
-Issues = "https://github.com/tamirblu/Tryaii-RE/issues"
+Homepage = "https://github.com/Tryaii-Admin/tryaii"
+Documentation = "https://github.com/Tryaii-Admin/tryaii#readme"
+Repository = "https://github.com/Tryaii-Admin/tryaii"
+Issues = "https://github.com/Tryaii-Admin/tryaii/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["tryaii"]
