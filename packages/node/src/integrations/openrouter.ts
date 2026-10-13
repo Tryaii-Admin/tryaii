@@ -150,6 +150,16 @@ export class OpenRouterIntegration {
     }
   }
 
+  /**
+   * The `provider` object the router's data-save policy requires for
+   * `modelId` (shared/datasave/SPEC.md section 4), or null. Throws
+   * `PolicyError` when the policy excludes the model.
+   */
+  private _providerPreferences(modelId: string): Record<string, unknown> | null {
+    const prefs = this._router?.providerPreferences;
+    return typeof prefs === 'function' ? (prefs.call(this._router, modelId) ?? null) : null;
+  }
+
   /** Convert TryAii model ID to OpenRouter slug. */
   private _resolveModel(modelId: string): string {
     return MODEL_ID_TO_OPENROUTER[modelId] ?? modelId;
@@ -206,6 +216,7 @@ export class OpenRouterIntegration {
     }
 
     const openrouterModel = this._resolveModel(modelId);
+    const providerPrefs = this._providerPreferences(modelId);
 
     // Build messages
     const messages: Array<{ role: string; content: string }> = [];
@@ -220,6 +231,8 @@ export class OpenRouterIntegration {
       : null;
 
     const payload = this._buildPayload(openrouterModel, messages, opts, false);
+    // Data-save policy: pin the OpenRouter hosts the policy allows.
+    if (providerPrefs !== null) payload.provider = providerPrefs;
 
     // Make API call using native fetch
     const response = await fetch(`${OpenRouterIntegration.OPENROUTER_BASE_URL}/chat/completions`, {
@@ -286,6 +299,7 @@ export class OpenRouterIntegration {
     }
 
     const openrouterModel = this._resolveModel(modelId);
+    const providerPrefs = this._providerPreferences(modelId);
 
     const messages: Array<{ role: string; content: string }> = [];
     if (opts?.systemMessage) {
@@ -299,6 +313,8 @@ export class OpenRouterIntegration {
       : null;
 
     const payload = this._buildPayload(openrouterModel, messages, opts, true);
+    // Data-save policy: pin the OpenRouter hosts the policy allows.
+    if (providerPrefs !== null) payload.provider = providerPrefs;
 
     const response = await fetch(`${OpenRouterIntegration.OPENROUTER_BASE_URL}/chat/completions`, {
       method: 'POST',

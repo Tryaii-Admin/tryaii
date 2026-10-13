@@ -10,6 +10,7 @@ trusted key (contract section 6, :mod:`tryaii.catalog.signing`).
 from tryaii.catalog.bundle import (
     BUNDLE_DATA_FILES,
     MANIFEST_FILE,
+    OPTIONAL_DATA_FILES,
     STARTER_BUNDLE_DIR,
     SUPPORTED_SCHEMA,
     BundleError,
@@ -40,6 +41,7 @@ from tryaii.catalog.signing import (
 __all__ = [
     "BUNDLE_DATA_FILES",
     "MANIFEST_FILE",
+    "OPTIONAL_DATA_FILES",
     "STARTER_BUNDLE_DIR",
     "SUPPORTED_SCHEMA",
     "BundleError",

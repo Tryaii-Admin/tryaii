@@ -43,6 +43,7 @@ tryaii eval prompts.json --max-price=0.50 --output-tokens=2000
 | `--budget-mode` | `strict` \| `fit-output` | `strict` | budget | [strict-vs-fit-output](budget-mode/strict-vs-fit-output.md) |
 | `--difficulty-source` | `intrinsic` \| `capability` \| `blend` | `intrinsic` | budget | [difficulty](budget-mode/difficulty.md) |
 | `--difficulty-gamma` | float ≥ 0 | `1` | budget | [difficulty](budget-mode/difficulty.md) |
+| `--origin` / `--providers` / `--platform` | see [policy](../policy.md) | saved policy | both | Limit routing to the models a [policy](../policy.md) allows; `summary.json` records it |
 
 Budget-only flags are accepted and validated even without `--max-price`, but take effect only in budget mode.
 

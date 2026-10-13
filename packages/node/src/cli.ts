@@ -8,6 +8,7 @@
  *   tryaii cachelint input.json       -- Pre-flight prompt-cache analysis
  *   tryaii setup                      -- Download the embedding model + warm centroids
  *   tryaii models                     -- List available models
+ *   tryaii policy [show|set|clear]    -- Model origin / provider policy (data save)
  *   tryaii benchmarks                 -- List available benchmarks
  *   tryaii help [command]             -- Global help, or detailed help for one command
  *
@@ -23,6 +24,8 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import { showBanner } from './banner.js';
+import { appsMain } from './cli-apps.js';
+import { MonitorUsageError, monitorMain } from './cli-monitor.js';
 import { BudgetMode, DifficultySource, routeDatasetWithBudget } from './budget.js';
 // Half-even formatting matches Python's f"{x:.2f}" (parity for money lines
 // in the diagnose summary); halfEven.ts is tiny and data-free.
@@ -42,6 +45,18 @@ import { LocalEmbeddingProvider } from './embeddings/local.js';
 import { DashboardSummary, renderDashboard } from './dashboard/index.js';
 import { ModelInfo, ModelRegistry } from './registry/models.js';
 import { writePaced } from './output.js';
+import {
+  clearSavedPolicy,
+  evaluate,
+  loadSavedPolicy,
+  ModelPolicy,
+  originLabel,
+  PolicyCatalogError,
+  PolicyError,
+  PolicyResult,
+  savePolicy,
+} from './policy.js';
+import type { PolicyField } from './policy.js';
 import {
   MAX_PROMPT_LENGTH,
   Router,
@@ -87,12 +102,15 @@ async function cliCatalog(nudge = false): Promise<CatalogBundle> {
  * one if needed) so repeated CLI calls skip the embedding-model load. Falls back
  * to an in-process Router when the daemon is disabled, unavailable, or slow to
  * start. Both route on `bundle` (the catalog the command selected); a daemon on
- * another catalog is replaced.
+ * another catalog is replaced. `allowedModels` (a data-save policy's allowed
+ * ids) limits the candidates on both paths; null = no policy, and then both
+ * paths are called exactly as before policies existed.
  */
 async function acquireRouteFn(
   config: TryaiiDreConfig,
   noDaemon: boolean,
   bundle: CatalogBundle,
+  allowedModels: string[] | null = null,
 ): Promise<{ routeFn: RouteFn; source: 'daemon' | 'inprocess' }> {
   if (!noDaemon && !daemon.isDisabled()) {
     let state: daemon.DaemonState | null = null;
@@ -109,16 +127,31 @@ async function acquireRouteFn(
       state = null;
     }
     if (state) {
-      return { routeFn: routeViaDaemonOrFallback(state, config, bundle), source: 'daemon' };
+      return {
+        routeFn: routeViaDaemonOrFallback(state, config, bundle, allowedModels),
+        source: 'daemon',
+      };
     }
   }
 
-  return { routeFn: inProcessRouteFn(config, bundle), source: 'inprocess' };
+  return { routeFn: inProcessRouteFn(config, bundle, allowedModels), source: 'inprocess' };
 }
 
-function inProcessRouteFn(config: TryaiiDreConfig, bundle: CatalogBundle): RouteFn {
-  const router = new Router({ config: { embeddingModel: config.embeddingModel }, bundle });
-  return (prompt, priorities, topK) => router.route(prompt, { priorities, topK });
+function inProcessRouteFn(
+  config: TryaiiDreConfig,
+  bundle: CatalogBundle,
+  allowedModels: string[] | null = null,
+): RouteFn {
+  // policy null: the command already resolved its policy into allowedModels.
+  const router = new Router({
+    config: { embeddingModel: config.embeddingModel },
+    bundle,
+    policy: null,
+  });
+  if (allowedModels === null) {
+    return (prompt, priorities, topK) => router.route(prompt, { priorities, topK });
+  }
+  return (prompt, priorities, topK) => router.route(prompt, { priorities, topK, allowedModels });
 }
 
 /**
@@ -131,8 +164,16 @@ function routeViaDaemonOrFallback(
   state: daemon.DaemonState,
   config: TryaiiDreConfig,
   bundle: CatalogBundle,
+  allowedModels: string[] | null = null,
 ): RouteFn {
-  return daemon.routeWithFallback(state, () => inProcessRouteFn(config, bundle));
+  if (allowedModels === null) {
+    return daemon.routeWithFallback(state, () => inProcessRouteFn(config, bundle));
+  }
+  return daemon.routeWithFallback(
+    state,
+    () => inProcessRouteFn(config, bundle, allowedModels),
+    allowedModels,
+  );
 }
 
 /** Error type whose message is shown to the user without a stack trace. */
@@ -149,6 +190,70 @@ class CliExit extends Error {
 class CliUsageError extends CliError {}
 
 const out = process.stdout;
+
+/** The --origin / --providers / --platform values of route, eval and models. */
+interface PolicyFlags {
+  origin?: string;
+  providers?: string;
+  platform?: string;
+}
+
+/** parseArgs options for the policy flags of route, eval and models. */
+const POLICY_FLAG_OPTIONS = {
+  origin: { type: 'string' },
+  providers: { type: 'string' },
+  platform: { type: 'string' },
+} as const;
+
+/** Print `message` to stderr and stop with `code`. */
+function failWith(message: string, code: number): never {
+  process.stderr.write(`${message}\n`);
+  throw new CliExit(code);
+}
+
+/**
+ * The data-save policy for this command (shared/datasave/SPEC.md): the saved
+ * policy with --origin / --providers / --platform overriding it. Returns a
+ * PolicyResult over the catalog's models, or null when no policy is active.
+ * Exits 2 on a bad flag value, 1 when the saved policy file is broken or the
+ * catalog has no origin data (never routes unfiltered). Mirrors _cli_policy.
+ */
+function cliPolicy(flags: PolicyFlags, bundle: CatalogBundle): PolicyResult | null {
+  let saved: ModelPolicy;
+  try {
+    saved = loadSavedPolicy();
+  } catch (error) {
+    if (error instanceof PolicyError) failWith(`error: ${error.message}`, 1);
+    throw error;
+  }
+  let policy: ModelPolicy;
+  try {
+    policy = saved.merged({
+      origin: flags.origin,
+      providers: flags.providers,
+      platform: flags.platform,
+    });
+  } catch (error) {
+    if (error instanceof PolicyError) failWith(`error: ${error.message}`, 2);
+    throw error;
+  }
+  if (!policy.active) return null;
+  try {
+    return evaluate(policy, bundle.origins, ModelRegistry.fromBundle(bundle).modelIds);
+  } catch (error) {
+    if (error instanceof PolicyCatalogError) failWith(error.message, 1);
+    if (error instanceof PolicyError) failWith(`error: ${error.message}`, 2);
+    throw error;
+  }
+}
+
+/** `Policy: <summary> (<allowed> of <total> models allowed)`. */
+function policyLine(result: PolicyResult): string {
+  return (
+    `Policy: ${result.policy.summary()} ` +
+    `(${result.allowed.length} of ${result.total} models allowed)`
+  );
+}
 
 function intFlag(name: string, value: string | undefined, fallback: number): number {
   if (value === undefined) return fallback;
@@ -185,6 +290,7 @@ async function cmdRoute(subArgs: string[]): Promise<void> {
       cost: { type: 'string', default: '3' },
       speed: { type: 'string', default: '3' },
       'top-k': { type: 'string', default: '5' },
+      ...POLICY_FLAG_OPTIONS,
       'no-daemon': { type: 'boolean', default: false },
     },
   });
@@ -203,7 +309,13 @@ async function cmdRoute(subArgs: string[]): Promise<void> {
 
   const config = createDefaultConfig();
   const bundle = await cliCatalog(true);
-  const { routeFn } = await acquireRouteFn(config, Boolean(values['no-daemon']), bundle);
+  const policyResult = cliPolicy(values, bundle);
+  const { routeFn } = await acquireRouteFn(
+    config,
+    Boolean(values['no-daemon']),
+    bundle,
+    policyResult !== null ? policyResult.allowed : null,
+  );
   const result = await routeFn(prompt, priorities, topK);
   const classification = result.classification;
 
@@ -215,6 +327,7 @@ async function cmdRoute(subArgs: string[]): Promise<void> {
   buf += `Category: ${classification?.broadCategory ?? ''} > ${classification?.subcategory ?? ''}\n`;
   buf += `Confidence: ${(classification?.confidence ?? 0).toFixed(3)}\n`;
   buf += `Classifier: ${classification?.classifierUsed ?? ''}\n`;
+  if (policyResult !== null) buf += policyLine(policyResult) + '\n';
   buf += `\nTop ${result.scores.length} Recommendations:\n`;
   buf += '-'.repeat(70) + '\n';
 
@@ -316,22 +429,36 @@ async function cmdModels(subArgs: string[]): Promise<void> {
     options: {
       provider: { type: 'string' },
       json: { type: 'boolean', default: false },
+      ...POLICY_FLAG_OPTIONS,
     },
   });
 
-  const registry = ModelRegistry.fromBundle(await cliCatalog(true));
+  const bundle = await cliCatalog(true);
+  const registry = ModelRegistry.fromBundle(bundle);
   let models = registry.allModels;
+  const policyResult = cliPolicy(values, bundle);
+  if (policyResult !== null) {
+    const allowed = new Set(policyResult.allowed);
+    models = models.filter((m) => allowed.has(m.modelId));
+  }
+  const origins = bundle.origins;
   if (values.provider) {
     const provider = values.provider.toLowerCase();
     models = models.filter((m) => m.provider.toLowerCase() === provider);
   }
 
   if (values.json) {
-    out.write(JSON.stringify(models.map((m) => m.toDict()), null, 2) + '\n');
+    const data = models.map((m) => {
+      const entry: Record<string, unknown> = { ...m.toDict() };
+      if (origins !== null) entry.origin = originLabel(origins, m.modelId);
+      return entry;
+    });
+    out.write(JSON.stringify(data, null, 2) + '\n');
     return;
   }
 
   let buf = `\nAvailable Models (${models.length}):\n`;
+  if (policyResult !== null) buf += policyLine(policyResult) + '\n';
   buf += '-'.repeat(70) + '\n';
 
   const byProvider = new Map<string, ModelInfo[]>();
@@ -350,11 +477,88 @@ async function cmdModels(subArgs: string[]): Promise<void> {
       if (model.pricing) {
         price = ` | $${model.pricing.inputPer1k.toFixed(4)}/${model.pricing.outputPer1k.toFixed(4)}`;
       }
-      buf += `    - ${model.modelId} [${latency}]${price}\n`;
+      const origin =
+        origins !== null ? ` | origin: ${originLabel(origins, model.modelId)}` : '';
+      buf += `    - ${model.modelId} [${latency}]${price}${origin}\n`;
     }
   }
 
   await writePaced(buf);
+}
+
+// ---------------------------------------------------------------------------
+// policy (shared/datasave/SPEC.md section 5; mirrors cmd_policy in main.py)
+// ---------------------------------------------------------------------------
+
+const POLICY_ACTIONS = ['show', 'set', 'clear'];
+
+async function cmdPolicy(subArgs: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args: subArgs,
+    allowPositionals: true,
+    options: {
+      ...POLICY_FLAG_OPTIONS,
+      'exclude-providers': { type: 'string' },
+      'allow-countries': { type: 'string' },
+      'deny-countries': { type: 'string' },
+    },
+  });
+  if (positionals.length > 1) {
+    throw new CliUsageError(`unrecognized arguments: ${positionals.slice(1).join(' ')}`);
+  }
+  const action = positionals[0] ?? 'show';
+  if (!POLICY_ACTIONS.includes(action)) {
+    throw new CliUsageError(
+      `argument action: invalid choice: '${action}' (choose from 'show', 'set', 'clear')`,
+    );
+  }
+
+  if (action === 'clear') {
+    out.write(clearSavedPolicy() ? 'Policy cleared.\n' : 'No policy saved.\n');
+    return;
+  }
+  if (action === 'set') {
+    const fields: Record<PolicyField, string | undefined> = {
+      origin: values.origin,
+      providers: values.providers,
+      exclude_providers: values['exclude-providers'],
+      allow_countries: values['allow-countries'],
+      deny_countries: values['deny-countries'],
+      platform: values.platform,
+    };
+    if (!Object.values(fields).some((v) => v)) {
+      throw new CliUsageError(
+        'policy set needs at least one of --origin, --providers, ' +
+          '--exclude-providers, --allow-countries, --deny-countries, --platform',
+      );
+    }
+    let saved: ModelPolicy;
+    try {
+      saved = loadSavedPolicy();
+    } catch (error) {
+      if (!(error instanceof PolicyError)) throw error;
+      saved = new ModelPolicy(); // a broken file is replaced by set
+    }
+    let policy: ModelPolicy;
+    try {
+      policy = saved.merged(fields);
+    } catch (error) {
+      if (error instanceof PolicyError) throw new CliUsageError(error.message);
+      throw error;
+    }
+    savePolicy(policy);
+    out.write(`Saved policy: ${policy.summary()}\n`);
+    return;
+  }
+  let policy: ModelPolicy;
+  try {
+    policy = loadSavedPolicy();
+  } catch (error) {
+    if (error instanceof PolicyError) throw new CliError(error.message);
+    throw error;
+  }
+  if (policy.active) out.write(`Saved policy: ${policy.summary()}\n`);
+  else out.write('No policy saved. All models are allowed.\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -647,6 +851,7 @@ async function cmdEval(subArgs: string[]): Promise<void> {
       'budget-mode': { type: 'string', default: 'strict' },
       'difficulty-source': { type: 'string', default: 'intrinsic' },
       'difficulty-gamma': { type: 'string', default: '1' },
+      ...POLICY_FLAG_OPTIONS,
       'no-daemon': { type: 'boolean', default: false },
     },
   });
@@ -701,13 +906,24 @@ async function cmdEval(subArgs: string[]): Promise<void> {
 
   const config = createDefaultConfig();
   const bundle = await cliCatalog(true);
+  const policyResult = cliPolicy(values, bundle);
+  if (policyResult !== null) {
+    out.write(
+      `[eval] policy     : ${policyResult.policy.summary()} ` +
+        `(${policyResult.allowed.length} of ${policyResult.total} models allowed)\n`,
+    );
+  }
   let results: Record<string, unknown>[];
   let budgetSummary: Record<string, unknown> | null = null;
 
   if (maxPrice != null) {
     // Budget optimization drives the scoring engine directly, so it needs a
     // real in-process Router rather than the daemon's route() surface.
-    const router = new Router({ config: { embeddingModel: config.embeddingModel }, bundle });
+    const router = new Router({
+      config: { embeddingModel: config.embeddingModel },
+      bundle,
+      policy: policyResult !== null ? policyResult.policy : null,
+    });
     out.write('[eval] warming up router...\n');
     await router.route('warmup', { priorities, topK: 1 });
     out.write(
@@ -800,7 +1016,12 @@ async function cmdEval(subArgs: string[]): Promise<void> {
       );
     }
   } else {
-    const { routeFn } = await acquireRouteFn(config, Boolean(values['no-daemon']), bundle);
+    const { routeFn } = await acquireRouteFn(
+      config,
+      Boolean(values['no-daemon']),
+      bundle,
+      policyResult !== null ? policyResult.allowed : null,
+    );
     out.write('[eval] warming up router...\n');
     await routeFn('warmup', priorities, 1);
     results = [];
@@ -829,8 +1050,16 @@ async function cmdEval(subArgs: string[]): Promise<void> {
 
   const summary = buildEvalSummary(results, priorities) as DashboardSummary & {
     budget?: Record<string, unknown>;
+    policy?: Record<string, unknown>;
   };
   if (budgetSummary) summary.budget = budgetSummary;
+  if (policyResult !== null) {
+    summary.policy = {
+      ...policyResult.policy.toDict(),
+      allowedModels: policyResult.allowed.length,
+      totalModels: policyResult.total,
+    };
+  }
   writeFileSync(summaryPath, JSON.stringify(summary, null, 2), 'utf-8');
   writeFileSync(dashboardPath, renderDashboard(summary, inputPath), 'utf-8');
 
@@ -1278,6 +1507,34 @@ async function diagnoseReport(argv: string[]): Promise<void> {
   out.write(`-> ${display}\n`);
 }
 
+/**
+ * Verb dispatcher for `tryaii monitor` (shared/monitor/SPEC.md section 5;
+ * mirrors cmd_monitor in packages/python/tryaii/cli/monitor.py). Usage
+ * errors exit 2, anything else is a runtime failure (exit 1).
+ */
+async function cmdMonitor(subArgs: string[]): Promise<void> {
+  try {
+    monitorMain(subArgs, (text) => out.write(text));
+  } catch (error) {
+    if (error instanceof MonitorUsageError) throw new CliUsageError(error.message);
+    throw error;
+  }
+}
+
+/**
+ * Verb dispatcher for `tryaii apps` (shared/monitor/SPEC.md section 7;
+ * mirrors cmd_apps in packages/python/tryaii/cli/apps.py). Exit codes: 0 ok,
+ * 1 server, network or sign-in failure, 2 usage.
+ */
+async function cmdApps(subArgs: string[]): Promise<void> {
+  const code = await appsMain(subArgs, {
+    out: (text) => out.write(text),
+    err: (text) => process.stderr.write(text),
+    version: version(),
+  });
+  if (code !== 0) throw new CliExit(code);
+}
+
 /** Verb dispatcher for `tryaii diagnose` (verb-peeling, like `help <topic>`). */
 async function cmdDiagnose(subArgs: string[]): Promise<void> {
   const verbs: Record<string, (argv: string[]) => Promise<void>> = {
@@ -1580,8 +1837,11 @@ Commands:
   eval <input.json>     Route a JSON dataset; writes results.jsonl, summary.json, index.html
   cachelint <input.json>  Analyze prompt-cache readiness before sending (--json, --provider)
   diagnose <verb>       Agent-driven codebase diagnostics: plan, check (see 'tryaii help diagnose')
+  monitor <verb>        Watch and steer the LLM calls your app makes: status, set, apps, events (see 'tryaii help monitor')
+  apps <verb>           tryaii.com apps and app keys for monitor upload: create, list, keys, check (see 'tryaii help apps')
   designpartner         Enroll as a tryaii design partner (one resumable command)
   models                List available models (--provider <name>, --json)
+  policy                Show, set or clear the model origin / provider policy
   benchmarks            List available benchmarks (--json)
   setup                 Download the embedding model and warm centroids (--model <name>)
   regenerate            Rebuild benchmark centroids, e.g. after changing the embedding model (--model <name>)
@@ -1594,6 +1854,11 @@ Common options:
   --cost <1-5>          Cost priority for route/eval (default 3)
   --speed <1-5>         Speed priority for route/eval (default 3)
   --top-k <n>           Number of recommendations (default 5)
+
+Policy options (route/eval/models; full catalog, see 'tryaii help policy'):
+  --origin <preset>     no-prc-models, no-prc-hosting or us-eu
+  --providers <a,b>     Only these companies (model maker and host)
+  --platform <name>     Only models served by bedrock, azure or vertex
 
 Eval-only options:
   -o, --output <dir>    Output directory (default: ./tryaii-eval-<timestamp>)
@@ -1638,6 +1903,9 @@ Options:
   --cost <1-5>          Cost priority (default 3; out-of-range clamped)
   --speed <1-5>         Speed priority (default 3; out-of-range clamped)
   --top-k <n>           Number of recommendations shown (default 5)
+  --origin <preset>     Policy: no-prc-models, no-prc-hosting or us-eu
+  --providers <a,b>     Policy: only these companies (model maker and host)
+  --platform <name>     Policy: only models served by bedrock, azure or vertex
   --no-daemon           Route in-process for this call; do not use or start a daemon
 
 Notes:
@@ -1687,6 +1955,9 @@ Options:
   --budget-mode <mode>  'strict' (default) or 'fit-output'
   --difficulty-source <s>  'intrinsic' (default), 'capability', or 'blend'
   --difficulty-gamma <n>   Shift budget toward harder prompts (default 1; 0 disables)
+  --origin <preset>     Policy: no-prc-models, no-prc-hosting or us-eu
+  --providers <a,b>     Policy: only these companies (model maker and host)
+  --platform <name>     Policy: only models served by bedrock, azure or vertex
   --no-daemon           Route in-process for this call; do not use or start a daemon
 
 Notes:
@@ -1713,10 +1984,14 @@ Usage:
 
 Print every model in the default registry, grouped by provider. Each line
 shows: model_id [latency-tier] | $input/output per 1k tokens (price omitted
-when the model has no pricing).
+when the model has no pricing). With the full catalog each line also ends
+with | origin: <countries> (where the model and its base model come from).
 
 Options:
   --provider <name>     Filter to one provider (case-insensitive exact match)
+  --origin <preset>     Policy: no-prc-models, no-prc-hosting or us-eu
+  --providers <a,b>     Policy: only these companies (model maker and host)
+  --platform <name>     Policy: only models served by bedrock, azure or vertex
   --json                Print the (filtered) models as pretty-printed JSON
 
 Examples:
@@ -2002,6 +2277,187 @@ Exit codes:
 Docs: docs/cli/diagnose/report.md
 `;
 
+const HELP_MONITOR = `tryaii monitor -- Watch and steer the LLM calls your app makes
+
+Usage:
+  tryaii monitor <verb> [options]
+
+monitor reads the local records written by tryaii.monitor.wrap(client):
+every call your app makes, the model it used, and the model tryaii's
+shadow routing would have picked (best-for-less: at least the anchor's
+quality for at most its price). Records live under
+<data dir>/monitor/<app>/; only metadata and prompt embeddings are stored,
+never prompt text.
+
+Verbs:
+  status                Per app/process: mode, pinned model, calls, tokens, est. cost, savings
+  set <process> <mode>  Set a process's mode: off (monitor only), stable (24h pin), dynamic,
+                        managed --model <id> (always that model)
+  apps                  List the apps with monitor records
+  events                Print the most recent events (--json emits JSONL)
+
+Options:
+  --app <id>            App to inspect (default: every app for status, the only app otherwise)
+  --since <window>      Window for status: 24h (default), 7d, 30d
+  -n <count>            events: number of lines (default 20)
+  --model <id>          set: the model of a managed process
+  --now <iso8601>       Override the current time (window and pin evaluation)
+  --json                Machine-readable output
+
+With TRYAII_API_KEY set, the wrapper also uploads these records (metadata
+only) to your tryaii.com dashboard and follows the modes set there; see
+'tryaii help apps'.
+
+Examples:
+  tryaii monitor status
+  tryaii monitor set "purchase item" stable --app shop
+  tryaii monitor set summarize managed --model openai/gpt-5-mini
+  tryaii monitor events --app shop -n 50 --json
+
+Exit codes:
+  0 success, 1 runtime failure, 2 usage error or unknown app/mode.
+
+Docs: docs/cli/monitor.md
+`;
+
+const HELP_MONITOR_STATUS = `tryaii monitor status -- Per-process roll-up of the monitored calls
+
+Usage:
+  tryaii monitor status [--app <id>] [--since 24h|7d|30d] [--now <iso8601>] [--json]
+
+One block per app (or just --app): a table with one row per sub-process
+(mode, pinned model, calls, tokens, est. cost, the cost the shadow-routing
+winners would have had, savings, and the top winner with its share), the
+files each sub-process runs in, and totals. Processes named in config.json,
+remote.json or pins.json show even with zero calls. A managed process shows
+as "managed (<model>)".
+
+Two lines close each block: "source: local" or "source: remote etag <etag>
+fetched <time>" (the dashboard config the wrapper follows), and the upload
+state: "upload: off", "upload: ok <n> events at <time>" or
+"upload: error <reason>".
+
+With --json: the status document (one object with --app, else a list).
+With no records at all: "no monitor records under <data dir>/monitor".
+`;
+
+const HELP_MONITOR_SET = `tryaii monitor set -- Set a sub-process's mode
+
+Usage:
+  tryaii monitor set <process> <mode> [--model <id>] [--app <id>]
+
+Modes:
+  off                   Monitor only; the model in your code is used as is
+  stable                Pin, for 24 hours, the model that won most of this process's calls
+  dynamic               Route every call to the best-for-less model
+  managed               Always send --model <id> (when this client can reach it and
+                        your policy allows it; otherwise the model in your code)
+
+Writes <data dir>/monitor/<app>/config.json; a running wrapper picks the
+change up within a few seconds. A mode set on the tryaii.com dashboard
+(remote.json) takes precedence. --app may be omitted when exactly one app
+has records (or TRYAII_APP is set).
+`;
+
+const HELP_MONITOR_APPS = `tryaii monitor apps -- List the apps with monitor records
+
+Usage:
+  tryaii monitor apps [--json]
+
+One app name per line (a JSON array with --json), read from
+<data dir>/monitor/.
+`;
+
+const HELP_MONITOR_EVENTS = `tryaii monitor events -- Print the most recent events
+
+Usage:
+  tryaii monitor events [--app <id>] [-n <count>] [--json]
+
+The newest <count> events (default 20), oldest first. Human lines show
+timestamp, process, model used, mode, winner, tokens, est. cost, route
+status and any error class; --json prints the raw event lines (JSONL).
+`;
+
+const HELP_APPS = `tryaii apps -- tryaii.com apps and app keys for monitor upload
+
+Usage:
+  tryaii apps <verb> [options]
+
+An app groups the monitor records of one program on your tryaii.com
+dashboard. Its app key (tryaii_<key_id>_<secret>) goes into TRYAII_API_KEY
+where the program runs: the monitor wrapper then uploads its call metadata
+(never prompt or response text) and follows the modes set on the dashboard.
+
+Verbs:
+  create <name>         Create an app and its first key (the full key is shown once)
+  list                  Your apps with keys, calls and cost of the last 24 hours
+  keys <app_id>         List an app's keys (prefix only); --new adds one, --revoke removes one
+  check                 Validate TRYAII_API_KEY (or --key) and show its app and scopes
+
+Options:
+  --new                 keys: create a key (at most 2 active keys per app)
+  --label <label>       keys --new: a label for the new key
+  --revoke <key_id>     keys: revoke a key
+  --key <key>           check: the key to validate instead of TRYAII_API_KEY
+  --json                Machine-readable output
+
+create, list and keys act as your account (run 'tryaii login' first);
+check only needs the app key.
+
+Examples:
+  tryaii apps create shop
+  tryaii apps keys app_x1y2z3a4b5c6 --new --label ci
+  TRYAII_API_KEY=tryaii_... tryaii apps check
+
+Exit codes:
+  0 success, 1 server, network or sign-in failure, 2 usage error.
+
+Docs: docs/cli/apps.md
+`;
+
+const HELP_APPS_CREATE = `tryaii apps create -- Create an app and its first key
+
+Usage:
+  tryaii apps create <name> [--json]
+
+Creates the app (names are 1-64 characters, unique per account) and a key
+labelled "default". The full key is printed once -- store it, e.g. as
+TRYAII_API_KEY in the environment of the program you monitor. Needs
+'tryaii login'.
+`;
+
+const HELP_APPS_LIST = `tryaii apps list -- List your apps
+
+Usage:
+  tryaii apps list [--json]
+
+One row per app: id, name, active keys, calls and estimated cost of the
+last 24 hours, and the time of the last uploaded event. Needs
+'tryaii login'.
+`;
+
+const HELP_APPS_KEYS = `tryaii apps keys -- List, create or revoke an app's keys
+
+Usage:
+  tryaii apps keys <app_id> [--json]
+  tryaii apps keys <app_id> --new [--label <label>] [--json]
+  tryaii apps keys <app_id> --revoke <key_id> [--json]
+
+Lists show the key prefix only (tryaii_<key_id>_...). --new prints the full
+new key once; an app has at most 2 active keys (rotate: create the new one,
+deploy it, revoke the old one). Needs 'tryaii login'.
+`;
+
+const HELP_APPS_CHECK = `tryaii apps check -- Validate an app key
+
+Usage:
+  tryaii apps check [--key <key>] [--json]
+
+Validates TRYAII_API_KEY (or --key) against TRYAII_API_URL (default
+https://api.tryaii.com) and prints the app, the key id, its scopes and its
+expiry. Exit 1 when the key is rejected.
+`;
+
 const HELP_DESIGNPARTNER = `tryaii designpartner -- Enroll as a tryaii design partner
 
 Usage:
@@ -2106,6 +2562,45 @@ Exit codes:
   0 signed in, 1 not signed in, session ended or network failure, 2 bad flag.
 `;
 
+const HELP_POLICY = `tryaii policy -- Show, set or clear the model origin / provider policy
+
+Usage:
+  tryaii policy [show]
+  tryaii policy set [options]
+  tryaii policy clear
+
+A policy limits which companies may build the models tryaii picks and which
+may receive your prompts. The saved policy applies to route, eval, models
+and the SDK (Router, DREClient) until cleared; --origin, --providers and
+--platform on a command override it for that call. Policies need the full
+catalog: run 'tryaii login' first.
+
+Options for set (each replaces the saved value; lists are comma-separated):
+  --origin <preset>     no-prc-models   no model made by a PRC company or
+                                        fine-tuned from a PRC model
+                        no-prc-hosting  no host controlled from the PRC
+                        us-eu           models and hosts from the US, the
+                                        EEA, the UK and Switzerland only
+  --providers <a,b>     Only these companies, as model maker and as host
+  --exclude-providers <a,b>  Never these companies
+  --allow-countries <A,B>    Only these countries (ISO codes, e.g. US,FR)
+  --deny-countries <A,B>     Never these countries
+  --platform <name>     Only models served by bedrock, azure or vertex
+
+Models or hosts with unknown origin are always excluded by an active policy.
+
+Examples:
+  tryaii policy set --origin no-prc-models
+  tryaii policy set --providers anthropic,openai
+  tryaii policy set --platform bedrock
+  tryaii policy clear
+
+Exit codes:
+  0 success, 1 runtime failure, 2 bad flag.
+
+Docs: docs/cli/policy.md
+`;
+
 const HELP_HELP = `tryaii help -- Show help for tryaii or a specific command
 
 Usage:
@@ -2117,8 +2612,8 @@ detailed help for that command. The flags -h/--help after any command do
 the same thing.
 
 Topics:
-  route, eval, cachelint, diagnose, designpartner, models, benchmarks,
-  setup, regenerate, login, logout, whoami, help
+  route, eval, cachelint, diagnose, designpartner, monitor, apps, models,
+  policy, benchmarks, setup, regenerate, login, logout, whoami, help
 
 Examples:
   tryaii help
@@ -2137,8 +2632,11 @@ const COMMAND_HELP: Record<string, string> = {
   eval: HELP_EVAL,
   cachelint: HELP_CACHELINT,
   diagnose: HELP_DIAGNOSE,
+  monitor: HELP_MONITOR,
+  apps: HELP_APPS,
   designpartner: HELP_DESIGNPARTNER,
   models: HELP_MODELS,
+  policy: HELP_POLICY,
   benchmarks: HELP_BENCHMARKS,
   setup: HELP_SETUP,
   regenerate: HELP_REGENERATE,
@@ -2157,6 +2655,28 @@ const DIAGNOSE_VERB_HELP: Record<string, string> = {
   plan: HELP_DIAGNOSE_PLAN,
   check: HELP_DIAGNOSE_CHECK,
   report: HELP_DIAGNOSE_REPORT,
+};
+
+/**
+ * Per-verb help for the monitor command. Mirrors MONITOR_VERB_HELP in the
+ * Python CLI (same parity guard).
+ */
+const MONITOR_VERB_HELP: Record<string, string> = {
+  status: HELP_MONITOR_STATUS,
+  set: HELP_MONITOR_SET,
+  apps: HELP_MONITOR_APPS,
+  events: HELP_MONITOR_EVENTS,
+};
+
+/**
+ * Per-verb help for the apps command. Mirrors APPS_VERB_HELP in the Python
+ * CLI (same parity guard).
+ */
+const APPS_VERB_HELP: Record<string, string> = {
+  create: HELP_APPS_CREATE,
+  list: HELP_APPS_LIST,
+  keys: HELP_APPS_KEYS,
+  check: HELP_APPS_CHECK,
 };
 
 function version(): string {
@@ -2233,6 +2753,16 @@ async function main(): Promise<void> {
       await writePaced((verb && DIAGNOSE_VERB_HELP[verb]) || COMMAND_HELP.diagnose);
       return;
     }
+    if (command === 'monitor') {
+      const verb = subArgs.find((arg) => !arg.startsWith('-'));
+      await writePaced((verb && MONITOR_VERB_HELP[verb]) || COMMAND_HELP.monitor);
+      return;
+    }
+    if (command === 'apps') {
+      const verb = subArgs.find((arg) => !arg.startsWith('-'));
+      await writePaced((verb && APPS_VERB_HELP[verb]) || COMMAND_HELP.apps);
+      return;
+    }
     // Unknown command + --help still gets the global overview (then nothing else runs).
     await writePaced(COMMAND_HELP[command] ?? HELP);
     return;
@@ -2251,11 +2781,20 @@ async function main(): Promise<void> {
     case 'diagnose':
       await cmdDiagnose(subArgs);
       break;
+    case 'monitor':
+      await cmdMonitor(subArgs);
+      break;
+    case 'apps':
+      await cmdApps(subArgs);
+      break;
     case 'designpartner':
       await cmdDesignpartner(subArgs);
       break;
     case 'models':
       await cmdModels(subArgs);
+      break;
+    case 'policy':
+      await cmdPolicy(subArgs);
       break;
     case 'benchmarks':
       await cmdBenchmarks(subArgs);

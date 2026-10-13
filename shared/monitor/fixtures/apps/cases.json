@@ -1,0 +1,909 @@
+{
+  "suite": "apps",
+  "description": "stdout/stderr/exit goldens and the request log of `tryaii apps` (SPEC §7) against canned HTTP answers (SPEC §6.3).",
+  "cases": [
+    {
+      "name": "missing-verb",
+      "description": "SPEC §7.1: no verb is a usage error.",
+      "input": {
+        "argv": [
+          "apps"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "missing-verb.stdout.golden.txt",
+        "stderr": "error: missing apps verb. Run \"tryaii help apps\".\n",
+        "exit_code": 2,
+        "requests": []
+      }
+    },
+    {
+      "name": "unknown-verb",
+      "description": "SPEC §7.1: an unknown verb is a usage error.",
+      "input": {
+        "argv": [
+          "apps",
+          "delete"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "unknown-verb.stdout.golden.txt",
+        "stderr": "error: unknown apps verb: delete. Run \"tryaii help apps\".\n",
+        "exit_code": 2,
+        "requests": []
+      }
+    },
+    {
+      "name": "unknown-option",
+      "description": "SPEC §7.1: an option another verb owns is unknown here.",
+      "input": {
+        "argv": [
+          "apps",
+          "list",
+          "--new"
+        ],
+        "signed_in": true
+      },
+      "expected": {
+        "stdout_golden": "unknown-option.stdout.golden.txt",
+        "stderr": "error: unknown option: --new. Run \"tryaii help apps\".\n",
+        "exit_code": 2,
+        "requests": []
+      }
+    },
+    {
+      "name": "not-signed-in",
+      "description": "SPEC §7.2: user verbs need tryaii login; no request is made.",
+      "input": {
+        "argv": [
+          "apps",
+          "list"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "not-signed-in.stdout.golden.txt",
+        "stderr": "error: not signed in (run tryaii login)\n",
+        "exit_code": 1,
+        "requests": []
+      }
+    },
+    {
+      "name": "list-table",
+      "description": "SPEC §7.2: one row per app; numbers right-aligned.",
+      "input": {
+        "argv": [
+          "apps",
+          "list"
+        ],
+        "signed_in": true,
+        "http": {
+          "GET /v1/apps": [
+            {
+              "status": 200,
+              "body": {
+                "apps": [
+                  {
+                    "app_id": "app_abcdefghijkl",
+                    "name": "shop",
+                    "owner_user_id": "google-sub-1",
+                    "created_at": "2026-10-12T08:00:00.000Z",
+                    "deleted_at": null,
+                    "calls_24h": 1234,
+                    "cost_24h_usd": 1.234567,
+                    "savings_24h_usd": 0.5,
+                    "last_event_at": "2026-10-12T08:59:00.000Z",
+                    "processes": 3,
+                    "keys_active": 2
+                  },
+                  {
+                    "app_id": "app_mnopqrstuvwx",
+                    "name": "internal tools",
+                    "owner_user_id": "google-sub-1",
+                    "created_at": "2026-10-12T08:30:00.000Z",
+                    "deleted_at": null,
+                    "calls_24h": 0,
+                    "cost_24h_usd": 0,
+                    "savings_24h_usd": 0,
+                    "last_event_at": null,
+                    "processes": 0,
+                    "keys_active": 1
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "stdout_golden": "list-table.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0,
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/v1/apps",
+            "query": null,
+            "auth": "bearer",
+            "body": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "list-empty",
+      "description": "SPEC §7.2: no apps yet.",
+      "input": {
+        "argv": [
+          "apps",
+          "list"
+        ],
+        "signed_in": true,
+        "http": {
+          "GET /v1/apps": [
+            {
+              "status": 200,
+              "body": {
+                "apps": []
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "stdout_golden": "list-empty.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0,
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/v1/apps",
+            "query": null,
+            "auth": "bearer",
+            "body": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "list-json",
+      "description": "SPEC §7.2: --json prints the apps array.",
+      "input": {
+        "argv": [
+          "apps",
+          "list",
+          "--json"
+        ],
+        "signed_in": true,
+        "http": {
+          "GET /v1/apps": [
+            {
+              "status": 200,
+              "body": {
+                "apps": [
+                  {
+                    "app_id": "app_mnopqrstuvwx",
+                    "name": "internal tools",
+                    "owner_user_id": "google-sub-1",
+                    "created_at": "2026-10-12T08:30:00.000Z",
+                    "deleted_at": null,
+                    "calls_24h": 0,
+                    "cost_24h_usd": 0,
+                    "savings_24h_usd": 0,
+                    "last_event_at": null,
+                    "processes": 0,
+                    "keys_active": 1
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "stdout_golden": "list-json.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0,
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/v1/apps",
+            "query": null,
+            "auth": "bearer",
+            "body": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "list-session-expired",
+      "description": "SPEC §7.2: a 401 on a user verb means the session ended.",
+      "input": {
+        "argv": [
+          "apps",
+          "list"
+        ],
+        "signed_in": true,
+        "http": {
+          "GET /v1/apps": [
+            {
+              "status": 401,
+              "body": {
+                "error": "invalid_token"
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "stdout_golden": "list-session-expired.stdout.golden.txt",
+        "stderr": "error: session expired or revoked (run tryaii login)\n",
+        "exit_code": 1,
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/v1/apps",
+            "query": null,
+            "auth": "bearer",
+            "body": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "list-network-failure",
+      "description": "SPEC §7.2: a transport failure names the API base.",
+      "input": {
+        "argv": [
+          "apps",
+          "list"
+        ],
+        "signed_in": true,
+        "http": {
+          "GET /v1/apps": [
+            {
+              "network": true
+            }
+          ]
+        }
+      },
+      "expected": {
+        "stdout_golden": "list-network-failure.stdout.golden.txt",
+        "stderr": "error: could not reach https://api.tryaii.test\n",
+        "exit_code": 1,
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/v1/apps",
+            "query": null,
+            "auth": "bearer",
+            "body": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "list-server-error",
+      "description": "SPEC §7.2: other errors print the error code (and detail).",
+      "input": {
+        "argv": [
+          "apps",
+          "list"
+        ],
+        "signed_in": true,
+        "http": {
+          "GET /v1/apps": [
+            {
+              "status": 500,
+              "body": {
+                "error": "internal",
+                "detail": "try later"
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "stdout_golden": "list-server-error.stdout.golden.txt",
+        "stderr": "error: internal: try later\n",
+        "exit_code": 1,
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/v1/apps",
+            "query": null,
+            "auth": "bearer",
+            "body": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "create-ok",
+      "description": "SPEC §7.2: create = the app, then its 'default' key; the key is printed once with a warning on stderr.",
+      "input": {
+        "argv": [
+          "apps",
+          "create",
+          "shop"
+        ],
+        "signed_in": true,
+        "http": {
+          "POST /v1/apps": [
+            {
+              "status": 201,
+              "body": {
+                "app_id": "app_newapp00001",
+                "name": "shop",
+                "owner_user_id": "google-sub-1",
+                "created_at": "2026-10-12T09:00:00.000Z",
+                "deleted_at": null
+              }
+            }
+          ],
+          "POST /v1/apps/app_newapp00001/keys": [
+            {
+              "status": 201,
+              "body": {
+                "key_id": "k1a2b3c4d5e6",
+                "key": "tryaii_k1a2b3c4d5e6_fixtureSecretfixtureSecretfixtureSecretfixt",
+                "label": "default",
+                "created_at": "2026-10-12T09:00:00.000Z"
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "stdout_golden": "create-ok.stdout.golden.txt",
+        "stderr": "warning: this is the only time the full key is shown; store it now (e.g. as TRYAII_API_KEY)\n",
+        "exit_code": 0,
+        "requests": [
+          {
+            "method": "POST",
+            "path": "/v1/apps",
+            "query": null,
+            "auth": "bearer",
+            "body": {
+              "name": "shop"
+            }
+          },
+          {
+            "method": "POST",
+            "path": "/v1/apps/app_newapp00001/keys",
+            "query": null,
+            "auth": "bearer",
+            "body": {
+              "label": "default"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "create-json",
+      "description": "SPEC §7.2: --json prints {app, key}; the warning stays on stderr.",
+      "input": {
+        "argv": [
+          "apps",
+          "create",
+          "shop",
+          "--json"
+        ],
+        "signed_in": true,
+        "http": {
+          "POST /v1/apps": [
+            {
+              "status": 201,
+              "body": {
+                "app_id": "app_newapp00001",
+                "name": "shop",
+                "owner_user_id": "google-sub-1",
+                "created_at": "2026-10-12T09:00:00.000Z",
+                "deleted_at": null
+              }
+            }
+          ],
+          "POST /v1/apps/app_newapp00001/keys": [
+            {
+              "status": 201,
+              "body": {
+                "key_id": "k1a2b3c4d5e6",
+                "key": "tryaii_k1a2b3c4d5e6_fixtureSecretfixtureSecretfixtureSecretfixt",
+                "label": "default",
+                "created_at": "2026-10-12T09:00:00.000Z"
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "stdout_golden": "create-json.stdout.golden.txt",
+        "stderr": "warning: this is the only time the full key is shown; store it now (e.g. as TRYAII_API_KEY)\n",
+        "exit_code": 0,
+        "requests": [
+          {
+            "method": "POST",
+            "path": "/v1/apps",
+            "query": null,
+            "auth": "bearer",
+            "body": {
+              "name": "shop"
+            }
+          },
+          {
+            "method": "POST",
+            "path": "/v1/apps/app_newapp00001/keys",
+            "query": null,
+            "auth": "bearer",
+            "body": {
+              "label": "default"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "create-name-taken",
+      "description": "SPEC §7.2: 409 name_taken.",
+      "input": {
+        "argv": [
+          "apps",
+          "create",
+          "shop"
+        ],
+        "signed_in": true,
+        "http": {
+          "POST /v1/apps": [
+            {
+              "status": 409,
+              "body": {
+                "error": "name_taken"
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "stdout_golden": "create-name-taken.stdout.golden.txt",
+        "stderr": "error: name_taken: you already have an app named 'shop'\n",
+        "exit_code": 1,
+        "requests": [
+          {
+            "method": "POST",
+            "path": "/v1/apps",
+            "query": null,
+            "auth": "bearer",
+            "body": {
+              "name": "shop"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "create-usage",
+      "description": "SPEC §7.2: create needs exactly one name.",
+      "input": {
+        "argv": [
+          "apps",
+          "create"
+        ],
+        "signed_in": true
+      },
+      "expected": {
+        "stdout_golden": "create-usage.stdout.golden.txt",
+        "stderr": "error: usage: tryaii apps create <name>. Run \"tryaii help apps\".\n",
+        "exit_code": 2,
+        "requests": []
+      }
+    },
+    {
+      "name": "create-name-too-long",
+      "description": "SPEC §7.2: names are 1-64 characters.",
+      "input": {
+        "argv": [
+          "apps",
+          "create",
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ],
+        "signed_in": true
+      },
+      "expected": {
+        "stdout_golden": "create-name-too-long.stdout.golden.txt",
+        "stderr": "error: app name must be 1-64 characters\n",
+        "exit_code": 2,
+        "requests": []
+      }
+    },
+    {
+      "name": "keys-list",
+      "description": "SPEC §7.2: keys show the prefix only, label, times and status.",
+      "input": {
+        "argv": [
+          "apps",
+          "keys",
+          "app_abcdefghijkl"
+        ],
+        "signed_in": true,
+        "http": {
+          "GET /v1/apps/app_abcdefghijkl/keys": [
+            {
+              "status": 200,
+              "body": {
+                "keys": [
+                  {
+                    "key_id": "k1a2b3c4d5e6",
+                    "label": "default",
+                    "prefix": "tryaii_k1a2b3c4d5e6_",
+                    "created_at": "2026-10-12T08:00:00.000Z",
+                    "last_used_at": "2026-10-12T08:59:00.000Z",
+                    "revoked_at": null,
+                    "expires_at": null
+                  },
+                  {
+                    "key_id": "q9w8e7r6t5y4",
+                    "label": null,
+                    "prefix": "tryaii_q9w8e7r6t5y4_",
+                    "created_at": "2026-10-11T08:00:00.000Z",
+                    "last_used_at": null,
+                    "revoked_at": "2026-10-12T07:00:00.000Z",
+                    "expires_at": null
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "stdout_golden": "keys-list.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0,
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/v1/apps/app_abcdefghijkl/keys",
+            "query": null,
+            "auth": "bearer",
+            "body": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "keys-new-label",
+      "description": "SPEC §7.2: --new --label creates a key and prints it once.",
+      "input": {
+        "argv": [
+          "apps",
+          "keys",
+          "app_abcdefghijkl",
+          "--new",
+          "--label",
+          "ci"
+        ],
+        "signed_in": true,
+        "http": {
+          "POST /v1/apps/app_abcdefghijkl/keys": [
+            {
+              "status": 201,
+              "body": {
+                "key_id": "q9w8e7r6t5y4",
+                "key": "tryaii_q9w8e7r6t5y4_fixtureSecretfixtureSecretfixtureSecretfixt",
+                "label": "ci",
+                "created_at": "2026-10-12T09:00:00.000Z"
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "stdout_golden": "keys-new-label.stdout.golden.txt",
+        "stderr": "warning: this is the only time the full key is shown; store it now (e.g. as TRYAII_API_KEY)\n",
+        "exit_code": 0,
+        "requests": [
+          {
+            "method": "POST",
+            "path": "/v1/apps/app_abcdefghijkl/keys",
+            "query": null,
+            "auth": "bearer",
+            "body": {
+              "label": "ci"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "keys-new-limit",
+      "description": "SPEC §7.2: a third active key is refused (409 key_limit).",
+      "input": {
+        "argv": [
+          "apps",
+          "keys",
+          "app_abcdefghijkl",
+          "--new"
+        ],
+        "signed_in": true,
+        "http": {
+          "POST /v1/apps/app_abcdefghijkl/keys": [
+            {
+              "status": 409,
+              "body": {
+                "error": "key_limit"
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "stdout_golden": "keys-new-limit.stdout.golden.txt",
+        "stderr": "error: key_limit: an app has at most 2 active keys; revoke one with tryaii apps keys app_abcdefghijkl --revoke <key_id>\n",
+        "exit_code": 1,
+        "requests": [
+          {
+            "method": "POST",
+            "path": "/v1/apps/app_abcdefghijkl/keys",
+            "query": null,
+            "auth": "bearer",
+            "body": {}
+          }
+        ]
+      }
+    },
+    {
+      "name": "keys-revoke",
+      "description": "SPEC §7.2: --revoke deletes the key (204).",
+      "input": {
+        "argv": [
+          "apps",
+          "keys",
+          "app_abcdefghijkl",
+          "--revoke",
+          "q9w8e7r6t5y4"
+        ],
+        "signed_in": true,
+        "http": {
+          "DELETE /v1/apps/app_abcdefghijkl/keys/q9w8e7r6t5y4": [
+            {
+              "status": 204,
+              "body": null
+            }
+          ]
+        }
+      },
+      "expected": {
+        "stdout_golden": "keys-revoke.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0,
+        "requests": [
+          {
+            "method": "DELETE",
+            "path": "/v1/apps/app_abcdefghijkl/keys/q9w8e7r6t5y4",
+            "query": null,
+            "auth": "bearer",
+            "body": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "keys-new-and-revoke",
+      "description": "SPEC §7.2: --new and --revoke are exclusive.",
+      "input": {
+        "argv": [
+          "apps",
+          "keys",
+          "app_abcdefghijkl",
+          "--new",
+          "--revoke",
+          "x"
+        ],
+        "signed_in": true
+      },
+      "expected": {
+        "stdout_golden": "keys-new-and-revoke.stdout.golden.txt",
+        "stderr": "error: --new and --revoke cannot be combined\n",
+        "exit_code": 2,
+        "requests": []
+      }
+    },
+    {
+      "name": "keys-label-without-new",
+      "description": "SPEC §7.2: --label only goes with --new.",
+      "input": {
+        "argv": [
+          "apps",
+          "keys",
+          "app_abcdefghijkl",
+          "--label",
+          "ci"
+        ],
+        "signed_in": true
+      },
+      "expected": {
+        "stdout_golden": "keys-label-without-new.stdout.golden.txt",
+        "stderr": "error: --label needs --new\n",
+        "exit_code": 2,
+        "requests": []
+      }
+    },
+    {
+      "name": "keys-usage",
+      "description": "SPEC §7.2: keys needs exactly one app id.",
+      "input": {
+        "argv": [
+          "apps",
+          "keys"
+        ],
+        "signed_in": true
+      },
+      "expected": {
+        "stdout_golden": "keys-usage.stdout.golden.txt",
+        "stderr": "error: usage: tryaii apps keys <app_id> [--new [--label <label>] | --revoke <key_id>]. Run \"tryaii help apps\".\n",
+        "exit_code": 2,
+        "requests": []
+      }
+    },
+    {
+      "name": "check-env-key",
+      "description": "SPEC §7.3: check validates TRYAII_API_KEY (no sign-in needed).",
+      "input": {
+        "argv": [
+          "apps",
+          "check"
+        ],
+        "env": {
+          "TRYAII_API_KEY": "tryaii_k1a2b3c4d5e6_fixtureSecretfixtureSecretfixtureSecretfixt"
+        },
+        "http": {
+          "GET /v1/apps/keys/validate": [
+            {
+              "status": 200,
+              "body": {
+                "app_id": "app_abcdefghijkl",
+                "app_name": "shop",
+                "key_id": "k1a2b3c4d5e6",
+                "scopes": [
+                  "monitor:write"
+                ],
+                "expires_at": null
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "stdout_golden": "check-env-key.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0,
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/v1/apps/keys/validate",
+            "query": null,
+            "auth": "app_key",
+            "body": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "check-flag-key-json",
+      "description": "SPEC §7.3: --key beats the environment; --json prints the validation body.",
+      "input": {
+        "argv": [
+          "apps",
+          "check",
+          "--key",
+          "tryaii_q9w8e7r6t5y4_fixtureSecretfixtureSecretfixtureSecretfixt",
+          "--json"
+        ],
+        "env": {
+          "TRYAII_API_KEY": "tryaii_k1a2b3c4d5e6_fixtureSecretfixtureSecretfixtureSecretfixt"
+        },
+        "http": {
+          "GET /v1/apps/keys/validate": [
+            {
+              "status": 200,
+              "body": {
+                "app_id": "app_abcdefghijkl",
+                "app_name": "shop",
+                "key_id": "q9w8e7r6t5y4",
+                "scopes": [
+                  "monitor:write"
+                ],
+                "expires_at": "2027-01-01T00:00:00.000Z"
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "stdout_golden": "check-flag-key-json.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0,
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/v1/apps/keys/validate",
+            "query": null,
+            "auth": "app_key",
+            "body": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "check-invalid",
+      "description": "SPEC §7.3: a rejected key exits 1.",
+      "input": {
+        "argv": [
+          "apps",
+          "check"
+        ],
+        "env": {
+          "TRYAII_API_KEY": "tryaii_k1a2b3c4d5e6_fixtureSecretfixtureSecretfixtureSecretfixt"
+        },
+        "http": {
+          "GET /v1/apps/keys/validate": [
+            {
+              "status": 401,
+              "body": {
+                "error": "invalid_key"
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "stdout_golden": "check-invalid.stdout.golden.txt",
+        "stderr": "error: invalid key\n",
+        "exit_code": 1,
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/v1/apps/keys/validate",
+            "query": null,
+            "auth": "app_key",
+            "body": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "check-no-key",
+      "description": "SPEC §7.3: no key at all is a usage error.",
+      "input": {
+        "argv": [
+          "apps",
+          "check"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "check-no-key.stdout.golden.txt",
+        "stderr": "error: no app key: set TRYAII_API_KEY or pass --key\n",
+        "exit_code": 2,
+        "requests": []
+      }
+    },
+    {
+      "name": "check-malformed-key",
+      "description": "SPEC §7.3: a value that is not an app key is refused before any request.",
+      "input": {
+        "argv": [
+          "apps",
+          "check",
+          "--key",
+          "tai_oldwebsitekey"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "check-malformed-key.stdout.golden.txt",
+        "stderr": "error: not an app key (expected tryaii_<key_id>_<secret>)\n",
+        "exit_code": 2,
+        "requests": []
+      }
+    }
+  ]
+}

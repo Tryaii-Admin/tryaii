@@ -117,6 +117,29 @@ tryaii diagnose check inventory.json --quality 3 --cost 4 --speed 2
 tryaii diagnose report                   # open .tryaii/diagnose/<run-id>/index.html
 ```
 
+Or wrap the OpenAI client your app already uses — every call is recorded locally
+and shadow-routed to find the model that gives at least the quality of the model in
+your code for at most its price; the model id in your code stays and is the anchor.
+Per sub-process you then choose `off` (watch), `stable` (one pinned model per day),
+`dynamic` (route every call) or `managed` (a model you assign). Only metadata and
+prompt embeddings are stored, no prompt text; nothing is uploaded unless you set an
+app key from `tryaii apps create` — then the metadata (never prompts or vectors)
+goes to your tryaii.com dashboard, which can also set the modes
+([docs](docs/cli/monitor.md), [apps](docs/cli/apps.md)):
+
+```python
+import tryaii.monitor as monitor
+monitor.wrap(client, app="shop")          # your openai.OpenAI(); patched in place
+with monitor.process("purchase item"):    # name the sub-process
+    client.chat.completions.create(model="gpt-5.5", messages=messages)
+```
+
+```bash
+tryaii monitor status                                  # per sub-process: model, winner, cost, savings
+tryaii monitor set "purchase item" stable --app shop   # pin the best model for 24h; picked up live
+tryaii apps create shop                                # optional: an app key for the dashboard
+```
+
 Want to shape where tryaii goes next? `tryaii designpartner` enrolls you as a
 design partner: a short questionnaire, explicit consent tiers shown verbatim,
 and nothing leaves your machine until you run `--confirm`
@@ -221,6 +244,8 @@ tryaii <command> [options]
 | `regenerate`         | Rebuild benchmark centroids, e.g. after switching the embedding model. |
 | `cachelint <request.json>` | Lint a chat request for prompt-cache readiness — verdict-first report; warns, never blocks. |
 | `diagnose <verb>`    | Agent-first codebase LLM diagnostics — model fit, cache readiness, cost exposure, prompt hygiene; insight-only, rendered to a local HTML report. |
+| `monitor <verb>`     | Read what `tryaii.monitor.wrap(client)` recorded and steer it — `status` per app/sub-process (model used, shadow-routing winner, cost, savings), `set` a sub-process to `off` / `stable` / `dynamic` / `managed`, `apps`, `events`. |
+| `apps <verb>`        | tryaii.com apps and app keys for monitor upload — `create`, `list`, `keys` (`--new`, `--revoke`), `check`. |
 | `designpartner`      | Enroll as a tryaii design partner — one resumable command; nothing is sent without an explicit `--confirm`. |
 | `login`              | Sign in with your tryaii.com account (free; unlocks the full model catalog of 322 models). |
 | `logout`             | Sign out and remove the stored credentials and the downloaded full catalog. |
@@ -260,6 +285,9 @@ tryaii <command> [options]
 **`setup` / `regenerate`** — `--model <name>` selects a non-default embedding model.
 **`cachelint`** — `-` reads the request from stdin; `--provider` / `--model` select the cache rules ([docs](docs/cli/cachelint.md)).
 **`diagnose`** — verbs `init` / `plan` / `check` / `report` ([docs](docs/cli/diagnose/README.md)).
+**`monitor`** — verbs `status` / `set <process> <mode>` / `apps` / `events`; `--app`, `--since 24h|7d|30d`, `-n`, `--model`, `--now`, `--json` ([docs](docs/cli/monitor.md)).
+
+**`apps`** — verbs `create <name>` / `list` / `keys <app_id>` (`--new [--label L]`, `--revoke <key_id>`) / `check [--key K]`; `--json` ([docs](docs/cli/apps.md)).
 **`designpartner`** — at most one action flag per run: `--answers` / `--consent` / `--confirm` / `--reset`; `--json` prints the machine-readable status agents consume ([docs](docs/cli/designpartner.md)).
 **`login` / `logout`** — no options ([login](docs/cli/login.md), [logout](docs/cli/logout.md)).
 **`whoami`** — `--json` prints the account as the server returns it ([docs](docs/cli/whoami.md)).

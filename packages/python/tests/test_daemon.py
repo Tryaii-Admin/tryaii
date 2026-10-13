@@ -62,6 +62,10 @@ class _FakeRouter:
         self.calls.append((prompt, top_k))
         return _make_result(priorities or Priorities())
 
+    def embed_prompt(self, prompt):
+        # Deterministic stand-in vector; 5 decimals so the wire rounding shows.
+        return [0.123456, -0.5, 0.00004, 1.0]
+
 
 @pytest.fixture()
 def running_daemon(tmp_path):
@@ -136,3 +140,42 @@ def test_stop_then_status_is_none(running_daemon):
     assert daemon_mod.stop(config) is True
     time.sleep(0.2)
     assert daemon_mod.status(config) is None
+
+
+def test_state_advertises_route_embedding(running_daemon):
+    _config, state, _router = running_daemon
+    assert daemon_mod.supports(state, daemon_mod.FEATURE_ROUTE_EMBEDDING)
+    assert not daemon_mod.supports(state, "somethingElse")
+    assert not daemon_mod.supports({"runtime": "python"}, daemon_mod.FEATURE_ROUTE_EMBEDDING)
+
+
+def test_route_with_embedding_returns_rounded_vector(running_daemon):
+    _config, state, router = running_daemon
+    result, embedding = daemon_mod.route_with_embedding(
+        state, "what's greater 5 or 5.5?", Priorities(), 3)
+    assert result.best_model == "gpt-5.2"
+    assert embedding == {
+        "model": state["embeddingModel"],
+        "dim": 4,
+        "v": [0.1235, -0.5, 0.0, 1.0],
+    }
+    # The plain route() path is unchanged: no embedding on the wire.
+    resp = daemon_mod._request(
+        state, {"cmd": "route", "prompt": "x", "priorities": {}, "topK": 1}, timeout=5)
+    assert resp["ok"] is True and "embedding" not in resp["result"]
+
+
+def test_include_embedding_must_be_boolean(running_daemon):
+    _config, state, _router = running_daemon
+    resp = daemon_mod._request(
+        state,
+        {"cmd": "route", "prompt": "x", "priorities": {}, "topK": 1, "includeEmbedding": "yes"},
+        timeout=5)
+    assert resp == {"ok": False, "error": "includeEmbedding must be a boolean"}
+
+
+def test_route_with_embedding_refuses_old_daemon(running_daemon):
+    _config, state, _router = running_daemon
+    old_state = {k: v for k, v in state.items() if k != "features"}
+    with pytest.raises(RuntimeError, match="does not support routeEmbedding"):
+        daemon_mod.route_with_embedding(old_state, "x", Priorities(), 1)

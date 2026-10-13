@@ -1,0 +1,8 @@
+{
+  "schema": "tryaii.monitor.upload-cursor/1",
+  "files": {
+    "events-2026-10-12.jsonl": 1675
+  },
+  "last_ok": "2026-10-12T08:25:00.000Z",
+  "last_error": null
+}

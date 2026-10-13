@@ -26,6 +26,15 @@ import { EmbeddingClassifier } from './classifiers/embedding.js';
 import { TryaiiDreConfig, createDefaultConfig, centroidFilePath } from './config.js';
 import { BaseEmbeddingProvider } from './embeddings/base.js';
 import { LocalEmbeddingProvider } from './embeddings/local.js';
+import {
+  ModelPolicy,
+  PolicyError,
+  PolicyResult,
+  evaluate,
+  pyRepr,
+  resolvePolicy,
+} from './policy.js';
+import type { PolicyLike, ProviderPreferences } from './policy.js';
 import { ModelRegistry, ModelInfo } from './registry/models.js';
 import { ModelScore, ScoringEngine } from './scoring/engine.js';
 import { DEFAULT_PRIORITIES, Priorities } from './scoring/priorities.js';
@@ -84,6 +93,11 @@ export interface RouteOptions {
   filterCapability?: string;
   /** Only consider models cheaper than this (input $/1k tokens). */
   filterMaxCost?: number;
+  /**
+   * Only consider these model ids (the CLI passes the ids its policy allows,
+   * so a daemon routes without reading the saved policy itself).
+   */
+  allowedModels?: Iterable<string> | null;
 }
 
 /**
@@ -117,6 +131,8 @@ export class Router {
   private _customized = false;
   private _userRegistry: ModelRegistry | null;
   private _userBenchmarkRegistry: BenchmarkRegistry | null;
+  private _policy: ModelPolicy;
+  private _policyResult: PolicyResult | null = null;
 
   constructor(opts?: {
     config?: Partial<TryaiiDreConfig>;
@@ -143,6 +159,14 @@ export class Router {
      * the stored session was rejected by the server.
      */
     catalog?: CatalogMode;
+    /**
+     * Which model makers and hosts are allowed (shared/datasave/SPEC.md):
+     * 'auto' (default) -- the policy saved with `tryaii policy set`, if any;
+     * null -- no policy; a `ModelPolicy` or a policy.json-shaped object
+     * (snake_case keys) -- that policy. An active policy needs the full
+     * catalog's origin data and throws `PolicyCatalogError` without it.
+     */
+    policy?: PolicyLike;
   }) {
     this._config = createDefaultConfig(opts?.config);
 
@@ -152,6 +176,7 @@ export class Router {
     this._catalogSettled = opts?.bundle != null || catalog === 'starter';
     this._userRegistry = opts?.registry ?? null;
     this._userBenchmarkRegistry = opts?.benchmarkRegistry ?? null;
+    this._policy = resolvePolicy(opts?.policy === undefined ? 'auto' : opts.policy);
 
     // The catalog this router routes on: an explicit bundle wins; otherwise
     // `catalog` picks it (offline here, completed by ready()).
@@ -170,6 +195,12 @@ export class Router {
     this._benchmarkRegistry = this._userBenchmarkRegistry ?? BenchmarkRegistry.fromBundle(bundle);
     // Scoring engine with normalizer from benchmark registry
     this._scoringEngine = new ScoringEngine(this._benchmarkRegistry.getNormalizer());
+    // Data-save policy: evaluated against the registry's models whenever the
+    // catalog is (re)applied, so a missing origins.json (starter catalog)
+    // fails here, not mid-route.
+    this._policyResult = this._policy.active
+      ? evaluate(this._policy, bundle.origins, this._registry.modelIds)
+      : null;
     // Centroids / classifier follow the bundle (rebuilt lazily).
     this._centroidLoader = null;
     this._classifier = null;
@@ -291,6 +322,25 @@ export class Router {
   }
 
   /**
+   * The embedding vector of `prompt` as the classifier sees it.
+   *
+   * Same normalization as `route()` (non-empty string, truncated to
+   * MAX_PROMPT_LENGTH) and the same per-classifier LRU, so asking for the
+   * vector right after routing the same text costs no second model call.
+   * Used by the daemon's `includeEmbedding` request (docs/daemon.md).
+   */
+  async embedPrompt(prompt: string): Promise<number[]> {
+    prompt = Router._normalizePrompt(prompt);
+    await this.ready();
+    const classifier = this._ensureClassifier();
+    // Bracket access reaches the classifier's private cached embedder on
+    // purpose: the LRU it keeps is exactly what makes this call free after
+    // route(). Mirrors the Python Router.embed_prompt.
+    const vector = await classifier['_getEmbeddingAsync'](prompt);
+    return vector.map((x) => Number(x));
+  }
+
+  /**
    * Validate and normalize a prompt before classification.
    *
    * Rejects empty/non-string prompts and truncates to MAX_PROMPT_LENGTH,
@@ -316,6 +366,14 @@ export class Router {
     const topK = opts?.topK ?? 5;
 
     let models = this._registry.allModels;
+    if (this._policyResult !== null) {
+      const allowed = new Set(this._policyResult.allowed);
+      models = models.filter((m) => allowed.has(m.modelId));
+    }
+    if (opts?.allowedModels != null) {
+      const only = new Set(opts.allowedModels);
+      models = models.filter((m) => only.has(m.modelId));
+    }
     if (opts?.filterProvider) {
       const providerLower = opts.filterProvider.toLowerCase();
       models = models.filter((m) => m.provider.toLowerCase() === providerLower);
@@ -457,6 +515,37 @@ export class Router {
 
     const normalizer = this._benchmarkRegistry.getNormalizer();
     this._scoringEngine = new ScoringEngine(normalizer);
+  }
+
+  /** The active data-save policy (inactive when none applies). */
+  get policy(): ModelPolicy {
+    return this._policy;
+  }
+
+  /** Which catalog models the policy allows, or null without a policy. */
+  get policyResult(): PolicyResult | null {
+    return this._policyResult;
+  }
+
+  /**
+   * The OpenRouter `provider` object a request for `modelId` must carry
+   * under the active policy, or null when hosts are unconstrained. Throws
+   * `PolicyError` for a model the policy excludes (e.g. an explicit model
+   * override).
+   */
+  providerPreferences(modelId: string): ProviderPreferences | null {
+    const result = this._policyResult;
+    if (result === null) return null;
+    if (
+      Object.prototype.hasOwnProperty.call(result.excluded, modelId) ||
+      !result.allowed.includes(modelId)
+    ) {
+      throw new PolicyError(
+        `model ${pyRepr(modelId)} is not allowed by the active policy ` +
+          `(${this._policy.summary()})`,
+      );
+    }
+    return result.providerPreferences(modelId);
   }
 
   /** The catalog bundle this router routes on. */

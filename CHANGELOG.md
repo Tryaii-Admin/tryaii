@@ -1,5 +1,136 @@
 # Changelog
 
+## 0.7.0 (2026-10-14)
+
+### Highlights
+
+- **Policies: control who builds your models and who sees your prompts.** New
+  `tryaii policy` command. Save your company's rules once and every routing decision
+  (`route`, `eval`, `models` and the SDK) stays inside them:
+  - `--origin no-prc-models`: only models whose maker, and the maker of their base
+    model, is not controlled from the People's Republic of China. A fine-tune of a
+    Chinese model counts as Chinese.
+  - `--origin no-prc-hosting`: any model, but prompts only go to hosts not controlled
+    from the PRC.
+  - `--origin us-eu`: models and hosts from the US, the EEA, the UK and Switzerland
+    only.
+  - `--providers anthropic,openai` / `--exclude-providers …`: only (or never) these
+    companies, as model maker and as host.
+  - `--allow-countries` / `--deny-countries`: by the country that controls the company.
+  - `--platform bedrock|azure|vertex`: only models that cloud platform offers.
+- **Hosts are enforced, not just filtered.** When a policy limits hosts, each OpenRouter
+  request lists exactly the hosts it may use (`provider.only`), so a prompt never reaches
+  an excluded host.
+- **Unknown means excluded.** A model or host whose origin tryaii cannot vouch for is
+  never allowed while a policy is active, and a policy never silently falls back to
+  "all models".
+- **Monitor: see what your LLM calls cost and what they could cost.** New
+  `tryaii monitor` and `tryaii apps` commands. `tryaii.monitor.wrap(client)`
+  (Python) / `wrap(client)` from `tryaii/monitor` (Node) patches the `openai`
+  client your app already uses. Every call is recorded locally (metadata only,
+  never prompt or response text) and shadow-routed to the best-for-less model.
+  Per sub-process modes `off`, `stable`, `dynamic` and `managed`; with an app
+  key from the dashboard on tryaii.com, call metadata is uploaded and the
+  dashboard assigns modes and models to the running app.
+
+### `tryaii monitor` — dashboard upload, remote modes, managed mode (both SDKs)
+
+- **Upload** (opt-in): with `TRYAII_API_KEY` set to an app key, the wrapper
+  uploads its event lines (metadata only — never prompt or response text,
+  never embeddings) in the background to `api.tryaii.com`: batches of at most
+  500 events / 1 MiB, at most every 5 s, exponential backoff (5 s → 5 min),
+  a cursor in `upload.json`, local files never touched. Each batch carries
+  `notice_version` (`tryaii.monitor.NOTICE_VERSION = "2026-10"`). A line with
+  a field named `prompt`, `messages`, `response`, `content`, `text` or `raw`
+  is never sent. `TRYAII_MONITOR_UPLOAD=0` disables it.
+- **Dashboard config**: a background long poll keeps `remote.json` current;
+  mode precedence is now env > dashboard > `wrap(mode=)` > `config.json` >
+  `off`. `TRYAII_MONITOR_REMOTE=0` disables it.
+- **`managed` mode**: a sub-process always sends an assigned model (from the
+  dashboard or `tryaii monitor set <process> managed --model <id>`) when the
+  client can reach it and the policy allows it; otherwise the model in your
+  code, recorded as `route_status: "unreachable_managed"`.
+- **No lost records at exit** (TS-224): a process that exits while the
+  daemon is still warming up now records its pending calls as
+  `route_status: "unavailable"` (and uploads them) instead of dropping them.
+- **Rejected key is visible in `status`**: a key rejected at start-up now
+  writes `upload: error invalid_key` for the app, instead of leaving the last
+  `upload: ok` line in place.
+- **Data-save policy in the wrapper** (TS-170): the saved policy is applied
+  once per process; a disallowed model is never recommended or sent.
+  `dynamic` now sends the best-for-less model among the models the client can
+  reach, so an unreachable recommendation no longer means "keep the anchor".
+- **Events** gain `event_id` (uuid4), `taxonomy_version` (null until the
+  catalog carries one) and `est_cost_anchor_usd` (the call priced at the
+  model in your code, so realised savings are computable).
+- **`tryaii monitor status`** shows `managed (<model>)`, a `realised:` line
+  (swapped calls and what they saved), `source: local | remote ...` and
+  `upload: off | ok ... | error ...`; the JSON document gains `source`,
+  `upload`, `managed_model`, `swapped_calls`, `est_cost_anchor_usd` and
+  `realised_savings_usd`.
+- **New command `tryaii apps`**: `create <name>` (prints the full key once),
+  `list`, `keys <app_id>` (`--new [--label L]`, `--revoke <key_id>`),
+  `check [--key K]` ([docs](docs/cli/apps.md)).
+- Contract: `shared/monitor/API.md` (v1.1) and `shared/monitor/SPEC.md` v2;
+  fixtures regenerated, new `apps` suite.
+
+### `tryaii monitor` — wrap the LLM calls your app makes (both SDKs)
+
+- **`tryaii.monitor.wrap(client)`** (Python) / **`wrap(client)` from
+  `tryaii/monitor`** (Node) patches an `openai` client in place. Every
+  `chat.completions.create` call (sync, async, streaming) is recorded locally
+  and **shadow-routed**: the model that would give at least the quality of the
+  model in your code for at most its price is recorded next to the model that
+  answered. The model id in your code stays — it is the anchor and the
+  fallback.
+- **Modes per sub-process**: `off` (record only, the default), `stable` (pin,
+  for 24 hours, the model that won most of that sub-process's calls) and
+  `dynamic` (route every call). Sub-processes are named with
+  `with monitor.process("...")`, a per-call `tryaii_process=` argument, or fall
+  back to the calling `file:function`. Modes are read from env
+  (`TRYAII_MONITOR_MODE`), `wrap(mode=)` or `config.json`, which a running app
+  re-reads — `tryaii monitor set` applies without a restart.
+- **What can be swapped** depends on the client's `base_url`: OpenRouter →
+  the whole catalog, `api.openai.com` → OpenAI models, other hosts → monitor
+  only. A better model the client cannot reach is recommended, never routed.
+- **Records** live under `~/.tryaii/monitor/<app>/`: daily `events-*.jsonl`
+  (metadata only — model, tokens, estimated cost at the model used and at the
+  winner, latency, call site, route status; no prompt or response text), daily
+  `vectors-*.jsonl` (the prompt's embedding; `TRYAII_MONITOR_VECTORS=0`
+  disables), `pins.json`, `config.json`. Nothing is uploaded without an app
+  key (slice 2 above).
+- **New CLI command** `tryaii monitor status | set <process> <mode> | apps |
+  events` (`--app`, `--since 24h|7d|30d`, `-n`, `--now`, `--json`),
+  byte-identical in both CLIs and frozen by `shared/monitor/fixtures/`.
+- **Daemon**: a `route` request may ask for `includeEmbedding`; the daemon
+  returns the prompt's vector (`{model, dim, v}`) and advertises
+  `features: ["routeEmbedding"]` in its state file. Routing for the wrapper
+  goes through the daemon on a background thread (`dynamic` routes in-path
+  within `TRYAII_MONITOR_ROUTE_TIMEOUT_MS`, default 1500 ms); the embedding
+  model is never loaded inside your application. Every monitor step is
+  fail-open.
+- Call-site capture now records the enclosing function name (Python
+  `CallSite.function`; Node `captureCallSite()` moved to a shared module).
+- Contract: `shared/monitor/SPEC.md`; docs: `docs/cli/monitor.md`,
+  `docs/sdk/monitor.md`; examples: `examples/monitor_openai.py` / `.mjs`.
+
+### Policies — details
+
+- Policies need the full catalog, which now carries origin data (`origins.json`,
+  catalog contract v1.2). Run `tryaii login` (free) first. With no policy set, routing
+  is unchanged.
+- `tryaii policy set` saves to `~/.tryaii/policy.json`. `--origin`, `--providers` and
+  `--platform` on `route`, `eval` and `models` override the saved value for one call.
+- `tryaii models` ends each line with the model's origin (`| origin: US`, `US+CN` for a
+  US fine-tune of a Chinese base model), and `route` prints a `Policy:` line.
+- SDK: `Router(policy=…)`, `DREClient(policy=…)` (Python) and `new Router({ policy })`
+  (Node) take a `ModelPolicy`, a dict, `None` (no policy) or `"auto"` (the saved one, the
+  default). `router.policy_result` (Node: `router.policyResult`) lists allowed and
+  excluded models with the reason.
+- Python and Node apply policies identically: both SDKs' tests reproduce the shared
+  fixtures in `shared/datasave/fixtures/`. See `docs/cli/policy.md` and
+  `shared/datasave/SPEC.md`.
+
 ## 0.6.1 (2026-10-07)
 
 First npm release of the 0.6 line: 0.6.0 was published to PyPI only. Features are

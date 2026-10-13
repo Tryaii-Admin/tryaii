@@ -1,0 +1,240 @@
+{
+  "suite": "pin",
+  "target": "tryaii.monitor.pins.evaluate_pin / pin_from_first_call",
+  "cases": [
+    {
+      "name": "expired-pin-repinned-from-24h-history",
+      "description": "The purchase-item pin expired at 06:00; the last 24h hold 20 reachable winners (gpt-5.4 x15, gpt-5-mini x5; the two claude winners are unreachable), so the 24h window is used.",
+      "input": {
+        "store": "shop",
+        "process": "purchase item",
+        "now": "2026-10-11T12:00:00.000Z",
+        "pin": "from_store"
+      },
+      "expected": {
+        "action": "pin",
+        "pin": {
+          "model": "openai/gpt-5.4",
+          "pinned_at": "2026-10-11T12:00:00.000Z",
+          "expires_at": "2026-10-12T12:00:00.000Z",
+          "basis": {
+            "window": "24h",
+            "events": 20,
+            "counts": {
+              "openai/gpt-5.4": 15,
+              "openai/gpt-5-mini": 5
+            }
+          }
+        },
+        "reason": "most frequent winner over 24h"
+      }
+    },
+    {
+      "name": "valid-pin-kept",
+      "description": "A pin that expires after now is kept as is.",
+      "input": {
+        "store": "shop",
+        "process": "checkout",
+        "now": "2026-10-11T12:00:00.000Z",
+        "pin": "from_store"
+      },
+      "expected": {
+        "action": "keep",
+        "pin": {
+          "model": "openai/gpt-5.4",
+          "pinned_at": "2026-10-11T09:00:00.000Z",
+          "expires_at": "2026-10-12T09:00:00.000Z",
+          "basis": {
+            "window": "first_call",
+            "events": 1,
+            "counts": {
+              "openai/gpt-5.4": 1
+            }
+          }
+        },
+        "reason": "pin valid"
+      }
+    },
+    {
+      "name": "few-events-use-7d-window",
+      "description": "summarize has one reachable winner in the last 24h (< 20), so the 7-day window decides: gpt-5-mini x5 over gpt-5.4-mini x1.",
+      "input": {
+        "store": "shop",
+        "process": "summarize",
+        "now": "2026-10-11T12:00:00.000Z",
+        "pin": null
+      },
+      "expected": {
+        "action": "pin",
+        "pin": {
+          "model": "openai/gpt-5-mini",
+          "pinned_at": "2026-10-11T12:00:00.000Z",
+          "expires_at": "2026-10-12T12:00:00.000Z",
+          "basis": {
+            "window": "7d",
+            "events": 6,
+            "counts": {
+              "openai/gpt-5-mini": 5,
+              "openai/gpt-5.4-mini": 1
+            }
+          }
+        },
+        "reason": "most frequent winner over 7d"
+      }
+    },
+    {
+      "name": "unknown-process-has-no-history",
+      "description": "No events for the process: action none (the wrapper routes in-path and pins the first call).",
+      "input": {
+        "store": "shop",
+        "process": "refund",
+        "now": "2026-10-11T12:00:00.000Z",
+        "pin": null
+      },
+      "expected": {
+        "action": "none",
+        "pin": null,
+        "reason": "no reachable winners in history"
+      }
+    },
+    {
+      "name": "pin-valid-exactly-at-expiry-is-expired",
+      "description": "now == expires_at is not before it: the pin is expired and history is consulted.",
+      "input": {
+        "store": "shop",
+        "process": "checkout",
+        "now": "2026-10-12T09:00:00.000Z",
+        "pin": {
+          "model": "openai/gpt-5.4",
+          "pinned_at": "2026-10-11T09:00:00.000Z",
+          "expires_at": "2026-10-12T09:00:00.000Z",
+          "basis": {
+            "window": "first_call",
+            "events": 1,
+            "counts": {
+              "openai/gpt-5.4": 1
+            }
+          }
+        }
+      },
+      "expected": {
+        "action": "none",
+        "pin": null,
+        "reason": "no reachable winners in history"
+      }
+    },
+    {
+      "name": "tie-breaks-by-model-id",
+      "description": "Equal counts pin the lexicographically smaller id.",
+      "input": {
+        "process": "p",
+        "now": "2026-10-11T12:00:00.000Z",
+        "pin": null,
+        "events": [
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-11T11:00:00.000Z",
+            "process": "p",
+            "winner": "openai/gpt-5.4",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-11T11:30:00.000Z",
+            "process": "p",
+            "winner": "openai/gpt-5-mini",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-11T11:40:00.000Z",
+            "process": "other",
+            "winner": "openai/gpt-5-mini",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-11T11:50:00.000Z",
+            "process": "p",
+            "winner": "anthropic/claude-sonnet-4.5",
+            "winner_reachable": false
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-11T11:55:00.000Z",
+            "process": "p",
+            "winner": null,
+            "winner_reachable": false
+          }
+        ]
+      },
+      "expected": {
+        "action": "pin",
+        "pin": {
+          "model": "openai/gpt-5-mini",
+          "pinned_at": "2026-10-11T12:00:00.000Z",
+          "expires_at": "2026-10-12T12:00:00.000Z",
+          "basis": {
+            "window": "7d",
+            "events": 2,
+            "counts": {
+              "openai/gpt-5-mini": 1,
+              "openai/gpt-5.4": 1
+            }
+          }
+        },
+        "reason": "most frequent winner over 7d"
+      }
+    },
+    {
+      "name": "events-outside-7d-ignored",
+      "description": "History older than 7 days never counts.",
+      "input": {
+        "process": "p",
+        "now": "2026-10-11T12:00:00.000Z",
+        "pin": null,
+        "events": [
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-03T12:00:00.000Z",
+            "process": "p",
+            "winner": "openai/gpt-5.4",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "bad-timestamp",
+            "process": "p",
+            "winner": "openai/gpt-5.4",
+            "winner_reachable": true
+          }
+        ]
+      },
+      "expected": {
+        "action": "none",
+        "pin": null,
+        "reason": "no reachable winners in history"
+      }
+    },
+    {
+      "name": "first-call-pin",
+      "description": "The pin a process gets from its very first in-path route.",
+      "input": {
+        "first_call_winner": "openai/gpt-5.4",
+        "now": "2026-10-11T12:00:00.250Z"
+      },
+      "expected": {
+        "model": "openai/gpt-5.4",
+        "pinned_at": "2026-10-11T12:00:00.250Z",
+        "expires_at": "2026-10-12T12:00:00.250Z",
+        "basis": {
+          "window": "first_call",
+          "events": 1,
+          "counts": {
+            "openai/gpt-5.4": 1
+          }
+        }
+      }
+    }
+  ]
+}

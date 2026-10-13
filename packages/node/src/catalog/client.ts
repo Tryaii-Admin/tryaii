@@ -48,7 +48,9 @@ import {
   BundleSchemaError,
   CatalogBundle,
   MANIFEST_FILE,
+  OPTIONAL_DATA_FILES,
   bundleFromTexts,
+  listedDataFiles,
   loadBundle,
   starterBundle,
 } from './bundle.js';
@@ -384,7 +386,7 @@ export function saveFull(
   const tmp = join(base, `.tmp-${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`);
   const target = join(base, version);
   try {
-    for (const name of BUNDLE_DATA_FILES) {
+    for (const name of listedDataFiles(bundle.manifest)) {
       writeFileAtomic(join(tmp, name), Buffer.from(files[name], 'utf-8'));
     }
     writeFileAtomic(join(tmp, MANIFEST_FILE), Buffer.from(manifestText(manifest), 'utf-8'));
@@ -406,6 +408,7 @@ export function saveFull(
     centroids: bundle.centroids,
     trainingQueries: bundle.trainingQueries,
     directory: target,
+    origins: bundle.origins,
   });
   loaded.set(target, placed);
   return placed;
@@ -544,7 +547,7 @@ async function runCheck(
     return { outcome: 'failed', bundle: null };
   }
   const fileTexts = files as Record<string, unknown>;
-  for (const name of BUNDLE_DATA_FILES) {
+  for (const name of [...BUNDLE_DATA_FILES, ...OPTIONAL_DATA_FILES]) {
     if (name in fileTexts && typeof fileTexts[name] !== 'string') {
       return { outcome: 'failed', bundle: null };
     }

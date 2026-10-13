@@ -1,0 +1,1 @@
+{"schema":"tryaii.monitor.vector/1","prompt_hash":"0caf4a20a2863391d35b1dbf9cee6b4ff6cc08f83211a51e1796f0ed6d0d0dfb","ts":"2026-10-11T00:30:00.000Z","process":"purchase item","model":"all-MiniLM-L6-v2","dim":4,"v":[0.0123,-0.2,0.5,0]}

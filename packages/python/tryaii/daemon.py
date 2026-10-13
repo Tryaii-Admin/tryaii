@@ -457,15 +457,68 @@ def _deserialize_route_result(data: dict):
     )
 
 
-def route(state: dict, prompt: str, priorities, top_k: int):
-    """Route a single prompt through a running daemon. Raises on failure."""
+#: Capability a daemon lists in its state file's ``features`` when a route
+#: request may ask for the prompt's embedding (``includeEmbedding``).
+FEATURE_ROUTE_EMBEDDING = "routeEmbedding"
+
+#: Capability a daemon lists in its state file's ``features`` when it honours
+#: a route request's ``allowedModels`` (data-save policies).
+FEATURE_ALLOWED_MODELS = "allowedModels"
+
+
+def supports(state: dict, feature: str) -> bool:
+    """Whether the daemon behind ``state`` advertises ``feature``. A daemon
+    from a release before the ``features`` key answers False to everything."""
+    return feature in (state.get("features") or [])
+
+
+def route(state: dict, prompt: str, priorities, top_k: int, allowed_models=None):
+    """Route a single prompt through a running daemon. Raises on failure.
+
+    ``allowed_models`` (the ids a data-save policy allows) limits the
+    candidates; None = every catalog model."""
+    result, _embedding = _route_request(state, prompt, priorities, top_k, False,
+                                        allowed_models)
+    return result
+
+
+def route_with_embedding(state: dict, prompt: str, priorities, top_k: int,
+                         allowed_models=None):
+    """Route a single prompt and also fetch its embedding vector.
+
+    Returns ``(RouteResult, embedding)`` where ``embedding`` is the wire dict
+    ``{"model": str, "dim": int, "v": [float, ...]}`` (4-decimal floats).
+    Raises RuntimeError when the daemon predates the feature (the caller
+    should fall back to ``route()`` and record no vector). ``allowed_models``
+    is passed through like ``route()``."""
+    if not supports(state, FEATURE_ROUTE_EMBEDDING):
+        raise RuntimeError("daemon does not support routeEmbedding")
+    return _route_request(state, prompt, priorities, top_k, True, allowed_models)
+
+
+def _route_request(state: dict, prompt: str, priorities, top_k: int,
+                   include_embedding: bool, allowed_models=None):
     payload = {
         "cmd": "route",
         "prompt": prompt,
         "priorities": priorities.to_dict(),
         "topK": top_k,
     }
+    if include_embedding:
+        payload["includeEmbedding"] = True
+    if allowed_models is not None:
+        # A daemon from an older release would ignore the list and route
+        # unfiltered: require it to advertise support, else the caller falls
+        # back to in-process routing.
+        if not supports(state, FEATURE_ALLOWED_MODELS):
+            raise RuntimeError("daemon does not support allowedModels")
+        payload["allowedModels"] = list(allowed_models)
     resp = _request(state, payload, timeout=30)
     if not resp.get("ok"):
         raise RuntimeError(resp.get("error", "daemon route failed"))
-    return _deserialize_route_result(resp["result"])
+    data = resp["result"]
+    result = _deserialize_route_result(data)
+    embedding = data.get("embedding") if include_embedding else None
+    if include_embedding and not isinstance(embedding, dict):
+        raise RuntimeError("daemon returned no embedding")
+    return result, embedding

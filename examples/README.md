@@ -1,5 +1,20 @@
 # Examples
 
+## `monitor_openai.py` / `monitor_openai.mjs` — wrap an OpenAI client
+
+Wrap the client your app already uses, name a sub-process, make two calls,
+then read the records with `tryaii monitor status --app examples`
+([docs](../docs/cli/monitor.md)). Needs `openai` and an `OPENAI_API_KEY`
+(or point the client at OpenRouter with `OPENROUTER_API_KEY` to let tryaii
+swap models across providers).
+
+```bash
+pip install tryaii openai && python examples/monitor_openai.py
+npm install tryaii openai && node examples/monitor_openai.mjs
+tryaii monitor status --app examples
+tryaii monitor set summarize dynamic --app examples   # route that sub-process from now on
+```
+
 ## `prompts.json` — 1000-prompt routing eval set
 
 A ready-to-run input for `tryaii eval`: **1000 unique prompts spanning 37 domains**

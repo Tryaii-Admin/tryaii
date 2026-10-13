@@ -59,9 +59,16 @@ signals readiness. Shape:
   "port": 0,
   "token": "<random hex>",
   "pid": 0,
-  "startedAtMs": 0
+  "startedAtMs": 0,
+  "features": ["allowedModels", "routeEmbedding"]
 }
 ```
+
+`features` lists optional request capabilities the daemon honours; a client
+checks it before relying on one (a daemon from an older release has no
+`features` key and supports none). Today: `allowedModels` -- the `route`
+command honours a list of allowed model ids (data-save policies) -- and
+`routeEmbedding` -- the `route` command accepts `includeEmbedding`.
 
 `catalog` is `"<kind>:<version>"` of the catalog the daemon routes on
 (docs/catalog/CONTRACT-catalog-v1.md section 5). The CLI selects the catalog
@@ -88,6 +95,14 @@ Request:
 
 `cmd` is one of `route`, `ping`, `shutdown`.
 
+`route` also accepts `"includeEmbedding": true` (feature `routeEmbedding`):
+the response's `result` then carries the prompt's embedding vector as the
+classifier computed it -- the same text `route` classified, after the prompt
+length cap -- as `{"model": "<embedding model>", "dim": N, "v": [...]}` with
+4-decimal floats. A non-boolean value is rejected with
+`{"ok": false, "error": "includeEmbedding must be a boolean"}`. The monitor
+feature uses this to store prompt vectors without the prompt text.
+
 Response (route):
 
 ```json
@@ -104,9 +119,12 @@ Response (route):
     "subcategory": "...", "confidence": 0.0, "classifierUsed": "embedding",
     "cacheHit": false, "processingTimeMs": 0.0, "difficulty": 0.0
   },
-  "priorities": {"quality": 3, "cost": 3, "speed": 3}
+  "priorities": {"quality": 3, "cost": 3, "speed": 3},
+  "embedding": {"model": "all-MiniLM-L6-v2", "dim": 384, "v": [0.0123, -0.0456]}
 }}
 ```
+
+(`embedding` is present only when the request set `includeEmbedding`.)
 
 Response (ping): `{"ok": true, "pong": true, "runtime": "...", "version": "...",
 "embeddingModel": "...", "catalog": "<kind>:<version>", "pid": 0, "uptimeMs": 0}`.

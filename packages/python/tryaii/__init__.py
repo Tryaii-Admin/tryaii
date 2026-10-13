@@ -37,6 +37,7 @@ from tryaii.catalog import (
 )
 from tryaii.client import DREClient
 from tryaii.config import TryaiiDreConfig
+from tryaii.policy import ModelPolicy, PolicyCatalogError, PolicyError
 from tryaii.registry.models import ModelInfo, ModelRegistry
 from tryaii.router import Router, RouteResult
 from tryaii.scoring.priorities import DEFAULT_PRIORITIES, Priorities
@@ -45,7 +46,7 @@ from tryaii.scoring.priorities import DEFAULT_PRIORITIES, Priorities
 # configures handlers. Done after imports to keep module-level imports at top.
 logging.getLogger("tryaii").addHandler(logging.NullHandler())
 
-__version__ = "0.6.1"
+__version__ = "0.7.0"
 
 __all__ = [
     "Router",
@@ -62,6 +63,9 @@ __all__ = [
     "BundleSchemaError",
     "SessionEndedError",
     "LoginRequiredError",
+    "ModelPolicy",
+    "PolicyError",
+    "PolicyCatalogError",
     "TryaiiDreConfig",
     "DREClient",
     "AsyncDREClient",
@@ -82,4 +86,9 @@ def __getattr__(name: str):
         from tryaii.async_client import AsyncDREClient
 
         return AsyncDREClient
+    if name == "monitor":
+        # ``tryaii.monitor.wrap(client)`` without an explicit import.
+        import tryaii.monitor as monitor
+
+        return monitor
     raise AttributeError(f"module 'tryaii' has no attribute {name!r}")

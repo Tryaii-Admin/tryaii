@@ -1,0 +1,14 @@
+tryaii monitor -- app: managed (last 24h)
+
+process    mode                         pinned  calls  tokens  est cost  at winner  savings  top winner share
+classify   dynamic                      -           1    1200    0.0006     0.0006   0.0000  openai/gpt-5-mini 100%
+    -> app/classify.py
+summarize  managed (openai/gpt-5-mini)  -           1    1200    0.0006     0.0006   0.0000  openai/gpt-5-mini 100%
+    -> app/summarize.py
+triage     managed (openai/gpt-5-nano)  -           1    1200    0.0110     0.0006   0.0103  openai/gpt-5-mini 100%
+    -> app/triage.py
+
+totals: 3 calls, 0 errors, est cost 0.0123, at winner 0.0019, savings 0.0103
+realised: 2 swapped calls, saved 0.0207
+source: remote etag e-42 fetched 2026-10-12T08:05:00.000Z
+upload: ok 2 events at 2026-10-12T08:25:00.000Z

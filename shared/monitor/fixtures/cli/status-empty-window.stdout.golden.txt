@@ -1,0 +1,11 @@
+tryaii monitor -- app: shop (last 24h)
+
+process        mode     pinned  calls  tokens  est cost  at winner  savings  top winner share
+checkout       off      -           0       0    0.0000          -        -  -
+purchase item  stable   -           0       0    0.0000          -        -  -
+summarize      dynamic  -           0       0    0.0000          -        -  -
+
+totals: 0 calls, 0 errors, est cost 0.0000, at winner -, savings -
+realised: 0 swapped calls, saved -
+source: local
+upload: off

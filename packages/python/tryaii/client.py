@@ -20,6 +20,7 @@ from typing import Optional
 
 from tryaii.config import TryaiiDreConfig
 from tryaii.integrations.openrouter import OpenRouterIntegration, OpenRouterResponse
+from tryaii.policy import PolicyLike
 from tryaii.router import Router, RouteResult
 from tryaii.scoring.priorities import Priorities
 
@@ -40,6 +41,8 @@ class DREClient:
         cache_lint: "warn" enables the pre-flight prompt-cache lint +
                     runtime verification (stderr warnings, fail-open).
                     Default "off"; TRYAII_CACHE_LINT=warn also enables.
+        policy: Data-save policy (shared/datasave/SPEC.md): "auto" (default)
+                = the saved policy, None = none, or a ModelPolicy / dict.
     """
 
     def __init__(
@@ -48,6 +51,7 @@ class DREClient:
         priorities: Optional[Priorities] = None,
         embedding_model: Optional[str] = None,
         cache_lint: Optional[str] = None,
+        policy: PolicyLike = "auto",
     ):
         self._api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
         self._default_priorities = priorities
@@ -59,7 +63,7 @@ class DREClient:
             config = TryaiiDreConfig(embedding_model=embedding_model)
 
         # Core router
-        self._router = Router(config=config)
+        self._router = Router(config=config, policy=policy)
 
         # OpenRouter integration for API calls (cache_lint="warn" enables the
         # pre-flight prompt-cache lint + runtime verification, fail-open).

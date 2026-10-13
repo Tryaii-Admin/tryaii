@@ -1,0 +1,6 @@
+{
+  "app": "shop",
+  "process": "summarize",
+  "mode": "managed",
+  "model": "gpt-5-mini"
+}

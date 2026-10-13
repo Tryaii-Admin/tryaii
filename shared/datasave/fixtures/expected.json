@@ -1,0 +1,738 @@
+{
+  "cases": [
+    {
+      "name": "inactive",
+      "policy": {
+        "origin": null,
+        "providers": [],
+        "exclude_providers": [],
+        "allow_countries": [],
+        "deny_countries": [],
+        "platform": null
+      },
+      "summary": "",
+      "active": false,
+      "allowed": [
+        "openai/gpt-x",
+        "openai/gpt-nohost",
+        "anthropic/claude-y",
+        "qwen/qwen-z",
+        "qwen/qwen-z:free",
+        "fireworks/ember",
+        "moonshotai/kimi",
+        "mistralai/mistral-m",
+        "cohere/command",
+        "twlab/model",
+        "unknown/thing",
+        "openrouter/router",
+        "ghost/not-in-origins"
+      ],
+      "excluded": {},
+      "provider": {
+        "openai/gpt-x": null,
+        "openai/gpt-nohost": null,
+        "anthropic/claude-y": null,
+        "qwen/qwen-z": null,
+        "qwen/qwen-z:free": null,
+        "fireworks/ember": null,
+        "moonshotai/kimi": null,
+        "mistralai/mistral-m": null,
+        "cohere/command": null,
+        "twlab/model": null,
+        "unknown/thing": null,
+        "openrouter/router": null,
+        "ghost/not-in-origins": null
+      }
+    },
+    {
+      "name": "no-prc-models",
+      "policy": {
+        "origin": "no-prc-models",
+        "providers": [],
+        "exclude_providers": [],
+        "allow_countries": [],
+        "deny_countries": [],
+        "platform": null
+      },
+      "summary": "origin no-prc-models",
+      "active": true,
+      "allowed": [
+        "openai/gpt-x",
+        "openai/gpt-nohost",
+        "anthropic/claude-y",
+        "mistralai/mistral-m",
+        "cohere/command",
+        "twlab/model"
+      ],
+      "excluded": {
+        "qwen/qwen-z": "origin",
+        "qwen/qwen-z:free": "origin",
+        "fireworks/ember": "origin",
+        "moonshotai/kimi": "origin",
+        "unknown/thing": "unknown",
+        "openrouter/router": "unknown",
+        "ghost/not-in-origins": "unknown"
+      },
+      "provider": {
+        "openai/gpt-x": null,
+        "openai/gpt-nohost": null,
+        "anthropic/claude-y": null,
+        "mistralai/mistral-m": null,
+        "cohere/command": null,
+        "twlab/model": null
+      }
+    },
+    {
+      "name": "no-prc-hosting",
+      "policy": {
+        "origin": "no-prc-hosting",
+        "providers": [],
+        "exclude_providers": [],
+        "allow_countries": [],
+        "deny_countries": [],
+        "platform": null
+      },
+      "summary": "origin no-prc-hosting",
+      "active": true,
+      "allowed": [
+        "openai/gpt-x",
+        "anthropic/claude-y",
+        "qwen/qwen-z",
+        "qwen/qwen-z:free",
+        "fireworks/ember",
+        "moonshotai/kimi",
+        "mistralai/mistral-m",
+        "cohere/command",
+        "twlab/model",
+        "unknown/thing",
+        "openrouter/router"
+      ],
+      "excluded": {
+        "openai/gpt-nohost": "host",
+        "ghost/not-in-origins": "host"
+      },
+      "provider": {
+        "openai/gpt-x": {
+          "only": [
+            "azure",
+            "openai"
+          ]
+        },
+        "anthropic/claude-y": {
+          "only": [
+            "amazon-bedrock",
+            "anthropic",
+            "google-vertex"
+          ]
+        },
+        "qwen/qwen-z": {
+          "only": [
+            "amazon-bedrock",
+            "deepinfra"
+          ]
+        },
+        "qwen/qwen-z:free": {
+          "only": [
+            "amazon-bedrock",
+            "deepinfra"
+          ]
+        },
+        "fireworks/ember": {
+          "only": [
+            "fireworks"
+          ]
+        },
+        "moonshotai/kimi": {
+          "only": [
+            "deepinfra"
+          ]
+        },
+        "mistralai/mistral-m": {
+          "only": [
+            "deepinfra",
+            "mistral"
+          ]
+        },
+        "cohere/command": {
+          "only": [
+            "cohere"
+          ]
+        },
+        "twlab/model": {
+          "only": [
+            "deepinfra"
+          ]
+        },
+        "unknown/thing": {
+          "only": [
+            "deepinfra"
+          ]
+        },
+        "openrouter/router": {
+          "only": [
+            "openai"
+          ]
+        }
+      }
+    },
+    {
+      "name": "us-eu",
+      "policy": {
+        "origin": "us-eu",
+        "providers": [],
+        "exclude_providers": [],
+        "allow_countries": [],
+        "deny_countries": [],
+        "platform": null
+      },
+      "summary": "origin us-eu",
+      "active": true,
+      "allowed": [
+        "openai/gpt-x",
+        "anthropic/claude-y",
+        "mistralai/mistral-m"
+      ],
+      "excluded": {
+        "openai/gpt-nohost": "host",
+        "qwen/qwen-z": "origin",
+        "qwen/qwen-z:free": "origin",
+        "fireworks/ember": "origin",
+        "moonshotai/kimi": "origin",
+        "cohere/command": "origin",
+        "twlab/model": "origin",
+        "unknown/thing": "unknown",
+        "openrouter/router": "unknown",
+        "ghost/not-in-origins": "unknown"
+      },
+      "provider": {
+        "openai/gpt-x": {
+          "only": [
+            "azure",
+            "openai"
+          ]
+        },
+        "anthropic/claude-y": {
+          "only": [
+            "amazon-bedrock",
+            "anthropic",
+            "google-vertex"
+          ]
+        },
+        "mistralai/mistral-m": {
+          "only": [
+            "deepinfra",
+            "mistral"
+          ]
+        }
+      }
+    },
+    {
+      "name": "providers anthropic+openai",
+      "policy": {
+        "origin": null,
+        "providers": [
+          "anthropic",
+          "openai"
+        ],
+        "exclude_providers": [],
+        "allow_countries": [],
+        "deny_countries": [],
+        "platform": null
+      },
+      "summary": "providers anthropic,openai",
+      "active": true,
+      "allowed": [
+        "openai/gpt-x",
+        "anthropic/claude-y"
+      ],
+      "excluded": {
+        "openai/gpt-nohost": "host",
+        "qwen/qwen-z": "provider",
+        "qwen/qwen-z:free": "provider",
+        "fireworks/ember": "provider",
+        "moonshotai/kimi": "provider",
+        "mistralai/mistral-m": "provider",
+        "cohere/command": "provider",
+        "twlab/model": "provider",
+        "unknown/thing": "unknown",
+        "openrouter/router": "unknown",
+        "ghost/not-in-origins": "unknown"
+      },
+      "provider": {
+        "openai/gpt-x": {
+          "only": [
+            "openai"
+          ]
+        },
+        "anthropic/claude-y": {
+          "only": [
+            "anthropic"
+          ]
+        }
+      }
+    },
+    {
+      "name": "providers by namespace alias",
+      "policy": {
+        "origin": null,
+        "providers": [
+          "deepinfra",
+          "mistralai"
+        ],
+        "exclude_providers": [],
+        "allow_countries": [],
+        "deny_countries": [],
+        "platform": null
+      },
+      "summary": "providers deepinfra,mistralai",
+      "active": true,
+      "allowed": [
+        "mistralai/mistral-m"
+      ],
+      "excluded": {
+        "openai/gpt-x": "provider",
+        "openai/gpt-nohost": "provider",
+        "anthropic/claude-y": "provider",
+        "qwen/qwen-z": "provider",
+        "qwen/qwen-z:free": "provider",
+        "fireworks/ember": "provider",
+        "moonshotai/kimi": "provider",
+        "cohere/command": "provider",
+        "twlab/model": "provider",
+        "unknown/thing": "unknown",
+        "openrouter/router": "unknown",
+        "ghost/not-in-origins": "unknown"
+      },
+      "provider": {
+        "mistralai/mistral-m": {
+          "only": [
+            "deepinfra",
+            "mistral"
+          ]
+        }
+      }
+    },
+    {
+      "name": "exclude moonshot",
+      "policy": {
+        "origin": null,
+        "providers": [],
+        "exclude_providers": [
+          "moonshot"
+        ],
+        "allow_countries": [],
+        "deny_countries": [],
+        "platform": null
+      },
+      "summary": "exclude-providers moonshot",
+      "active": true,
+      "allowed": [
+        "openai/gpt-x",
+        "anthropic/claude-y",
+        "qwen/qwen-z",
+        "qwen/qwen-z:free",
+        "mistralai/mistral-m",
+        "cohere/command",
+        "twlab/model"
+      ],
+      "excluded": {
+        "openai/gpt-nohost": "host",
+        "fireworks/ember": "provider",
+        "moonshotai/kimi": "provider",
+        "unknown/thing": "unknown",
+        "openrouter/router": "unknown",
+        "ghost/not-in-origins": "unknown"
+      },
+      "provider": {
+        "openai/gpt-x": {
+          "only": [
+            "azure",
+            "openai"
+          ]
+        },
+        "anthropic/claude-y": {
+          "only": [
+            "amazon-bedrock",
+            "anthropic",
+            "google-vertex"
+          ]
+        },
+        "qwen/qwen-z": {
+          "only": [
+            "alibaba",
+            "amazon-bedrock",
+            "deepinfra"
+          ]
+        },
+        "qwen/qwen-z:free": {
+          "only": [
+            "alibaba",
+            "amazon-bedrock",
+            "deepinfra"
+          ]
+        },
+        "mistralai/mistral-m": {
+          "only": [
+            "deepinfra",
+            "mistral"
+          ]
+        },
+        "cohere/command": {
+          "only": [
+            "cohere"
+          ]
+        },
+        "twlab/model": {
+          "only": [
+            "deepinfra"
+          ]
+        }
+      }
+    },
+    {
+      "name": "allow US only",
+      "policy": {
+        "origin": null,
+        "providers": [],
+        "exclude_providers": [],
+        "allow_countries": [
+          "US"
+        ],
+        "deny_countries": [],
+        "platform": null
+      },
+      "summary": "allow-countries US",
+      "active": true,
+      "allowed": [
+        "openai/gpt-x",
+        "anthropic/claude-y"
+      ],
+      "excluded": {
+        "openai/gpt-nohost": "host",
+        "qwen/qwen-z": "origin",
+        "qwen/qwen-z:free": "origin",
+        "fireworks/ember": "origin",
+        "moonshotai/kimi": "origin",
+        "mistralai/mistral-m": "origin",
+        "cohere/command": "origin",
+        "twlab/model": "origin",
+        "unknown/thing": "unknown",
+        "openrouter/router": "unknown",
+        "ghost/not-in-origins": "unknown"
+      },
+      "provider": {
+        "openai/gpt-x": {
+          "only": [
+            "azure",
+            "openai"
+          ]
+        },
+        "anthropic/claude-y": {
+          "only": [
+            "amazon-bedrock",
+            "anthropic",
+            "google-vertex"
+          ]
+        }
+      }
+    },
+    {
+      "name": "deny FR",
+      "policy": {
+        "origin": null,
+        "providers": [],
+        "exclude_providers": [],
+        "allow_countries": [],
+        "deny_countries": [
+          "FR"
+        ],
+        "platform": null
+      },
+      "summary": "deny-countries FR",
+      "active": true,
+      "allowed": [
+        "openai/gpt-x",
+        "anthropic/claude-y",
+        "qwen/qwen-z",
+        "qwen/qwen-z:free",
+        "fireworks/ember",
+        "moonshotai/kimi",
+        "cohere/command",
+        "twlab/model"
+      ],
+      "excluded": {
+        "openai/gpt-nohost": "host",
+        "mistralai/mistral-m": "origin",
+        "unknown/thing": "unknown",
+        "openrouter/router": "unknown",
+        "ghost/not-in-origins": "unknown"
+      },
+      "provider": {
+        "openai/gpt-x": {
+          "only": [
+            "azure",
+            "openai"
+          ]
+        },
+        "anthropic/claude-y": {
+          "only": [
+            "amazon-bedrock",
+            "anthropic",
+            "google-vertex"
+          ]
+        },
+        "qwen/qwen-z": {
+          "only": [
+            "alibaba",
+            "amazon-bedrock",
+            "deepinfra"
+          ]
+        },
+        "qwen/qwen-z:free": {
+          "only": [
+            "alibaba",
+            "amazon-bedrock",
+            "deepinfra"
+          ]
+        },
+        "fireworks/ember": {
+          "only": [
+            "fireworks"
+          ]
+        },
+        "moonshotai/kimi": {
+          "only": [
+            "deepinfra",
+            "moonshotai"
+          ]
+        },
+        "cohere/command": {
+          "only": [
+            "cohere"
+          ]
+        },
+        "twlab/model": {
+          "only": [
+            "deepinfra"
+          ]
+        }
+      }
+    },
+    {
+      "name": "platform bedrock",
+      "policy": {
+        "origin": null,
+        "providers": [],
+        "exclude_providers": [],
+        "allow_countries": [],
+        "deny_countries": [],
+        "platform": "bedrock"
+      },
+      "summary": "platform bedrock",
+      "active": true,
+      "allowed": [
+        "anthropic/claude-y",
+        "qwen/qwen-z",
+        "qwen/qwen-z:free"
+      ],
+      "excluded": {
+        "openai/gpt-x": "platform",
+        "openai/gpt-nohost": "platform",
+        "fireworks/ember": "platform",
+        "moonshotai/kimi": "platform",
+        "mistralai/mistral-m": "platform",
+        "cohere/command": "platform",
+        "twlab/model": "platform",
+        "unknown/thing": "platform",
+        "openrouter/router": "platform",
+        "ghost/not-in-origins": "platform"
+      },
+      "provider": {
+        "anthropic/claude-y": {
+          "only": [
+            "amazon-bedrock"
+          ]
+        },
+        "qwen/qwen-z": {
+          "only": [
+            "amazon-bedrock"
+          ]
+        },
+        "qwen/qwen-z:free": {
+          "only": [
+            "amazon-bedrock"
+          ]
+        }
+      }
+    },
+    {
+      "name": "platform azure",
+      "policy": {
+        "origin": null,
+        "providers": [],
+        "exclude_providers": [],
+        "allow_countries": [],
+        "deny_countries": [],
+        "platform": "azure"
+      },
+      "summary": "platform azure",
+      "active": true,
+      "allowed": [
+        "openai/gpt-x"
+      ],
+      "excluded": {
+        "openai/gpt-nohost": "platform",
+        "anthropic/claude-y": "platform",
+        "qwen/qwen-z": "platform",
+        "qwen/qwen-z:free": "platform",
+        "fireworks/ember": "platform",
+        "moonshotai/kimi": "platform",
+        "mistralai/mistral-m": "platform",
+        "cohere/command": "platform",
+        "twlab/model": "platform",
+        "unknown/thing": "platform",
+        "openrouter/router": "platform",
+        "ghost/not-in-origins": "platform"
+      },
+      "provider": {
+        "openai/gpt-x": {
+          "only": [
+            "azure"
+          ]
+        }
+      }
+    },
+    {
+      "name": "no-prc-models on bedrock",
+      "policy": {
+        "origin": "no-prc-models",
+        "providers": [],
+        "exclude_providers": [],
+        "allow_countries": [],
+        "deny_countries": [],
+        "platform": "bedrock"
+      },
+      "summary": "origin no-prc-models; platform bedrock",
+      "active": true,
+      "allowed": [
+        "anthropic/claude-y"
+      ],
+      "excluded": {
+        "openai/gpt-x": "platform",
+        "openai/gpt-nohost": "platform",
+        "qwen/qwen-z": "origin",
+        "qwen/qwen-z:free": "origin",
+        "fireworks/ember": "origin",
+        "moonshotai/kimi": "origin",
+        "mistralai/mistral-m": "platform",
+        "cohere/command": "platform",
+        "twlab/model": "platform",
+        "unknown/thing": "unknown",
+        "openrouter/router": "unknown",
+        "ghost/not-in-origins": "unknown"
+      },
+      "provider": {
+        "anthropic/claude-y": {
+          "only": [
+            "amazon-bedrock"
+          ]
+        }
+      }
+    },
+    {
+      "name": "deny CN keeps TW and SG-registered PRC subsidiaries out",
+      "policy": {
+        "origin": null,
+        "providers": [],
+        "exclude_providers": [],
+        "allow_countries": [],
+        "deny_countries": [
+          "CN"
+        ],
+        "platform": null
+      },
+      "summary": "deny-countries CN",
+      "active": true,
+      "allowed": [
+        "openai/gpt-x",
+        "anthropic/claude-y",
+        "mistralai/mistral-m",
+        "cohere/command",
+        "twlab/model"
+      ],
+      "excluded": {
+        "openai/gpt-nohost": "host",
+        "qwen/qwen-z": "origin",
+        "qwen/qwen-z:free": "origin",
+        "fireworks/ember": "origin",
+        "moonshotai/kimi": "origin",
+        "unknown/thing": "unknown",
+        "openrouter/router": "unknown",
+        "ghost/not-in-origins": "unknown"
+      },
+      "provider": {
+        "openai/gpt-x": {
+          "only": [
+            "azure",
+            "openai"
+          ]
+        },
+        "anthropic/claude-y": {
+          "only": [
+            "amazon-bedrock",
+            "anthropic",
+            "google-vertex"
+          ]
+        },
+        "mistralai/mistral-m": {
+          "only": [
+            "deepinfra",
+            "mistral"
+          ]
+        },
+        "cohere/command": {
+          "only": [
+            "cohere"
+          ]
+        },
+        "twlab/model": {
+          "only": [
+            "deepinfra"
+          ]
+        }
+      }
+    },
+    {
+      "name": "error: unknown provider",
+      "error": "unknown provider: nobody (use company names such as anthropic, openai, google, mistral, or a model-id namespace)"
+    },
+    {
+      "name": "error: unknown origin",
+      "error": "unknown origin 'no-china'; use one of: no-prc-models, no-prc-hosting, us-eu"
+    },
+    {
+      "name": "error: unknown platform",
+      "error": "unknown platform 'oracle'; use one of: bedrock, azure, vertex"
+    },
+    {
+      "name": "error: bad country",
+      "error": "deny_countries: 'CHN' is not a two-letter country code"
+    },
+    {
+      "name": "error: unknown field",
+      "error": "unknown policy field(s): region"
+    }
+  ],
+  "labels": {
+    "openai/gpt-x": "US",
+    "fireworks/ember": "US+CN",
+    "qwen/qwen-z:free": "CN",
+    "unknown/thing": "?",
+    "ghost/not-in-origins": "?",
+    "twlab/model": "TW"
+  },
+  "no_origins": {
+    "name": "active policy without origins.json",
+    "error": "Model filters (origin, providers, platform) need the full catalog. Run: tryaii login"
+  }
+}

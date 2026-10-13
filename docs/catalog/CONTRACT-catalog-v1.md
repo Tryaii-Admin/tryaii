@@ -1,4 +1,4 @@
-# tryaii model catalog — contract v1.1
+# tryaii model catalog — contract v1.2
 
 This is the client-side specification of the model catalog: the bundle format
 both SDKs (Python and Node) route on, how a logged-in client downloads, verifies,
@@ -242,3 +242,22 @@ forgery, because the manifest travels with the files.
   Python verifies with a vendored, verify-only Ed25519 implementation (no new
   runtime dependency) tested against the RFC 8032 test vectors; Node uses
   `crypto.verify(null, msg, publicKey, sig)`.
+
+## 7. Optional data files (catalog contract v1.2, 2026-10-10)
+
+- A bundle may carry **optional data files** beyond the five of section 1. v1.2 defines
+  one: `origins.json`, the model origin / inference-host data the SDKs' data-save
+  policies read (`shared/datasave/SPEC.md`). Only full bundles carry it;
+  the starter never does, so policies need a logged-in user.
+- An optional file is present **exactly when `manifest.files` lists it**, with the
+  same rules as every other data file: canonical text, `files[name]` = sha256 of its
+  UTF-8 bytes, covered by the manifest signature (section 6). A listed file that is
+  missing or mismatched makes the bundle invalid; an unlisted one is ignored by
+  clients and refused by the publisher (`unexpected entries`).
+- `schema` stays 1: the change is additive. Clients older than v1.2 ignore the file
+  (they read only the five) and drop it from their cache.
+- Server: `GET /v1/catalog/live` serves it in `files` after the five; MongoDB stores it
+  in the release's `catalog_benchmarks` document as `origins`, and
+  `catalog_releases.files_sha256` lists it.
+- Clients (both SDKs): verified and parsed when listed; the full-catalog cache writes it
+  with the other files.

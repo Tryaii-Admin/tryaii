@@ -33,6 +33,7 @@ from tryaii.integrations.openrouter import (
     OpenRouterResponse,
     _build_cache_lint_hook,
 )
+from tryaii.policy import PolicyLike
 from tryaii.router import Router, RouteResult
 from tryaii.scoring.priorities import Priorities
 
@@ -62,6 +63,8 @@ class AsyncDREClient:
         cache_lint: "warn" enables the pre-flight prompt-cache lint +
             runtime verification (stderr warnings, fail-open). Default
             "off"; TRYAII_CACHE_LINT=warn also enables.
+        policy: Data-save policy (shared/datasave/SPEC.md): "auto" (default)
+            = the saved policy, None = none, or a ModelPolicy / dict.
     """
 
     def __init__(
@@ -70,6 +73,7 @@ class AsyncDREClient:
         priorities: Optional[Priorities] = None,
         embedding_model: Optional[str] = None,
         cache_lint: Optional[str] = None,
+        policy: PolicyLike = "auto",
     ):
         self._api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
         self._default_priorities = priorities
@@ -81,7 +85,7 @@ class AsyncDREClient:
             config = TryaiiDreConfig(embedding_model=embedding_model)
 
         # Core router (sync -- will be called via asyncio.to_thread)
-        self._router = Router(config=config)
+        self._router = Router(config=config, policy=policy)
 
         # Async HTTP client (lazy-initialized)
         self._http_client: Optional[httpx.AsyncClient] = None
@@ -148,6 +152,15 @@ class AsyncDREClient:
         if max_tokens is not None and math.isfinite(max_tokens) and max_tokens > 0:
             payload["max_tokens"] = max_tokens
         return payload
+
+    def _apply_policy(self, payload: dict, model_id: str) -> None:
+        """Pin the OpenRouter hosts the router's data-save policy allows
+        (shared/datasave/SPEC.md section 4). Raises ``PolicyError`` when the
+        policy excludes ``model_id``."""
+        prefs = getattr(getattr(self, "_router", None), "provider_preferences", None)
+        provider = prefs(model_id) if callable(prefs) else None
+        if provider is not None:
+            payload["provider"] = provider
 
     # -- Retry helper --------------------------------------------------
 
@@ -309,6 +322,7 @@ class AsyncDREClient:
             if self._cache_lint else None
 
         payload = self._build_payload(openrouter_model, messages, temperature, max_tokens)
+        self._apply_policy(payload, model_id)
 
         # Async API call
         client = self._ensure_http_client()
@@ -380,6 +394,7 @@ class AsyncDREClient:
         payload = self._build_payload(
             openrouter_model, messages, temperature, max_tokens, stream=True
         )
+        self._apply_policy(payload, model_id)
 
         # Async streaming with reconnect on transient errors. Retries only cover
         # the pre-first-byte connection phase: once a chunk has been yielded a
@@ -489,6 +504,7 @@ class AsyncDREClient:
             if self._cache_lint else None
 
         payload = self._build_payload(openrouter_model, messages, temperature, max_tokens)
+        self._apply_policy(payload, model_id)
 
         # Async API call
         client = self._ensure_http_client()

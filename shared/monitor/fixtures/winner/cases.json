@@ -1,0 +1,1108 @@
+{
+  "suite": "winner",
+  "target": "tryaii.monitor.winner.pick_winner / routed_model (+ reachable, native_model_id)",
+  "cases": [
+    {
+      "name": "band-cheaper-openai-dynamic",
+      "description": "The first ranked model with quality >= anchor-0.05 and blended price <= the anchor's wins; dynamic on an openai client sends its native id.",
+      "input": {
+        "provider": "openai",
+        "mode": "dynamic",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "openai/gpt-5.4",
+            "finalScore": 0.91,
+            "qualityScore": 0.8
+          },
+          {
+            "modelId": "anthropic/claude-sonnet-4.5",
+            "finalScore": 0.9,
+            "qualityScore": 0.81
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          },
+          {
+            "modelId": "openai/gpt-5-mini",
+            "finalScore": 0.85,
+            "qualityScore": 0.7
+          }
+        ]
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5.4",
+          "rank": 1,
+          "method": "band"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "openai/gpt-5.4",
+          "rank": 1,
+          "method": "band"
+        },
+        "routed": "openai/gpt-5.4",
+        "model_to_send": "gpt-5.4",
+        "route_status": null
+      }
+    },
+    {
+      "name": "unreachable-winner-recommended-not-routed",
+      "description": "An anthropic winner on an openai client is recorded as the winner but never sent; since slice 2 (TS-170) dynamic sends the best-for-less model of the reachable ranking instead (routed_winner).",
+      "input": {
+        "provider": "openai",
+        "mode": "dynamic",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "anthropic/claude-sonnet-4.5",
+            "finalScore": 0.92,
+            "qualityScore": 0.81
+          },
+          {
+            "modelId": "openai/gpt-5.4",
+            "finalScore": 0.91,
+            "qualityScore": 0.8
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ]
+      },
+      "expected": {
+        "winner": {
+          "winner": "anthropic/claude-sonnet-4.5",
+          "rank": 1,
+          "method": "band"
+        },
+        "winner_reachable": false,
+        "routed_winner": {
+          "winner": "openai/gpt-5.4",
+          "rank": 1,
+          "method": "band"
+        },
+        "routed": "openai/gpt-5.4",
+        "model_to_send": "gpt-5.4",
+        "route_status": null
+      }
+    },
+    {
+      "name": "openrouter-routes-cross-provider",
+      "description": "The same ranking on an OpenRouter client is sent as the slug.",
+      "input": {
+        "provider": "openrouter",
+        "mode": "dynamic",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "anthropic/claude-sonnet-4.5",
+            "finalScore": 0.92,
+            "qualityScore": 0.81
+          },
+          {
+            "modelId": "openai/gpt-5.4",
+            "finalScore": 0.91,
+            "qualityScore": 0.8
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ]
+      },
+      "expected": {
+        "winner": {
+          "winner": "anthropic/claude-sonnet-4.5",
+          "rank": 1,
+          "method": "band"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "anthropic/claude-sonnet-4.5",
+          "rank": 1,
+          "method": "band"
+        },
+        "routed": "anthropic/claude-sonnet-4.5",
+        "model_to_send": "anthropic/claude-sonnet-4.5",
+        "route_status": null
+      }
+    },
+    {
+      "name": "anchor-is-best-at-its-price",
+      "description": "A better but pricier model does not qualify; the anchor is the winner (method anchor) and nothing is routed.",
+      "input": {
+        "provider": "openai",
+        "mode": "dynamic",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "anthropic/claude-fable-5.1",
+            "finalScore": 0.95,
+            "qualityScore": 0.9
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          },
+          {
+            "modelId": "openai/gpt-5.4",
+            "finalScore": 0.8,
+            "qualityScore": 0.7
+          }
+        ]
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5.5",
+          "rank": 2,
+          "method": "anchor"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "openai/gpt-5.5",
+          "rank": 1,
+          "method": "anchor"
+        },
+        "routed": null,
+        "model_to_send": null,
+        "route_status": null
+      }
+    },
+    {
+      "name": "quality-floor-excludes-cheaper-model",
+      "description": "A cheaper model below anchor-0.05 quality is not a winner.",
+      "input": {
+        "provider": "openai",
+        "mode": "dynamic",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "openai/gpt-5-mini",
+            "finalScore": 0.93,
+            "qualityScore": 0.76
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ]
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5.5",
+          "rank": 2,
+          "method": "anchor"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "openai/gpt-5.5",
+          "rank": 2,
+          "method": "anchor"
+        },
+        "routed": null,
+        "model_to_send": null,
+        "route_status": null
+      }
+    },
+    {
+      "name": "no-anchor-takes-top",
+      "description": "Without an anchor the top of the ranking wins and, when reachable, is routed in dynamic mode.",
+      "input": {
+        "provider": "openai",
+        "mode": "dynamic",
+        "anchor": null,
+        "scores": [
+          {
+            "modelId": "openai/gpt-5.4",
+            "finalScore": 0.91,
+            "qualityScore": 0.8
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ]
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5.4",
+          "rank": 1,
+          "method": "top"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "openai/gpt-5.4",
+          "rank": 1,
+          "method": "top"
+        },
+        "routed": "openai/gpt-5.4",
+        "model_to_send": "gpt-5.4",
+        "route_status": null
+      }
+    },
+    {
+      "name": "anchor-missing-from-ranking",
+      "description": "An anchor the daemon did not rank behaves like no anchor.",
+      "input": {
+        "provider": "openai",
+        "mode": "off",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "openai/gpt-5-mini",
+            "finalScore": 0.93,
+            "qualityScore": 0.76
+          },
+          {
+            "modelId": "openai/gpt-5.4",
+            "finalScore": 0.91,
+            "qualityScore": 0.8
+          }
+        ]
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5-mini",
+          "rank": 1,
+          "method": "top"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "openai/gpt-5-mini",
+          "rank": 1,
+          "method": "top"
+        },
+        "routed": null,
+        "model_to_send": null,
+        "route_status": null
+      }
+    },
+    {
+      "name": "empty-ranking",
+      "description": "No scores: no winner, nothing routed.",
+      "input": {
+        "provider": "openai",
+        "mode": "dynamic",
+        "anchor": "openai/gpt-5.5",
+        "scores": []
+      },
+      "expected": {
+        "winner": {
+          "winner": null,
+          "rank": null,
+          "method": "none"
+        },
+        "winner_reachable": false,
+        "routed_winner": {
+          "winner": null,
+          "rank": null,
+          "method": "none"
+        },
+        "routed": null,
+        "model_to_send": null,
+        "route_status": null
+      }
+    },
+    {
+      "name": "off-never-routes",
+      "description": "Mode off records the winner but keeps the developer's model.",
+      "input": {
+        "provider": "openai",
+        "mode": "off",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "openai/gpt-5.4",
+            "finalScore": 0.91,
+            "qualityScore": 0.8
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ]
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5.4",
+          "rank": 1,
+          "method": "band"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "openai/gpt-5.4",
+          "rank": 1,
+          "method": "band"
+        },
+        "routed": null,
+        "model_to_send": null,
+        "route_status": null
+      }
+    },
+    {
+      "name": "stable-sends-the-pin",
+      "description": "Stable mode sends the pinned model whatever this call's winner is.",
+      "input": {
+        "provider": "openai",
+        "mode": "stable",
+        "anchor": "openai/gpt-5.5",
+        "pin_model": "openai/gpt-5-mini",
+        "scores": [
+          {
+            "modelId": "openai/gpt-5.4",
+            "finalScore": 0.91,
+            "qualityScore": 0.8
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ]
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5.4",
+          "rank": 1,
+          "method": "band"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "openai/gpt-5.4",
+          "rank": 1,
+          "method": "band"
+        },
+        "routed": "openai/gpt-5-mini",
+        "model_to_send": "gpt-5-mini",
+        "route_status": null
+      }
+    },
+    {
+      "name": "stable-pin-unreachable",
+      "description": "A pinned model the client cannot reach falls back to the anchor.",
+      "input": {
+        "provider": "openai",
+        "mode": "stable",
+        "anchor": "openai/gpt-5.5",
+        "pin_model": "anthropic/claude-sonnet-4.5",
+        "scores": [
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ]
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5.5",
+          "rank": 1,
+          "method": "anchor"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "openai/gpt-5.5",
+          "rank": 1,
+          "method": "anchor"
+        },
+        "routed": null,
+        "model_to_send": null,
+        "route_status": null
+      }
+    },
+    {
+      "name": "stable-pin-equals-anchor",
+      "description": "Pinning the anchor itself changes nothing.",
+      "input": {
+        "provider": "openai",
+        "mode": "stable",
+        "anchor": "openai/gpt-5.5",
+        "pin_model": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ]
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5.5",
+          "rank": 1,
+          "method": "anchor"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "openai/gpt-5.5",
+          "rank": 1,
+          "method": "anchor"
+        },
+        "routed": null,
+        "model_to_send": null,
+        "route_status": null
+      }
+    },
+    {
+      "name": "other-provider-never-swaps",
+      "description": "On an unknown host the winner is still recorded but is unreachable by definition.",
+      "input": {
+        "provider": "other",
+        "mode": "dynamic",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "openai/gpt-5.4",
+            "finalScore": 0.91,
+            "qualityScore": 0.8
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ]
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5.4",
+          "rank": 1,
+          "method": "band"
+        },
+        "winner_reachable": false,
+        "routed_winner": {
+          "winner": "openai/gpt-5.5",
+          "rank": 1,
+          "method": "anchor"
+        },
+        "routed": null,
+        "model_to_send": null,
+        "route_status": null
+      }
+    },
+    {
+      "name": "unpriced-candidate-skipped",
+      "description": "A ranked id that is not in the catalog (no price) cannot qualify; the next candidate does.",
+      "input": {
+        "provider": "openai",
+        "mode": "dynamic",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "openai/not-in-catalog",
+            "finalScore": 0.95,
+            "qualityScore": 0.85
+          },
+          {
+            "modelId": "openai/gpt-5-mini",
+            "finalScore": 0.93,
+            "qualityScore": 0.79
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ]
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5-mini",
+          "rank": 2,
+          "method": "band"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "openai/gpt-5-mini",
+          "rank": 1,
+          "method": "band"
+        },
+        "routed": "openai/gpt-5-mini",
+        "model_to_send": "gpt-5-mini",
+        "route_status": null
+      }
+    },
+    {
+      "name": "ts170-unreachable-winner-reachable-band-sent",
+      "description": "SPEC §2.4/§2.8: the recommendation (haiku) is unreachable from an openai client; the in-path ranking (reachable ∩ policy) still has a band model, so dynamic sends it.",
+      "input": {
+        "provider": "openai",
+        "mode": "dynamic",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "anthropic/claude-haiku-4.5",
+            "finalScore": 0.93,
+            "qualityScore": 0.81
+          },
+          {
+            "modelId": "openai/gpt-5-mini",
+            "finalScore": 0.9,
+            "qualityScore": 0.79
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ]
+      },
+      "expected": {
+        "winner": {
+          "winner": "anthropic/claude-haiku-4.5",
+          "rank": 1,
+          "method": "band"
+        },
+        "winner_reachable": false,
+        "routed_winner": {
+          "winner": "openai/gpt-5-mini",
+          "rank": 1,
+          "method": "band"
+        },
+        "routed": "openai/gpt-5-mini",
+        "model_to_send": "gpt-5-mini",
+        "route_status": null
+      }
+    },
+    {
+      "name": "policy-excludes-band-winner",
+      "description": "SPEC §2.3/§2.8: the policy disallows gpt-5-mini; the next band model wins and is sent.",
+      "input": {
+        "provider": "openai",
+        "mode": "dynamic",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "openai/gpt-5-mini",
+            "finalScore": 0.91,
+            "qualityScore": 0.8
+          },
+          {
+            "modelId": "openai/gpt-5-nano",
+            "finalScore": 0.9,
+            "qualityScore": 0.79
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ],
+        "allowed": [
+          "openai/gpt-5-nano",
+          "openai/gpt-5.5"
+        ]
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5-nano",
+          "rank": 1,
+          "method": "band"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "openai/gpt-5-nano",
+          "rank": 1,
+          "method": "band"
+        },
+        "routed": "openai/gpt-5-nano",
+        "model_to_send": "gpt-5-nano",
+        "route_status": null
+      }
+    },
+    {
+      "name": "policy-excludes-anchor-top-wins",
+      "description": "SPEC §2.3/§2.8: a disallowed anchor leaves the ranking, so the top allowed model wins (method top) and dynamic sends it.",
+      "input": {
+        "provider": "openrouter",
+        "mode": "dynamic",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "anthropic/claude-haiku-4.5",
+            "finalScore": 0.93,
+            "qualityScore": 0.81
+          },
+          {
+            "modelId": "openai/gpt-5-mini",
+            "finalScore": 0.9,
+            "qualityScore": 0.79
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ],
+        "allowed": [
+          "openai/gpt-5-mini",
+          "anthropic/claude-haiku-4.5"
+        ]
+      },
+      "expected": {
+        "winner": {
+          "winner": "anthropic/claude-haiku-4.5",
+          "rank": 1,
+          "method": "top"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "anthropic/claude-haiku-4.5",
+          "rank": 1,
+          "method": "top"
+        },
+        "routed": "anthropic/claude-haiku-4.5",
+        "model_to_send": "anthropic/claude-haiku-4.5",
+        "route_status": null
+      }
+    },
+    {
+      "name": "policy-allows-nothing",
+      "description": "SPEC §2.8: an empty allowed set (fail-closed policy) recommends nothing and sends the anchor.",
+      "input": {
+        "provider": "openai",
+        "mode": "dynamic",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "openai/gpt-5-mini",
+            "finalScore": 0.91,
+            "qualityScore": 0.8
+          },
+          {
+            "modelId": "openai/gpt-5-nano",
+            "finalScore": 0.9,
+            "qualityScore": 0.79
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ],
+        "allowed": []
+      },
+      "expected": {
+        "winner": {
+          "winner": null,
+          "rank": null,
+          "method": "none"
+        },
+        "winner_reachable": false,
+        "routed_winner": {
+          "winner": null,
+          "rank": null,
+          "method": "none"
+        },
+        "routed": null,
+        "model_to_send": null,
+        "route_status": null
+      }
+    },
+    {
+      "name": "policy-stable-pin-disallowed",
+      "description": "SPEC §2.4/§2.8: a pinned model the policy no longer allows is not sent.",
+      "input": {
+        "provider": "openai",
+        "mode": "stable",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "openai/gpt-5-mini",
+            "finalScore": 0.91,
+            "qualityScore": 0.8
+          },
+          {
+            "modelId": "openai/gpt-5-nano",
+            "finalScore": 0.9,
+            "qualityScore": 0.79
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ],
+        "pin_model": "openai/gpt-5-mini",
+        "allowed": [
+          "openai/gpt-5-nano",
+          "openai/gpt-5.5"
+        ]
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5-nano",
+          "rank": 1,
+          "method": "band"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "openai/gpt-5-nano",
+          "rank": 1,
+          "method": "band"
+        },
+        "routed": null,
+        "model_to_send": null,
+        "route_status": null
+      }
+    },
+    {
+      "name": "managed-reachable-sent",
+      "description": "SPEC §2.9: managed sends its model when the client reaches it; the recommendation is still recorded.",
+      "input": {
+        "provider": "openai",
+        "mode": "managed",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "openai/gpt-5-mini",
+            "finalScore": 0.91,
+            "qualityScore": 0.8
+          },
+          {
+            "modelId": "openai/gpt-5-nano",
+            "finalScore": 0.9,
+            "qualityScore": 0.79
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ],
+        "managed_model": "openai/gpt-5-nano"
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5-mini",
+          "rank": 1,
+          "method": "band"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "openai/gpt-5-mini",
+          "rank": 1,
+          "method": "band"
+        },
+        "routed": "openai/gpt-5-nano",
+        "model_to_send": "gpt-5-nano",
+        "route_status": null
+      }
+    },
+    {
+      "name": "managed-native-id-resolves",
+      "description": "SPEC §2.9: the managed model resolves like the anchor (a bare native id works).",
+      "input": {
+        "provider": "openai",
+        "mode": "managed",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "openai/gpt-5-mini",
+            "finalScore": 0.91,
+            "qualityScore": 0.8
+          },
+          {
+            "modelId": "openai/gpt-5-nano",
+            "finalScore": 0.9,
+            "qualityScore": 0.79
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ],
+        "managed_model": "gpt-5-nano"
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5-mini",
+          "rank": 1,
+          "method": "band"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "openai/gpt-5-mini",
+          "rank": 1,
+          "method": "band"
+        },
+        "routed": "openai/gpt-5-nano",
+        "model_to_send": "gpt-5-nano",
+        "route_status": null
+      }
+    },
+    {
+      "name": "managed-unreachable-anchor-sent",
+      "description": "SPEC §2.9: an openai client cannot send an anthropic model -- the anchor is sent, route_status unreachable_managed.",
+      "input": {
+        "provider": "openai",
+        "mode": "managed",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "anthropic/claude-haiku-4.5",
+            "finalScore": 0.93,
+            "qualityScore": 0.81
+          },
+          {
+            "modelId": "openai/gpt-5-mini",
+            "finalScore": 0.9,
+            "qualityScore": 0.79
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ],
+        "managed_model": "anthropic/claude-haiku-4.5"
+      },
+      "expected": {
+        "winner": {
+          "winner": "anthropic/claude-haiku-4.5",
+          "rank": 1,
+          "method": "band"
+        },
+        "winner_reachable": false,
+        "routed_winner": {
+          "winner": "openai/gpt-5-mini",
+          "rank": 1,
+          "method": "band"
+        },
+        "routed": null,
+        "model_to_send": null,
+        "route_status": "unreachable_managed"
+      }
+    },
+    {
+      "name": "managed-disallowed-by-policy",
+      "description": "SPEC §2.9: a managed model outside the policy is treated as unreachable.",
+      "input": {
+        "provider": "openrouter",
+        "mode": "managed",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "anthropic/claude-haiku-4.5",
+            "finalScore": 0.93,
+            "qualityScore": 0.81
+          },
+          {
+            "modelId": "openai/gpt-5-mini",
+            "finalScore": 0.9,
+            "qualityScore": 0.79
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ],
+        "managed_model": "anthropic/claude-haiku-4.5",
+        "allowed": [
+          "openai/gpt-5-mini",
+          "openai/gpt-5.5"
+        ]
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5-mini",
+          "rank": 1,
+          "method": "band"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "openai/gpt-5-mini",
+          "rank": 1,
+          "method": "band"
+        },
+        "routed": null,
+        "model_to_send": null,
+        "route_status": "unreachable_managed"
+      }
+    },
+    {
+      "name": "managed-openrouter-cross-provider",
+      "description": "SPEC §2.9: an openrouter client sends a managed model of another provider by its OpenRouter id.",
+      "input": {
+        "provider": "openrouter",
+        "mode": "managed",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "anthropic/claude-haiku-4.5",
+            "finalScore": 0.93,
+            "qualityScore": 0.81
+          },
+          {
+            "modelId": "openai/gpt-5-mini",
+            "finalScore": 0.9,
+            "qualityScore": 0.79
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ],
+        "managed_model": "anthropic/claude-haiku-4.5"
+      },
+      "expected": {
+        "winner": {
+          "winner": "anthropic/claude-haiku-4.5",
+          "rank": 1,
+          "method": "band"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "anthropic/claude-haiku-4.5",
+          "rank": 1,
+          "method": "band"
+        },
+        "routed": "anthropic/claude-haiku-4.5",
+        "model_to_send": "anthropic/claude-haiku-4.5",
+        "route_status": null
+      }
+    },
+    {
+      "name": "managed-equals-anchor",
+      "description": "SPEC §2.9: a managed model equal to the anchor is sent as written, with no status.",
+      "input": {
+        "provider": "openai",
+        "mode": "managed",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "openai/gpt-5-mini",
+            "finalScore": 0.91,
+            "qualityScore": 0.8
+          },
+          {
+            "modelId": "openai/gpt-5-nano",
+            "finalScore": 0.9,
+            "qualityScore": 0.79
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ],
+        "managed_model": "openai/gpt-5.5"
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5-mini",
+          "rank": 1,
+          "method": "band"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "openai/gpt-5-mini",
+          "rank": 1,
+          "method": "band"
+        },
+        "routed": null,
+        "model_to_send": null,
+        "route_status": null
+      }
+    },
+    {
+      "name": "managed-unknown-model",
+      "description": "SPEC §2.9: an id the catalog does not know is unreachable_managed.",
+      "input": {
+        "provider": "openrouter",
+        "mode": "managed",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "openai/gpt-5-mini",
+            "finalScore": 0.91,
+            "qualityScore": 0.8
+          },
+          {
+            "modelId": "openai/gpt-5-nano",
+            "finalScore": 0.9,
+            "qualityScore": 0.79
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ],
+        "managed_model": "acme/not-a-model"
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5-mini",
+          "rank": 1,
+          "method": "band"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "openai/gpt-5-mini",
+          "rank": 1,
+          "method": "band"
+        },
+        "routed": null,
+        "model_to_send": null,
+        "route_status": "unreachable_managed"
+      }
+    },
+    {
+      "name": "managed-without-model",
+      "description": "SPEC §2.9: managed without a model (e.g. a remote default_mode) sends the anchor with unreachable_managed.",
+      "input": {
+        "provider": "openai",
+        "mode": "managed",
+        "anchor": "openai/gpt-5.5",
+        "scores": [
+          {
+            "modelId": "openai/gpt-5-mini",
+            "finalScore": 0.91,
+            "qualityScore": 0.8
+          },
+          {
+            "modelId": "openai/gpt-5-nano",
+            "finalScore": 0.9,
+            "qualityScore": 0.79
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "finalScore": 0.88,
+            "qualityScore": 0.82
+          }
+        ],
+        "managed_model": null
+      },
+      "expected": {
+        "winner": {
+          "winner": "openai/gpt-5-mini",
+          "rank": 1,
+          "method": "band"
+        },
+        "winner_reachable": true,
+        "routed_winner": {
+          "winner": "openai/gpt-5-mini",
+          "rank": 1,
+          "method": "band"
+        },
+        "routed": null,
+        "model_to_send": null,
+        "route_status": "unreachable_managed"
+      }
+    }
+  ]
+}
