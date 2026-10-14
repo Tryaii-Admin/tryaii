@@ -48,9 +48,11 @@ from tryaii.auth.transport import AuthError, session_api_url
 from tryaii.catalog.bundle import (
     BUNDLE_DATA_FILES,
     MANIFEST_FILE,
+    OPTIONAL_DATA_FILES,
     BundleSchemaError,
     CatalogBundle,
     bundle_from_texts,
+    listed_data_files,
     load_bundle,
     starter_bundle,
 )
@@ -304,7 +306,7 @@ def save_full(manifest: dict, files: dict, bundle: CatalogBundle) -> CatalogBund
     tmp = base / f".tmp-{uuid.uuid4().hex}"
     target = base / version
     try:
-        for name in BUNDLE_DATA_FILES:
+        for name in listed_data_files(bundle.manifest):
             raw = files[name]
             data = raw.encode("utf-8") if isinstance(raw, str) else bytes(raw)
             store.write_atomic(tmp / name, data)
@@ -334,6 +336,7 @@ def save_full(manifest: dict, files: dict, bundle: CatalogBundle) -> CatalogBund
         centroids=bundle.centroids,
         training_queries=bundle.training_queries,
         directory=target,
+        origins=bundle.origins,
     )
     with _LOADED_LOCK:
         _LOADED[str(target)] = placed
@@ -470,7 +473,8 @@ def _run_check(creds: dict, cached: Optional[CatalogBundle], *, opener=None
     if not isinstance(manifest, dict) or not isinstance(files, dict):
         return _FAILED, None
     # The wire format carries text only (same rule as the Node SDK).
-    if any(name in files and not isinstance(files[name], str) for name in BUNDLE_DATA_FILES):
+    if any(name in files and not isinstance(files[name], str)
+           for name in BUNDLE_DATA_FILES + OPTIONAL_DATA_FILES):
         return _FAILED, None
     try:
         # Signature first (contract section 6), before anything is written to

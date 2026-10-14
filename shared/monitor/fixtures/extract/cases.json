@@ -1,0 +1,203 @@
+{
+  "suite": "extract",
+  "target": "tryaii.monitor.extract.routing_text",
+  "cases": [
+    {
+      "name": "user-only",
+      "description": "A single user message routes on its text alone.",
+      "input": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "Fix the failing test in checkout.py"
+          }
+        ]
+      },
+      "expected": {
+        "text": "Fix the failing test in checkout.py",
+        "prompt_hash": "42c71376cd30f6083b55a2e887723abfb9252491850f2fd90d36c9e05453afe5"
+      }
+    },
+    {
+      "name": "system-and-user",
+      "description": "The first system message is joined to the last user message with a blank line.",
+      "input": {
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a careful code reviewer."
+          },
+          {
+            "role": "user",
+            "content": "Review this diff."
+          }
+        ]
+      },
+      "expected": {
+        "text": "You are a careful code reviewer.\n\nReview this diff.",
+        "prompt_hash": "625c2d0f3277a5da5a5e2c01ba723320484cdb63dadc36a477133b8188a235f0"
+      }
+    },
+    {
+      "name": "developer-role-counts-as-system",
+      "description": "The Responses-style developer role is a system message.",
+      "input": {
+        "messages": [
+          {
+            "role": "developer",
+            "content": "Answer in JSON."
+          },
+          {
+            "role": "user",
+            "content": "List three fruits."
+          }
+        ]
+      },
+      "expected": {
+        "text": "Answer in JSON.\n\nList three fruits.",
+        "prompt_hash": "2ceb23905baf7f4cbc6a83a8c745c08e70bd335f6cedffae334730493f008dd2"
+      }
+    },
+    {
+      "name": "content-parts-keep-text-only",
+      "description": "Image and other non-text parts are dropped; text parts join with a newline.",
+      "input": {
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "What is in this picture?"
+              },
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "https://example.com/a.png"
+                }
+              },
+              {
+                "type": "text",
+                "text": "Be brief."
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "text": "What is in this picture?\nBe brief.",
+        "prompt_hash": "bf19102203ddaaab5c679ecb6756ea681d83c24541ca10c434ea78b0a728aaa4"
+      }
+    },
+    {
+      "name": "last-user-turn-wins",
+      "description": "Multi-turn conversations route on the last user message only (the first system message still counts).",
+      "input": {
+        "messages": [
+          {
+            "role": "system",
+            "content": "Be terse."
+          },
+          {
+            "role": "user",
+            "content": "Hello"
+          },
+          {
+            "role": "assistant",
+            "content": "Hi!"
+          },
+          {
+            "role": "user",
+            "content": "Translate 'good morning' to French."
+          },
+          {
+            "role": "system",
+            "content": "A second system message is ignored."
+          }
+        ]
+      },
+      "expected": {
+        "text": "Be terse.\n\nTranslate 'good morning' to French.",
+        "prompt_hash": "e80b2bb7534f779be84bed4fd77c3faa6570bf669e510a0b1a1bba0fe9c35755"
+      }
+    },
+    {
+      "name": "no-user-text-is-empty",
+      "description": "A call with no user turn (or an empty one) has nothing to route; the hash is that of the empty string.",
+      "input": {
+        "messages": [
+          {
+            "role": "system",
+            "content": "Only a system prompt."
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "https://example.com/a.png"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "text": "",
+        "prompt_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "name": "null-content-and-non-object-messages",
+      "description": "None content and non-dict entries are ignored.",
+      "input": {
+        "messages": [
+          "not a message",
+          {
+            "role": "user",
+            "content": null
+          },
+          {
+            "role": "user",
+            "content": "Second user message with real text"
+          }
+        ]
+      },
+      "expected": {
+        "text": "Second user message with real text",
+        "prompt_hash": "c02a2cdfcea31f649398b7e11be617afd5d1bacc4ebc8fc2190b99aa843840ba"
+      }
+    },
+    {
+      "name": "messages-not-a-list",
+      "description": "Anything but a list yields empty text.",
+      "input": {
+        "messages": {
+          "role": "user",
+          "content": "oops"
+        }
+      },
+      "expected": {
+        "text": "",
+        "prompt_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "name": "unicode-verbatim",
+      "description": "Non-ASCII text is hashed as UTF-8 and kept verbatim.",
+      "input": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "תרגם: café ☕"
+          }
+        ]
+      },
+      "expected": {
+        "text": "תרגם: café ☕",
+        "prompt_hash": "554481cc66364737574e24930f89b0ccd0ea4376c1c53ee2a245d86c3483a27c"
+      }
+    }
+  ]
+}

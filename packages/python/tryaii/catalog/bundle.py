@@ -12,7 +12,9 @@ Integrity rules (all enforced by :func:`load_bundle` / :func:`bundle_from_texts`
 * every one of the five data files listed in ``BUNDLE_DATA_FILES`` must be
   present, and ``sha256`` of its exact UTF-8 bytes must equal
   ``manifest["files"][name]`` -- the bytes are hashed as read, never
-  re-serialized;
+  re-serialized; an optional file (``OPTIONAL_DATA_FILES``, contract v1.2)
+  follows the same rule whenever the manifest lists it, and is absent
+  otherwise;
 * ``manifest["schema"]`` must be an integer no greater than
   :data:`SUPPORTED_SCHEMA` (a newer schema raises :class:`BundleSchemaError`);
 * the benchmark name sets of ``benchmarks.json``, ``normalization_ranges.json``,
@@ -51,6 +53,11 @@ BUNDLE_DATA_FILES: tuple[str, ...] = (
     "centroids.json",
     "training_queries.json",
 )
+
+#: Optional data files (contract v1.2): verified and parsed when the manifest
+#: lists them. ``origins.json`` = model origin / host data for policies
+#: (shared/datasave/SPEC.md); the full catalog carries it, the starter not.
+OPTIONAL_DATA_FILES: tuple[str, ...] = ("origins.json",)
 
 BUNDLE_KINDS = ("starter", "full")
 
@@ -100,6 +107,8 @@ class CatalogBundle:
     centroids: dict
     training_queries: dict
     directory: Optional[Path] = None
+    #: ``origins.json`` when the bundle carries it (contract v1.2), else None.
+    origins: Optional[dict] = None
 
     # ------------------------------------------------------------ manifest
     @property
@@ -203,7 +212,18 @@ def _parse_manifest(manifest: Any) -> dict:
     missing = [name for name in BUNDLE_DATA_FILES if not isinstance(files.get(name), str)]
     if missing:
         raise BundleError(f"manifest.json 'files' is missing: {', '.join(missing)}")
+    bad = [name for name in OPTIONAL_DATA_FILES
+           if name in files and not isinstance(files[name], str)]
+    if bad:
+        raise BundleError(f"manifest.json 'files' has a non-string hash for: {', '.join(bad)}")
     return manifest
+
+
+def listed_data_files(manifest: Mapping[str, Any]) -> tuple[str, ...]:
+    """The data files this manifest requires: the five, plus each optional
+    file it lists (in ``OPTIONAL_DATA_FILES`` order)."""
+    files = manifest.get("files") or {}
+    return BUNDLE_DATA_FILES + tuple(name for name in OPTIONAL_DATA_FILES if name in files)
 
 
 def _check_consistency(bundle: CatalogBundle) -> None:
@@ -231,6 +251,12 @@ def _check_consistency(bundle: CatalogBundle) -> None:
         )
     if not isinstance(bundle.models.get("models"), list):
         raise BundleError("models.json has no 'models' array")
+    if bundle.origins is not None:
+        origins = bundle.origins
+        if not isinstance(origins, dict) or not all(
+            isinstance(origins.get(key), dict) for key in ("orgs", "hosts", "models")
+        ):
+            raise BundleError("origins.json must have 'orgs', 'hosts' and 'models' objects")
 
 
 def _verify_signature(manifest: dict, env: Optional[Mapping[str, str]]) -> None:
@@ -262,7 +288,7 @@ def bundle_from_texts(
     if verify_signature:
         _verify_signature(manifest, env)
     parsed: dict[str, Any] = {}
-    for name in BUNDLE_DATA_FILES:
+    for name in listed_data_files(manifest):
         if name not in files:
             raise BundleIntegrityError(f"catalog bundle is missing {name}")
         raw = files[name]
@@ -288,6 +314,7 @@ def bundle_from_texts(
         centroids=parsed["centroids.json"],
         training_queries=parsed["training_queries.json"],
         directory=directory,
+        origins=parsed.get("origins.json"),
     )
     try:
         _check_consistency(bundle)
@@ -322,7 +349,7 @@ def load_bundle(
     if verify_signature:
         _verify_signature(manifest, env)
     files: dict[str, bytes] = {}
-    for name in BUNDLE_DATA_FILES:
+    for name in listed_data_files(manifest):
         path = directory / name
         if not path.is_file():
             raise BundleIntegrityError(f"catalog bundle at {directory} is missing {name}")

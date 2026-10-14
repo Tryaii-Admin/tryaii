@@ -1,0 +1,678 @@
+{
+  "suite": "config",
+  "target": "tryaii.monitor.config.resolve_mode / resolve_app / resolve_process / set_process_mode",
+  "cases": [
+    {
+      "name": "mode-env-wins",
+      "description": "TRYAII_MONITOR_MODE beats every other level.",
+      "input": {
+        "mode": {
+          "process": "purchase item",
+          "env": {
+            "TRYAII_MONITOR_MODE": "dynamic"
+          },
+          "args": "stable",
+          "config": {
+            "default_mode": "off",
+            "processes": {
+              "purchase item": {
+                "mode": "off"
+              }
+            }
+          }
+        }
+      },
+      "expected": {
+        "mode": {
+          "mode": "dynamic",
+          "source": "env",
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "mode-remote-over-args",
+      "description": "A remote (dashboard) document beats wrap(mode=).",
+      "input": {
+        "mode": {
+          "process": "purchase item",
+          "env": {},
+          "remote": {
+            "schema": "tryaii.monitor.config/1",
+            "source": "remote",
+            "default_mode": "off",
+            "processes": {
+              "purchase item": {
+                "mode": "stable",
+                "providers": null
+              }
+            }
+          },
+          "args": "dynamic"
+        }
+      },
+      "expected": {
+        "mode": {
+          "mode": "stable",
+          "source": "remote",
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "mode-args-over-config",
+      "description": "wrap(mode=) beats config.json.",
+      "input": {
+        "mode": {
+          "process": "purchase item",
+          "args": "dynamic",
+          "config": {
+            "default_mode": "off",
+            "processes": {
+              "purchase item": {
+                "mode": "stable"
+              }
+            }
+          }
+        }
+      },
+      "expected": {
+        "mode": {
+          "mode": "dynamic",
+          "source": "args",
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "mode-config-process-over-default",
+      "description": "The per-process config entry beats default_mode.",
+      "input": {
+        "mode": {
+          "process": "purchase item",
+          "config": {
+            "default_mode": "dynamic",
+            "processes": {
+              "purchase item": {
+                "mode": "stable"
+              }
+            }
+          }
+        }
+      },
+      "expected": {
+        "mode": {
+          "mode": "stable",
+          "source": "config",
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "mode-config-default",
+      "description": "An unlisted process takes default_mode.",
+      "input": {
+        "mode": {
+          "process": "refund",
+          "config": {
+            "default_mode": "stable",
+            "processes": {
+              "purchase item": {
+                "mode": "off"
+              }
+            }
+          }
+        }
+      },
+      "expected": {
+        "mode": {
+          "mode": "stable",
+          "source": "config",
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "mode-default-off",
+      "description": "Nothing set anywhere: off.",
+      "input": {
+        "mode": {
+          "process": "refund"
+        }
+      },
+      "expected": {
+        "mode": {
+          "mode": "off",
+          "source": "default",
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "mode-invalid-values-ignored",
+      "description": "Invalid values at a level are skipped, not errors; valid values are trimmed and lower-cased.",
+      "input": {
+        "mode": {
+          "process": "p",
+          "env": {
+            "TRYAII_MONITOR_MODE": "turbo"
+          },
+          "args": " Stable ",
+          "config": {
+            "default_mode": "dynamic"
+          }
+        }
+      },
+      "expected": {
+        "mode": {
+          "mode": "stable",
+          "source": "args",
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "app-env",
+      "description": "TRYAII_APP wins and is sanitized.",
+      "input": {
+        "app": {
+          "env": {
+            "TRYAII_APP": "Shop Backend"
+          },
+          "args": "shop",
+          "cwd_name": "repo"
+        }
+      },
+      "expected": {
+        "app": {
+          "app": "shop-backend",
+          "source": "env"
+        }
+      }
+    },
+    {
+      "name": "app-args-sanitized",
+      "description": "wrap(app=) is sanitized: lower-case, runs of other characters become one dash, edges trimmed.",
+      "input": {
+        "app": {
+          "env": {},
+          "args": "  My App (v2)!  ",
+          "cwd_name": "repo"
+        }
+      },
+      "expected": {
+        "app": {
+          "app": "my-app-v2",
+          "source": "args"
+        }
+      }
+    },
+    {
+      "name": "app-cwd-fallback",
+      "description": "Without env or args the working directory name is the app.",
+      "input": {
+        "app": {
+          "env": {
+            "TRYAII_APP": "   "
+          },
+          "args": null,
+          "cwd_name": "tryaii_Projects"
+        }
+      },
+      "expected": {
+        "app": {
+          "app": "tryaii_projects",
+          "source": "cwd"
+        }
+      }
+    },
+    {
+      "name": "app-default",
+      "description": "Nothing usable anywhere: default.",
+      "input": {
+        "app": {
+          "env": {},
+          "args": "???",
+          "cwd_name": ""
+        }
+      },
+      "expected": {
+        "app": {
+          "app": "default",
+          "source": "default"
+        }
+      }
+    },
+    {
+      "name": "process-per-call-wins",
+      "description": "tryaii_process on the call beats the context and the wrap default.",
+      "input": {
+        "process": {
+          "per_call": "purchase item",
+          "context": "checkout",
+          "default": "agent",
+          "call_site": {
+            "file": "/srv/app/x.py",
+            "line": 3,
+            "function": "f"
+          }
+        }
+      },
+      "expected": {
+        "process": {
+          "process": "purchase item",
+          "source": "call"
+        }
+      }
+    },
+    {
+      "name": "process-context-over-default",
+      "description": "The process(name) context beats wrap(process=).",
+      "input": {
+        "process": {
+          "per_call": "",
+          "context": "checkout",
+          "default": "agent"
+        }
+      },
+      "expected": {
+        "process": {
+          "process": "checkout",
+          "source": "context"
+        }
+      }
+    },
+    {
+      "name": "process-call-site-fallback-windows-path",
+      "description": "No names given: basename(file):function, with backslash paths.",
+      "input": {
+        "process": {
+          "call_site": {
+            "file": "C:\\app\\checkout.py",
+            "line": 42,
+            "function": "purchase_item"
+          }
+        }
+      },
+      "expected": {
+        "process": {
+          "process": "checkout.py:purchase_item",
+          "source": "call_site"
+        }
+      }
+    },
+    {
+      "name": "process-call-site-without-function",
+      "description": "An unknown function name falls back to the line.",
+      "input": {
+        "process": {
+          "call_site": {
+            "file": "/srv/app/main.py",
+            "line": 9,
+            "function": null
+          }
+        }
+      },
+      "expected": {
+        "process": {
+          "process": "main.py:L9",
+          "source": "call_site"
+        }
+      }
+    },
+    {
+      "name": "process-default",
+      "description": "No names and no call site: default.",
+      "input": {
+        "process": {
+          "per_call": null,
+          "context": null,
+          "default": "  ",
+          "call_site": null
+        }
+      },
+      "expected": {
+        "process": {
+          "process": "default",
+          "source": "default"
+        }
+      }
+    },
+    {
+      "name": "set-new-process",
+      "description": "monitor set adds a process entry (providers null) and sorts processes.",
+      "input": {
+        "set": {
+          "config": {
+            "schema": "tryaii.monitor.config/1",
+            "source": "local",
+            "default_mode": "off",
+            "processes": {
+              "summarize": {
+                "mode": "dynamic",
+                "providers": null
+              }
+            }
+          },
+          "process": "purchase item",
+          "mode": "stable"
+        }
+      },
+      "expected": {
+        "set": {
+          "schema": "tryaii.monitor.config/1",
+          "source": "local",
+          "default_mode": "off",
+          "processes": {
+            "purchase item": {
+              "mode": "stable",
+              "providers": null
+            },
+            "summarize": {
+              "mode": "dynamic",
+              "providers": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "set-existing-keeps-providers",
+      "description": "Changing the mode keeps the entry's other fields.",
+      "input": {
+        "set": {
+          "config": {
+            "schema": "tryaii.monitor.config/1",
+            "source": "local",
+            "default_mode": "off",
+            "processes": {
+              "purchase item": {
+                "mode": "stable",
+                "providers": [
+                  "openai"
+                ]
+              }
+            }
+          },
+          "process": "purchase item",
+          "mode": "off"
+        }
+      },
+      "expected": {
+        "set": {
+          "schema": "tryaii.monitor.config/1",
+          "source": "local",
+          "default_mode": "off",
+          "processes": {
+            "purchase item": {
+              "mode": "off",
+              "providers": [
+                "openai"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "set-on-empty-config",
+      "description": "A missing config.json starts from the empty document.",
+      "input": {
+        "set": {
+          "config": null,
+          "process": "refund",
+          "mode": "dynamic"
+        }
+      },
+      "expected": {
+        "set": {
+          "schema": "tryaii.monitor.config/1",
+          "source": "local",
+          "default_mode": "off",
+          "processes": {
+            "refund": {
+              "mode": "dynamic",
+              "providers": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "set-invalid-mode",
+      "description": "An invalid mode is an error.",
+      "input": {
+        "set": {
+          "config": null,
+          "process": "refund",
+          "mode": "turbo"
+        }
+      },
+      "expected": {
+        "set": {
+          "error": "mode must be off, stable, dynamic or managed"
+        }
+      }
+    },
+    {
+      "name": "mode-remote-managed-with-model",
+      "description": "SPEC §2.6: a remote per-process managed entry carries its model.",
+      "input": {
+        "mode": {
+          "process": "triage",
+          "remote": {
+            "default_mode": null,
+            "processes": {
+              "triage": {
+                "mode": "managed",
+                "model": "openai/gpt-5-nano"
+              }
+            }
+          },
+          "args": "dynamic",
+          "config": {
+            "default_mode": "off",
+            "processes": {}
+          }
+        }
+      },
+      "expected": {
+        "mode": {
+          "mode": "managed",
+          "source": "remote",
+          "model": "openai/gpt-5-nano"
+        }
+      }
+    },
+    {
+      "name": "mode-config-managed-with-model",
+      "description": "SPEC §2.6: a config.json managed entry carries its model (trimmed).",
+      "input": {
+        "mode": {
+          "process": "summarize",
+          "config": {
+            "default_mode": "off",
+            "processes": {
+              "summarize": {
+                "mode": "managed",
+                "model": " openai/gpt-5-mini ",
+                "providers": null
+              }
+            }
+          }
+        }
+      },
+      "expected": {
+        "mode": {
+          "mode": "managed",
+          "source": "config",
+          "model": "openai/gpt-5-mini"
+        }
+      }
+    },
+    {
+      "name": "mode-remote-default-managed-no-model",
+      "description": "SPEC §2.6: managed from a default_mode has no model (null).",
+      "input": {
+        "mode": {
+          "process": "any",
+          "remote": {
+            "default_mode": "managed",
+            "processes": {}
+          }
+        }
+      },
+      "expected": {
+        "mode": {
+          "mode": "managed",
+          "source": "remote",
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "mode-env-managed-no-model",
+      "description": "SPEC §2.6: TRYAII_MONITOR_MODE=managed wins but carries no model.",
+      "input": {
+        "mode": {
+          "process": "triage",
+          "env": {
+            "TRYAII_MONITOR_MODE": "Managed"
+          },
+          "remote": {
+            "processes": {
+              "triage": {
+                "mode": "managed",
+                "model": "openai/gpt-5-nano"
+              }
+            }
+          }
+        }
+      },
+      "expected": {
+        "mode": {
+          "mode": "managed",
+          "source": "env",
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "mode-model-ignored-for-other-modes",
+      "description": "SPEC §2.6: a model next to a non-managed mode is ignored.",
+      "input": {
+        "mode": {
+          "process": "p",
+          "config": {
+            "processes": {
+              "p": {
+                "mode": "dynamic",
+                "model": "openai/gpt-5-nano"
+              }
+            }
+          }
+        }
+      },
+      "expected": {
+        "mode": {
+          "mode": "dynamic",
+          "source": "config",
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "set-managed-with-model",
+      "description": "SPEC §2.6: managed entries are written as mode, model, providers.",
+      "input": {
+        "set": {
+          "config": {
+            "schema": "tryaii.monitor.config/1",
+            "source": "local",
+            "default_mode": "off",
+            "processes": {
+              "a": {
+                "mode": "off",
+                "providers": null
+              }
+            }
+          },
+          "process": "summarize",
+          "mode": "managed",
+          "model": "openai/gpt-5-mini"
+        }
+      },
+      "expected": {
+        "set": {
+          "schema": "tryaii.monitor.config/1",
+          "source": "local",
+          "default_mode": "off",
+          "processes": {
+            "a": {
+              "mode": "off",
+              "providers": null
+            },
+            "summarize": {
+              "mode": "managed",
+              "model": "openai/gpt-5-mini",
+              "providers": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "set-managed-needs-model",
+      "description": "SPEC §2.6: managed without a model is an error.",
+      "input": {
+        "set": {
+          "config": null,
+          "process": "p",
+          "mode": "managed"
+        }
+      },
+      "expected": {
+        "set": {
+          "error": "managed mode needs --model <id>"
+        }
+      }
+    },
+    {
+      "name": "set-off-drops-managed-model",
+      "description": "SPEC §2.6: leaving managed drops the stale model and keeps providers.",
+      "input": {
+        "set": {
+          "config": {
+            "processes": {
+              "p": {
+                "mode": "managed",
+                "model": "openai/gpt-5-mini",
+                "providers": [
+                  "openai"
+                ]
+              }
+            }
+          },
+          "process": "p",
+          "mode": "off",
+          "model": "ignored"
+        }
+      },
+      "expected": {
+        "set": {
+          "schema": "tryaii.monitor.config/1",
+          "source": "local",
+          "default_mode": "off",
+          "processes": {
+            "p": {
+              "mode": "off",
+              "providers": [
+                "openai"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

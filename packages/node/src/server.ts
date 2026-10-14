@@ -19,8 +19,10 @@ import {
   CATALOG_ENV,
   catalogKey,
   clearState,
+  FEATURE_ROUTE_EMBEDDING,
   idleSeconds,
   readState,
+  FEATURE_ALLOWED_MODELS,
   RUNTIME,
   writeState,
   type DaemonState,
@@ -32,6 +34,8 @@ import { Priorities } from './scoring/priorities.js';
 /** Minimal routing surface so tests can inject a fake router. */
 export interface RouterLike {
   route(prompt: string, opts?: RouteOptions): Promise<RouteResult>;
+  /** The prompt's embedding vector; needed for `includeEmbedding` requests. */
+  embedPrompt?(prompt: string): Promise<number[]>;
 }
 
 export interface ServeOptions {
@@ -82,6 +86,15 @@ function serializeClassification(
   };
 }
 
+/**
+ * Wire shape of a prompt embedding: {model, dim, v} with v rounded to 4
+ * decimals (plain JSON floats; the Python SDK rounds the same way).
+ */
+export function serializeEmbedding(vector: number[], model: string): Record<string, unknown> {
+  const v = vector.map((x) => Math.round(Number(x) * 1e4) / 1e4);
+  return { model, dim: v.length, v };
+}
+
 export function serializeRouteResult(result: RouteResult): Record<string, unknown> {
   return {
     bestModel: result.bestModel,
@@ -114,6 +127,8 @@ interface DaemonRequest {
   prompt?: string;
   priorities?: { quality?: number; cost?: number; speed?: number };
   topK?: number;
+  includeEmbedding?: unknown;
+  allowedModels?: unknown;
 }
 
 async function handle(
@@ -146,8 +161,32 @@ async function handle(
       const pr = req.priorities ?? {};
       const priorities = new Priorities(pr.quality ?? 3, pr.cost ?? 3, pr.speed ?? 3);
       const topK = Number(req.topK ?? 5);
-      const result = await router.route(prompt, { priorities, topK });
-      return { ok: true, result: serializeRouteResult(result) };
+      // Monitor's vector store asks for the prompt's embedding alongside the
+      // routing result (feature "routeEmbedding", docs/daemon.md).
+      const includeEmbedding = req.includeEmbedding ?? false;
+      if (typeof includeEmbedding !== 'boolean') {
+        return { ok: false, error: 'includeEmbedding must be a boolean' };
+      }
+      // Data-save policy: the CLI sends the model ids its policy allows; the
+      // daemon itself never reads the saved policy (it would go stale).
+      const allowed = req.allowedModels;
+      if (
+        allowed !== undefined &&
+        allowed !== null &&
+        (!Array.isArray(allowed) || !allowed.every((m) => typeof m === 'string'))
+      ) {
+        return { ok: false, error: 'allowedModels must be a list of model ids' };
+      }
+      const result =
+        allowed === undefined || allowed === null
+          ? await router.route(prompt, { priorities, topK })
+          : await router.route(prompt, { priorities, topK, allowedModels: allowed as string[] });
+      const payload = serializeRouteResult(result);
+      if (includeEmbedding) {
+        if (!router.embedPrompt) return { ok: false, error: 'daemon router cannot embed' };
+        payload.embedding = serializeEmbedding(await router.embedPrompt(prompt), state.embeddingModel);
+      }
+      return { ok: true, result: payload };
     }
     default:
       return { ok: false, error: `unknown command: ${req.cmd}` };
@@ -174,6 +213,8 @@ export async function serve(
     const real = new Router({
       config: { embeddingModel: cfg.embeddingModel, dataDir: cfg.dataDir },
       bundle,
+      // The CLI sends the allowed model ids per request (allowedModels).
+      policy: null,
     });
     log(`[daemon] loading embedding model '${cfg.embeddingModel}' (one-time)...`);
     const started = Date.now();
@@ -271,6 +312,7 @@ export async function serve(
         token,
         pid: process.pid,
         startedAtMs: Date.now(),
+        features: [FEATURE_ALLOWED_MODELS, FEATURE_ROUTE_EMBEDDING],
       };
       // Write the state file only now that the model is warm: its presence is
       // the readiness signal clients poll for.

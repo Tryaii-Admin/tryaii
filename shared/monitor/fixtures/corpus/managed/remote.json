@@ -1,0 +1,19 @@
+{
+  "schema": "tryaii.monitor.remote/1",
+  "etag": "e-42",
+  "app_id": "app_abcdefghijkl",
+  "default_mode": null,
+  "processes": {
+    "classify": {
+      "mode": "dynamic",
+      "model": null
+    },
+    "triage": {
+      "mode": "managed",
+      "model": "openai/gpt-5-nano"
+    }
+  },
+  "updated_at": "2026-10-12T08:00:00.000Z",
+  "updated_by": "google-sub-1",
+  "fetched_at": "2026-10-12T08:05:00.000Z"
+}

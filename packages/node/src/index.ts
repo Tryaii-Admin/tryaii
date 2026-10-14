@@ -121,6 +121,18 @@ export {
   selectCatalog,
 } from './catalog/client.js';
 export type { CatalogMode, CatalogNotice, CatalogSelection } from './catalog/client.js';
+export type { OriginsJson } from './catalog/bundle.js';
+
+// Data save: model origin and provider policies (shared/datasave/SPEC.md)
+export { ModelPolicy, PolicyError, PolicyCatalogError } from './policy.js';
+export type {
+  ExclusionReason,
+  ModelPolicyInit,
+  PolicyDict,
+  PolicyLike,
+  PolicyResult,
+  ProviderPreferences,
+} from './policy.js';
 
 // Benchmarks
 export { BenchmarkRegistry } from './benchmarks/registry.js';

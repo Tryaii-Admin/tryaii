@@ -1,0 +1,2 @@
+created app app_newapp00001 (shop)
+key: tryaii_k1a2b3c4d5e6_fixtureSecretfixtureSecretfixtureSecretfixt

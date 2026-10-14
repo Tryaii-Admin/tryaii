@@ -1,0 +1,104 @@
+{
+  "schema": "tryaii.monitor.status/1",
+  "app": "managed",
+  "now": "2026-10-12T09:00:00.000Z",
+  "since": "24h",
+  "source": {
+    "kind": "remote",
+    "etag": "e-42",
+    "fetched_at": "2026-10-12T08:05:00.000Z"
+  },
+  "upload": {
+    "state": "ok",
+    "events": 2,
+    "last_ok": "2026-10-12T08:25:00.000Z",
+    "last_error": null
+  },
+  "processes": [
+    {
+      "process": "classify",
+      "mode": "dynamic",
+      "mode_source": "remote",
+      "managed_model": null,
+      "pinned": null,
+      "calls": 1,
+      "errors": 0,
+      "prompt_tokens": 1000,
+      "completion_tokens": 200,
+      "total_tokens": 1200,
+      "est_cost_usd": 0.00065,
+      "est_cost_winner_usd": 0.00065,
+      "savings_usd": 0,
+      "swapped_calls": 1,
+      "est_cost_anchor_usd": 0.011,
+      "realised_savings_usd": 0.01035,
+      "top_winner": {
+        "model": "openai/gpt-5-mini",
+        "share": 1
+      },
+      "files": [
+        "app/classify.py"
+      ]
+    },
+    {
+      "process": "summarize",
+      "mode": "managed",
+      "mode_source": "config",
+      "managed_model": "openai/gpt-5-mini",
+      "pinned": null,
+      "calls": 1,
+      "errors": 0,
+      "prompt_tokens": 1000,
+      "completion_tokens": 200,
+      "total_tokens": 1200,
+      "est_cost_usd": 0.00065,
+      "est_cost_winner_usd": 0.00065,
+      "savings_usd": 0,
+      "swapped_calls": 1,
+      "est_cost_anchor_usd": 0.011,
+      "realised_savings_usd": 0.01035,
+      "top_winner": {
+        "model": "openai/gpt-5-mini",
+        "share": 1
+      },
+      "files": [
+        "app/summarize.py"
+      ]
+    },
+    {
+      "process": "triage",
+      "mode": "managed",
+      "mode_source": "remote",
+      "managed_model": "openai/gpt-5-nano",
+      "pinned": null,
+      "calls": 1,
+      "errors": 0,
+      "prompt_tokens": 1000,
+      "completion_tokens": 200,
+      "total_tokens": 1200,
+      "est_cost_usd": 0.011,
+      "est_cost_winner_usd": 0.00065,
+      "savings_usd": 0.01035,
+      "swapped_calls": 0,
+      "est_cost_anchor_usd": 0.011,
+      "realised_savings_usd": 0,
+      "top_winner": {
+        "model": "openai/gpt-5-mini",
+        "share": 1
+      },
+      "files": [
+        "app/triage.py"
+      ]
+    }
+  ],
+  "totals": {
+    "calls": 3,
+    "errors": 0,
+    "est_cost_usd": 0.0123,
+    "est_cost_winner_usd": 0.00195,
+    "savings_usd": 0.01035,
+    "swapped_calls": 2,
+    "est_cost_anchor_usd": 0.033,
+    "realised_savings_usd": 0.0207
+  }
+}

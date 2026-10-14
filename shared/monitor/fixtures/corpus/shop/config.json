@@ -1,0 +1,15 @@
+{
+  "schema": "tryaii.monitor.config/1",
+  "source": "local",
+  "default_mode": "off",
+  "processes": {
+    "purchase item": {
+      "mode": "stable",
+      "providers": null
+    },
+    "summarize": {
+      "mode": "dynamic",
+      "providers": null
+    }
+  }
+}

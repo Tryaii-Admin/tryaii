@@ -12,11 +12,14 @@ tryaii <command> [options]
 | [`eval <input.json>`](eval/README.md) | Route a JSON prompt dataset; writes `results.jsonl`, `summary.json`, `index.html` — see [dataset](eval/dataset/README.md), [priority mode](eval/priority-mode/README.md), [budget mode](eval/budget-mode/README.md), [outputs](eval/outputs/README.md) |
 | [`cachelint <input.json>`](cachelint.md) | Pre-flight prompt-cache analysis: detectors, stable prefix, per-model floors, predicted HIT/MISS across sequences (`--json`, `--provider` raw-text mode) |
 | [`diagnose <verb>`](diagnose/README.md) | Agent-first codebase LLM diagnostics: [`init`](diagnose/init.md) installs the agent playbook, [`plan`](diagnose/plan.md) hands the agent the interview + inventory shape, [`check`](diagnose/check.md) runs model-fit/cache/cost/hygiene over an inventory, [`report`](diagnose/report.md) renders a local HTML report with run-over-run deltas |
+| [`monitor <verb>`](monitor.md) | Read the records of `tryaii.monitor.wrap(client)` and steer it: [`status`](monitor.md#status) per app/sub-process (mode, pinned model, calls, tokens, est. cost, savings), [`set`](monitor.md#set-process-mode) a sub-process to `off` / `stable` / `dynamic` / `managed`, [`apps`](monitor.md#apps), [`events`](monitor.md#events) (`--json` = JSONL) |
+| [`apps <verb>`](apps.md) | tryaii.com apps and app keys for monitor upload: `create`, `list`, `keys` (`--new`, `--revoke`), `check` |
 | [`designpartner`](designpartner.md) | Enroll as a tryaii design partner: one resumable command (questionnaire → diagnose → tiered consent → submission; nothing sent without `--confirm`, always saved locally first) |
 | [`models`](models.md) | List the model catalog in use — the 45-model starter catalog, or the full catalog after `login` (`--provider`, `--json`) |
 | [`benchmarks`](benchmarks.md) | List registered benchmarks (`--json`) |
 | [`setup`](setup.md) | Download the embedding model and warm centroids (one-time) |
 | [`regenerate`](regenerate.md) | Force-rebuild benchmark centroids (e.g. after changing the embedding model) |
+| [`policy`](policy.md) | Show, set or clear the model origin / provider policy: no Chinese models, US/EU only, chosen vendors, or one cloud platform (full catalog) |
 | [`login`](login.md) | Sign in with your tryaii.com account (free; unlocks the full model catalog) |
 | [`logout`](logout.md) | Sign out and remove the stored credentials and the downloaded full catalog |
 | [`whoami`](whoami.md) | Show the signed-in account and the catalog in use (`--json`) |
@@ -49,6 +52,8 @@ A gradient "TRYAII" wordmark is printed to **stderr** (stdout stays clean for pi
 | `TRYAII_DRE_DATA_DIR` | Data dir; default `~/.tryaii`. Both CLIs keep the login credentials and the downloaded full catalog there; Python also keeps its centroid caches there |
 | `TRYAII_API_URL` | API base URL for [`login`](login.md) only (default `https://api.tryaii.com`); a stored session always talks to the server that issued it |
 | `TRYAII_VERBOSE` | (Node) set to `1` by `--verbose`; not read by the SDK itself |
+| `TRYAII_APP`, `TRYAII_MONITOR_MODE`, `TRYAII_MONITOR_VECTORS`, `TRYAII_MONITOR_ROUTE_TIMEOUT_MS`, `TRYAII_NO_DAEMON` | The monitor wrapper's app name, forced mode, vector store, in-path routing budget and daemon switch ([monitor](monitor.md#environment-variables)) |
+| `TRYAII_API_KEY`, `TRYAII_MONITOR_UPLOAD`, `TRYAII_MONITOR_REMOTE` | The monitor wrapper's app key (also `apps check`'s default key), upload switch and dashboard-config switch; with a key, `TRYAII_API_URL` is also the base for upload, the dashboard config and `apps check` ([apps](apps.md)) |
 | `OPENROUTER_API_KEY` | Read by the SDK clients, **not** by any CLI command (the CLI never calls model APIs) |
 
 The Python package also loads a `.env` file from the working directory on import (`python-dotenv`).

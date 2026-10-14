@@ -41,6 +41,7 @@ Routing is fully local — no API key. To also *call* the chosen model, use the 
 | **Configuration & caching** | [configuration/](configuration/README.md) · [caching](configuration/caching.md) | `TryaiiDreConfig` / `createDefaultConfig`, `CacheConfig` |
 | **Eval dashboard** | [dashboard.md](dashboard.md) | `renderDashboard` (Node export) |
 | **Diagnose engine** | [diagnose.md](diagnose.md) · [CLI](../cli/diagnose/README.md) | `tryaii.diagnose` / `tryaii/diagnose` subpath: `analyze_inventory`, `render_report_html`, run store |
+| **Monitor (wrap the openai client)** | [monitor.md](monitor.md) · [CLI](../cli/monitor.md) | `tryaii.monitor` / `tryaii/monitor` subpath: `wrap`, `install`, `process`, the pure engine (`routing_text`, `pick_winner`, `evaluate_pin`, `aggregate`, store) |
 
 ## Import surfaces
 

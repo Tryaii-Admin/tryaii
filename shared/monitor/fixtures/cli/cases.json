@@ -1,0 +1,825 @@
+{
+  "suite": "cli",
+  "description": "stdout/stderr/exit goldens of `tryaii monitor` (SPEC.md §5). Each case runs in a fresh temp data dir with the named corpus stores staged under <tmp>/monitor/<store>/; `env` is merged into the process environment. Both CLIs must reproduce every golden byte for byte.",
+  "cases": [
+    {
+      "name": "status-shop",
+      "description": "Human status for one app: table, per-process files, totals; a pinned process with no calls still shows.",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--now",
+          "2026-10-11T12:00:00Z"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "status-shop.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "status-two-apps",
+      "description": "Without --app every app prints its own block, separated by a blank line.",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--now",
+          "2026-10-11T12:00:00Z"
+        ],
+        "copy_store": [
+          "shop",
+          "web"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "status-two-apps.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "status-json-app",
+      "description": "--app --json prints the single status document; --since 7d widens the window.",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--app",
+          "shop",
+          "--since",
+          "7d",
+          "--now",
+          "2026-10-11T12:00:00Z",
+          "--json"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "status-json-app.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "status-json-all",
+      "description": "--json without --app prints a list of status documents, one per app.",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--now",
+          "2026-10-11T12:00:00Z",
+          "--json"
+        ],
+        "copy_store": [
+          "shop",
+          "web"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "status-json-all.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "status-empty-window",
+      "description": "A window with no events still lists configured/pinned processes with zero calls.",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--now",
+          "2026-10-20T12:00:00Z"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "status-empty-window.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "status-env-mode-override",
+      "description": "TRYAII_MONITOR_MODE overrides every process's mode in the table.",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--app",
+          "shop",
+          "--now",
+          "2026-10-11T12:00:00Z"
+        ],
+        "copy_store": [
+          "shop"
+        ],
+        "env": {
+          "TRYAII_MONITOR_MODE": "dynamic"
+        }
+      },
+      "expected": {
+        "stdout_golden": "status-env-mode-override.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "status-no-records",
+      "description": "No monitor directory at all: a notice on stdout, exit 0 (data dir forced relative so the path is stable).",
+      "input": {
+        "argv": [
+          "monitor",
+          "status"
+        ],
+        "env": {
+          "TRYAII_DRE_DATA_DIR": "."
+        }
+      },
+      "expected": {
+        "stdout_golden": "status-no-records.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "status-no-records-json",
+      "description": "No records with --json prints an empty list.",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--json"
+        ],
+        "env": {
+          "TRYAII_DRE_DATA_DIR": "."
+        }
+      },
+      "expected": {
+        "stdout_golden": "status-no-records-json.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "status-unknown-app",
+      "description": "--app naming an app without records is a usage error.",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--app",
+          "nope",
+          "--now",
+          "2026-10-11T12:00:00Z"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "status-unknown-app.stdout.golden.txt",
+        "stderr": "error: unknown app 'nope'\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "status-bad-since",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--since",
+          "1d"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "status-bad-since.stdout.golden.txt",
+        "stderr": "error: --since must be 24h, 7d or 30d\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "status-bad-now",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--now",
+          "yesterday"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "status-bad-now.stdout.golden.txt",
+        "stderr": "error: --now must be an ISO-8601 UTC timestamp (e.g. 2026-10-11T12:00:00Z)\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "status-unknown-option",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--nope"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "status-unknown-option.stdout.golden.txt",
+        "stderr": "error: unknown option: --nope. Run \"tryaii help monitor\".\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "status-unexpected-argument",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "shop"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "status-unexpected-argument.stdout.golden.txt",
+        "stderr": "error: unexpected argument: shop. Run \"tryaii help monitor\".\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "set-ok",
+      "description": "Writes config.json (checked byte-for-byte by the cross-CLI parity test) and confirms on stdout.",
+      "input": {
+        "argv": [
+          "monitor",
+          "set",
+          "checkout",
+          "dynamic",
+          "--app",
+          "shop"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "set-ok.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "set-ok-json",
+      "input": {
+        "argv": [
+          "monitor",
+          "set",
+          "purchase item",
+          "off",
+          "--app",
+          "shop",
+          "--json"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "set-ok-json.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "set-single-app-implicit",
+      "description": "With exactly one app on disk --app may be omitted.",
+      "input": {
+        "argv": [
+          "monitor",
+          "set",
+          "new process",
+          "stable"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "set-single-app-implicit.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "set-env-app",
+      "description": "TRYAII_APP selects the app when --app is absent.",
+      "input": {
+        "argv": [
+          "monitor",
+          "set",
+          "default",
+          "stable"
+        ],
+        "copy_store": [
+          "shop",
+          "web"
+        ],
+        "env": {
+          "TRYAII_APP": "web"
+        }
+      },
+      "expected": {
+        "stdout_golden": "set-env-app.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "set-bad-mode",
+      "input": {
+        "argv": [
+          "monitor",
+          "set",
+          "checkout",
+          "fast",
+          "--app",
+          "shop"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "set-bad-mode.stdout.golden.txt",
+        "stderr": "error: mode must be off, stable, dynamic or managed\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "set-missing-args",
+      "input": {
+        "argv": [
+          "monitor",
+          "set",
+          "checkout"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "set-missing-args.stdout.golden.txt",
+        "stderr": "error: usage: tryaii monitor set <process> <mode> [--model <id>]. Run \"tryaii help monitor\".\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "set-app-required",
+      "description": "Several apps and no --app: the error names them.",
+      "input": {
+        "argv": [
+          "monitor",
+          "set",
+          "checkout",
+          "off"
+        ],
+        "copy_store": [
+          "shop",
+          "web"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "set-app-required.stdout.golden.txt",
+        "stderr": "error: --app is required (apps: shop, web)\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "set-no-records",
+      "input": {
+        "argv": [
+          "monitor",
+          "set",
+          "checkout",
+          "off"
+        ],
+        "env": {
+          "TRYAII_DRE_DATA_DIR": "."
+        }
+      },
+      "expected": {
+        "stdout_golden": "set-no-records.stdout.golden.txt",
+        "stderr": "error: --app is required (no monitor records yet)\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "set-unknown-app",
+      "input": {
+        "argv": [
+          "monitor",
+          "set",
+          "checkout",
+          "off",
+          "--app",
+          "nope"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "set-unknown-app.stdout.golden.txt",
+        "stderr": "error: unknown app 'nope'\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "apps",
+      "input": {
+        "argv": [
+          "monitor",
+          "apps"
+        ],
+        "copy_store": [
+          "shop",
+          "web"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "apps.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "apps-json",
+      "input": {
+        "argv": [
+          "monitor",
+          "apps",
+          "--json"
+        ],
+        "copy_store": [
+          "shop",
+          "web"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "apps-json.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "apps-none",
+      "input": {
+        "argv": [
+          "monitor",
+          "apps"
+        ],
+        "env": {
+          "TRYAII_DRE_DATA_DIR": "."
+        }
+      },
+      "expected": {
+        "stdout_golden": "apps-none.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "events-human",
+      "description": "Newest three events, oldest first, with error class on the failed call.",
+      "input": {
+        "argv": [
+          "monitor",
+          "events",
+          "--app",
+          "shop",
+          "-n",
+          "3"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "events-human.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "events-json",
+      "description": "--json prints the raw event lines (JSONL), minified exactly as stored.",
+      "input": {
+        "argv": [
+          "monitor",
+          "events",
+          "--app",
+          "web",
+          "-n",
+          "2",
+          "--json"
+        ],
+        "copy_store": [
+          "shop",
+          "web"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "events-json.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "events-default-count",
+      "description": "Default -n is 20, across daily files.",
+      "input": {
+        "argv": [
+          "monitor",
+          "events"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "events-default-count.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "events-bad-count",
+      "input": {
+        "argv": [
+          "monitor",
+          "events",
+          "--app",
+          "shop",
+          "-n",
+          "0"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "events-bad-count.stdout.golden.txt",
+        "stderr": "error: -n must be a positive integer\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "events-app-required",
+      "input": {
+        "argv": [
+          "monitor",
+          "events"
+        ],
+        "copy_store": [
+          "shop",
+          "web"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "events-app-required.stdout.golden.txt",
+        "stderr": "error: --app is required (apps: shop, web)\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "missing-verb",
+      "input": {
+        "argv": [
+          "monitor"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "missing-verb.stdout.golden.txt",
+        "stderr": "error: missing monitor verb. Run \"tryaii help monitor\".\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "unknown-verb",
+      "input": {
+        "argv": [
+          "monitor",
+          "bogus"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "unknown-verb.stdout.golden.txt",
+        "stderr": "error: unknown monitor verb: bogus. Run \"tryaii help monitor\".\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "set-managed-ok",
+      "description": "SPEC §5.3: set managed --model writes the model into config.json.",
+      "input": {
+        "argv": [
+          "monitor",
+          "set",
+          "summarize",
+          "managed",
+          "--model",
+          "openai/gpt-5-mini",
+          "--app",
+          "shop"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "set-managed-ok.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "set-managed-json",
+      "description": "SPEC §5.3: --json adds the model for managed.",
+      "input": {
+        "argv": [
+          "monitor",
+          "set",
+          "summarize",
+          "managed",
+          "--model=gpt-5-mini",
+          "--json"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "set-managed-json.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "set-managed-needs-model",
+      "description": "SPEC §5.3: managed without --model is a usage error.",
+      "input": {
+        "argv": [
+          "monitor",
+          "set",
+          "summarize",
+          "managed"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "set-managed-needs-model.stdout.golden.txt",
+        "stderr": "error: managed mode needs --model <id>\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "set-model-without-managed",
+      "description": "SPEC §5.3: --model with another mode is a usage error.",
+      "input": {
+        "argv": [
+          "monitor",
+          "set",
+          "summarize",
+          "dynamic",
+          "--model",
+          "openai/gpt-5-mini"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "set-model-without-managed.stdout.golden.txt",
+        "stderr": "error: --model only applies to managed mode\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "status-model-option-rejected",
+      "description": "SPEC §5.1: --model belongs to set only.",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--model",
+          "x"
+        ],
+        "copy_store": [
+          "shop"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "status-model-option-rejected.stdout.golden.txt",
+        "stderr": "error: unknown option: --model. Run \"tryaii help monitor\".\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "status-managed",
+      "description": "SPEC §5.2: managed processes show 'managed (<model>)'; the block ends with the remote source line and the upload line.",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--app",
+          "managed",
+          "--now",
+          "2026-10-12T09:00:00Z"
+        ],
+        "copy_store": [
+          "managed"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "status-managed.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "status-managed-json",
+      "description": "SPEC §5.2: the v2 status document with source and upload blocks.",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--app",
+          "managed",
+          "--now",
+          "2026-10-12T09:00:00Z",
+          "--json"
+        ],
+        "copy_store": [
+          "managed"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "status-managed-json.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "status-upload-error",
+      "description": "SPEC §5.2: an app with only an upload cursor prints no table, the local source and the upload error.",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--app",
+          "flaky",
+          "--now",
+          "2026-10-12T09:00:00Z"
+        ],
+        "copy_store": [
+          "flaky"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "status-upload-error.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    }
+  ]
+}

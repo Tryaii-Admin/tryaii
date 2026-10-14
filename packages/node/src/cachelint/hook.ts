@@ -28,7 +28,7 @@
 
 import { createHash } from 'node:crypto';
 import { basename } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { captureCallSite } from '../callsite.js';
 
 type Engine = typeof import('./index.js');
 type Introspect = typeof import('./introspect.js');
@@ -40,59 +40,10 @@ const MAX_SHAPES = 1024; // FIFO cap on remembered prompt shapes
 const STALE_AFTER_MS = 3600 * 1000; // idle window after which a shape's counter resets
 const MAX_SITES = 512; // FIFO cap on the per-call-site emission/value stores
 
-// The package root for the stack-walk frame filter: '..' from this module is
-// src/ under vitest and dist/ when installed — both are exactly what must be
-// skipped as SDK-internal.
-const PKG_ROOT = fileURLToPath(new URL('..', import.meta.url))
-  .replace(/\\/g, '/')
-  .toLowerCase();
-
 /** Slot expr for warning lines: whitespace collapsed, capped at 60 chars. */
 function displayExpr(expr: string): string {
   const collapsed = expr.replace(/\s+/g, ' ').trim();
   return collapsed.length <= 60 ? collapsed : collapsed.slice(0, 57) + '...';
-}
-
-/**
- * Synchronous structured-CallSite capture (spike-verified): V8 zero-cost
- * async CallSites carry the awaiting user frame through internal awaits;
- * node: internal frames (timers, task queues) interleave and are skipped;
- * a first foreign frame inside another node_modules tree is a wrapper
- * library, not user code — dead-end.
- */
-function captureCallSite(): CallSite | null {
-  const saved = Error.prepareStackTrace;
-  const savedLimit = Error.stackTraceLimit;
-  let sites: NodeJS.CallSite[];
-  try {
-    Error.stackTraceLimit = 40;
-    Error.prepareStackTrace = (_err, callSites) => callSites;
-    sites = new Error().stack as unknown as NodeJS.CallSite[];
-  } finally {
-    Error.prepareStackTrace = saved;
-    Error.stackTraceLimit = savedLimit;
-  }
-  if (!Array.isArray(sites)) return null;
-  for (const site of sites) {
-    let file = site.getFileName();
-    if (typeof file === 'string' && file.startsWith('file://')) {
-      try {
-        file = fileURLToPath(file);
-      } catch {
-        continue;
-      }
-    }
-    if (!file) continue; // anonymous / eval frames
-    if (file.startsWith('node:')) continue; // runtime internals interleave
-    const norm = file.replace(/\\/g, '/').toLowerCase();
-    if (norm.startsWith(PKG_ROOT)) continue; // SDK-internal
-    if (norm.includes('/node_modules/')) return null; // wrapper library: dead-end
-    const line = site.getLineNumber();
-    if (line === null || line === undefined) continue;
-    const col = site.getColumnNumber();
-    return { file, line, col: col ?? null };
-  }
-  return null;
 }
 
 const NOTE_LINE =

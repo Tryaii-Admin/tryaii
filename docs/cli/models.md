@@ -19,6 +19,7 @@ tryaii models --json
 | Flag | Type | Default | Effect |
 |---|---|---|---|
 | `--provider` | string | — | Case-insensitive exact match on the provider name |
+| `--origin` / `--providers` / `--platform` | string | saved policy | List only the models a [policy](policy.md) allows (full catalog) |
 | `--json` | boolean | off | Print the (filtered) models as pretty-printed JSON (`to_dict()` shape: `model_id`, `provider`, `benchmark_scores`, `capabilities`, `pricing {input_per_1k, output_per_1k}`, `latency`, `tokens_per_second` (null when unmeasured), `ttft_ms` (null when unmeasured), `description`) |
 
 ## Text output
@@ -35,7 +36,7 @@ Available Models (45):
     - ...
 ```
 
-Each line shows `model_id [latency-tier] | $input/output per 1k tokens` (price segment omitted when the model has no pricing).
+Each line shows `model_id [latency-tier] | $input/output per 1k tokens` (price segment omitted when the model has no pricing). With the full catalog each line ends with `| origin: <countries>`: the countries controlling the model's maker and its base model's maker (`US+CN` = a US fine-tune of a Chinese base model, `?` = not reviewed yet); `--json` entries gain `"origin"`. With a [policy](policy.md) active, only allowed models are listed and a `Policy:` line follows the header.
 
 ## Speed fields
 

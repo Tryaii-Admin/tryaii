@@ -54,6 +54,8 @@ class CallSite:
     end_line: Optional[int] = None
     col: Optional[int] = None
     end_col: Optional[int] = None
+    # Enclosing function name (co_name; "<module>" at module level).
+    function: Optional[str] = None
 
 
 @dataclass
@@ -109,8 +111,9 @@ def capture_call_site() -> Optional[CallSite]:
                 return None      # asyncio / threading machinery: dead-end
             if f"{os.sep}site-packages{os.sep}" in norm or f"{os.sep}dist-packages{os.sep}" in norm:
                 return None      # a wrapper library, not user code
-            site = CallSite(file=filename, line=frame.f_lineno)
             code = frame.f_code
+            site = CallSite(file=filename, line=frame.f_lineno,
+                            function=code.co_name or None)
             if hasattr(code, "co_positions"):   # 3.11+: exact call span
                 try:
                     positions = list(code.co_positions())

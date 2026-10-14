@@ -15,6 +15,9 @@ tryaii route "Write a Python function to merge sorted arrays" --quality=5 --cost
 | `--cost` | int | `3` | Cost priority 1–5 |
 | `--speed` | int | `3` | Speed priority 1–5 |
 | `--top-k` | int | `5` | Number of recommendations shown |
+| `--origin` | `no-prc-models` \| `no-prc-hosting` \| `us-eu` | saved policy | [Policy](policy.md) preset for this call |
+| `--providers` | `a,b` | saved policy | [Policy](policy.md): only these companies (maker and host) |
+| `--platform` | `bedrock` \| `azure` \| `vertex` | saved policy | [Policy](policy.md): only models that platform serves |
 
 Priority values must be integers (non-integers → exit 2 on Node), but out-of-range values are **silently clamped** to 1–5, not rejected (`--quality=99` behaves as 5).
 

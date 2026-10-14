@@ -74,7 +74,9 @@ export class DREClient {
     this._apiKey = options?.apiKey ?? process.env.OPENROUTER_API_KEY ?? '';
     this._baseUrl = options?.baseUrl ?? 'https://openrouter.ai/api/v1';
     this._defaultPriorities = mergePriorities(options?.priorities);
-    this._router = new Router();
+    this._router = new Router({
+      policy: options?.policy === undefined ? 'auto' : options.policy,
+    });
     this._cacheLint = buildCacheLintHook(options?.cacheLint);
   }
 
@@ -114,6 +116,22 @@ export class DREClient {
     }
 
     return this._toSdkResult(coreResult, priorities);
+  }
+
+  /**
+   * The OpenRouter `provider` object the router's data-save policy requires
+   * for `modelId` (shared/datasave/SPEC.md section 4), or null. Tolerates a
+   * (stub) router without `providerPreferences`. Throws `PolicyError` when
+   * the policy excludes the model.
+   */
+  private _providerPreferences(modelId: string): Record<string, unknown> | null {
+    const router = this._router as unknown as
+      | { providerPreferences?: (id: string) => unknown }
+      | null
+      | undefined;
+    const prefs = router?.providerPreferences;
+    if (typeof prefs !== 'function') return null;
+    return (prefs.call(router, modelId) as Record<string, unknown> | null) ?? null;
   }
 
   /** Build an OpenRouter chat payload (single payload seat for chat + stream). */
@@ -157,6 +175,8 @@ export class DREClient {
     const modelId = coreResult.bestModel;
     const reasoning = coreResult.scores[0]?.reasoning ?? '';
     const openrouterModel = resolveModel(modelId);
+    // Throws PolicyError when the policy excludes the model.
+    const providerPrefs = this._providerPreferences(modelId);
 
     // Build messages
     const messages: Array<{ role: string; content: string }> = [];
@@ -171,6 +191,8 @@ export class DREClient {
       : null;
 
     const payload = this._buildPayload(openrouterModel, messages, options, false);
+    // Data-save policy (shared/datasave/SPEC.md section 4): pin the hosts it allows.
+    if (providerPrefs !== null) payload.provider = providerPrefs;
 
     // Call OpenRouter API
     const response = await fetch(`${this._baseUrl}/chat/completions`, {
@@ -243,6 +265,8 @@ export class DREClient {
     }
     const modelId = coreResult.bestModel;
     const openrouterModel = resolveModel(modelId);
+    // Throws PolicyError when the policy excludes the model.
+    const providerPrefs = this._providerPreferences(modelId);
 
     // Build messages
     const messages: Array<{ role: string; content: string }> = [];
@@ -257,6 +281,8 @@ export class DREClient {
       : null;
 
     const payload = this._buildPayload(openrouterModel, messages, options, true);
+    // Data-save policy (shared/datasave/SPEC.md section 4): pin the hosts it allows.
+    if (providerPrefs !== null) payload.provider = providerPrefs;
 
     // Call OpenRouter API with streaming
     const response = await fetch(`${this._baseUrl}/chat/completions`, {

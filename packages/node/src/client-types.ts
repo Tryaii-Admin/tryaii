@@ -2,6 +2,8 @@
  * High-level client TypeScript types for TryAii.
  */
 
+import type { PolicyLike } from './policy.js';
+
 /**
  * User priorities for model selection.
  *
@@ -126,4 +128,9 @@ export interface DREClientOptions {
    * TRYAII_CACHE_LINT=warn also enables.
    */
   cacheLint?: 'off' | 'warn';
+  /**
+   * Data-save policy (shared/datasave/SPEC.md): 'auto' (default) = the saved
+   * policy, null = none, or a ModelPolicy / policy.json-shaped object.
+   */
+  policy?: PolicyLike;
 }

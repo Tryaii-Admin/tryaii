@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { createDefaultConfig, type TryaiiDreConfig } from '../src/index.js';
+import { createDefaultConfig, type TryaiiDreConfig } from '../src/config.js';
 import * as daemon from '../src/daemon.js';
 import { serve, type RouterLike } from '../src/server.js';
 import type { RouteResult, RouteOptions } from '../src/router.js';
@@ -53,6 +53,11 @@ function makeResult(priorities: Priorities): RouteResult {
 class FakeRouter implements RouterLike {
   async route(_prompt: string, opts?: RouteOptions): Promise<RouteResult> {
     return makeResult(opts?.priorities ?? new Priorities());
+  }
+
+  async embedPrompt(_prompt: string): Promise<number[]> {
+    // Deterministic stand-in vector; 5 decimals so the wire rounding shows.
+    return [0.123456, -0.5, 0.00004, 1.0];
   }
 }
 
@@ -104,6 +109,54 @@ describe('routing daemon', () => {
     expect(got.classification?.difficulty).toBe(0.3);
     expect(got.priorities.quality).toBe(5);
     expect(got.priorities.cost).toBe(1);
+  });
+
+  it('advertises the routeEmbedding feature in its state', () => {
+    expect(daemon.supports(state, daemon.FEATURE_ROUTE_EMBEDDING)).toBe(true);
+    expect(daemon.supports(state, 'somethingElse')).toBe(false);
+    const { features: _omit, ...oldState } = state;
+    expect(daemon.supports(oldState as daemon.DaemonState, daemon.FEATURE_ROUTE_EMBEDDING)).toBe(
+      false,
+    );
+  });
+
+  it('route with embedding returns the rounded vector', async () => {
+    const { result, embedding } = await daemon.routeViaDaemonWithEmbedding(
+      state,
+      "what's greater 5 or 5.5?",
+      new Priorities(),
+      3,
+    );
+    expect(result.bestModel).toBe('gpt-5.2');
+    expect(embedding).toEqual({
+      model: state.embeddingModel,
+      dim: 4,
+      v: [0.1235, -0.5, 0, 1],
+    });
+    // The plain route path is unchanged: no embedding on the wire.
+    const resp = await daemon.request(
+      state,
+      { cmd: 'route', prompt: 'x', priorities: {}, topK: 1 },
+      5000,
+    );
+    expect(resp.ok).toBe(true);
+    expect(resp.result as Record<string, unknown>).not.toHaveProperty('embedding');
+  });
+
+  it('rejects a non-boolean includeEmbedding', async () => {
+    const resp = await daemon.request(
+      state,
+      { cmd: 'route', prompt: 'x', priorities: {}, topK: 1, includeEmbedding: 'yes' },
+      5000,
+    );
+    expect(resp).toEqual({ ok: false, error: 'includeEmbedding must be a boolean' });
+  });
+
+  it('route with embedding refuses a daemon without the feature', async () => {
+    const { features: _omit, ...oldState } = state;
+    await expect(
+      daemon.routeViaDaemonWithEmbedding(oldState as daemon.DaemonState, 'x', new Priorities(), 1),
+    ).rejects.toThrow('does not support routeEmbedding');
   });
 
   it('rejects requests with a bad token', async () => {

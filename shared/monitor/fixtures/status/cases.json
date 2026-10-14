@@ -1,0 +1,631 @@
+{
+  "suite": "status",
+  "target": "tryaii.monitor.status.aggregate",
+  "cases": [
+    {
+      "name": "shop-24h",
+      "description": "The shop store over the last 24h: purchase item (24 calls, 1 error, 2 unrouted), summarize (1 swapped call) and the pinned-but-idle checkout; the expired purchase-item pin is not shown.",
+      "input": {
+        "store": "shop",
+        "now": "2026-10-11T12:00:00.000Z",
+        "since": "24h"
+      },
+      "expected": {
+        "schema": "tryaii.monitor.status/1",
+        "app": "shop",
+        "now": "2026-10-11T12:00:00.000Z",
+        "since": "24h",
+        "source": {
+          "kind": "local",
+          "etag": null,
+          "fetched_at": null
+        },
+        "upload": {
+          "state": "off",
+          "events": 0,
+          "last_ok": null,
+          "last_error": null
+        },
+        "processes": [
+          {
+            "process": "checkout",
+            "mode": "off",
+            "mode_source": "config",
+            "managed_model": null,
+            "pinned": {
+              "model": "openai/gpt-5.4",
+              "expires_at": "2026-10-12T09:00:00.000Z"
+            },
+            "calls": 0,
+            "errors": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "est_cost_usd": 0,
+            "est_cost_winner_usd": null,
+            "savings_usd": null,
+            "swapped_calls": 0,
+            "est_cost_anchor_usd": null,
+            "realised_savings_usd": null,
+            "top_winner": null,
+            "files": []
+          },
+          {
+            "process": "purchase item",
+            "mode": "stable",
+            "mode_source": "config",
+            "managed_model": null,
+            "pinned": null,
+            "calls": 24,
+            "errors": 1,
+            "prompt_tokens": 20410,
+            "completion_tokens": 2921,
+            "total_tokens": 23331,
+            "est_cost_usd": 0.18968,
+            "est_cost_winner_usd": 0.075045,
+            "savings_usd": 0.110635,
+            "swapped_calls": 0,
+            "est_cost_anchor_usd": null,
+            "realised_savings_usd": null,
+            "top_winner": {
+              "model": "openai/gpt-5.4",
+              "share": 0.6818
+            },
+            "files": [
+              "/srv/app/cart/flow.py",
+              "C:/app/checkout.py"
+            ]
+          },
+          {
+            "process": "summarize",
+            "mode": "dynamic",
+            "mode_source": "config",
+            "managed_model": null,
+            "pinned": null,
+            "calls": 1,
+            "errors": 0,
+            "prompt_tokens": 2200,
+            "completion_tokens": 300,
+            "total_tokens": 2500,
+            "est_cost_usd": 0.00115,
+            "est_cost_winner_usd": 0.00115,
+            "savings_usd": 0,
+            "swapped_calls": 1,
+            "est_cost_anchor_usd": null,
+            "realised_savings_usd": null,
+            "top_winner": {
+              "model": "openai/gpt-5-mini",
+              "share": 1
+            },
+            "files": [
+              "/srv/app/summarize.py"
+            ]
+          }
+        ],
+        "totals": {
+          "calls": 25,
+          "errors": 1,
+          "est_cost_usd": 0.19083,
+          "est_cost_winner_usd": 0.076195,
+          "savings_usd": 0.110635,
+          "swapped_calls": 1,
+          "est_cost_anchor_usd": null,
+          "realised_savings_usd": null
+        }
+      }
+    },
+    {
+      "name": "shop-7d",
+      "description": "The 7-day window adds yesterday's history.",
+      "input": {
+        "store": "shop",
+        "now": "2026-10-11T12:00:00.000Z",
+        "since": "7d"
+      },
+      "expected": {
+        "schema": "tryaii.monitor.status/1",
+        "app": "shop",
+        "now": "2026-10-11T12:00:00.000Z",
+        "since": "7d",
+        "source": {
+          "kind": "local",
+          "etag": null,
+          "fetched_at": null
+        },
+        "upload": {
+          "state": "off",
+          "events": 0,
+          "last_ok": null,
+          "last_error": null
+        },
+        "processes": [
+          {
+            "process": "checkout",
+            "mode": "off",
+            "mode_source": "config",
+            "managed_model": null,
+            "pinned": {
+              "model": "openai/gpt-5.4",
+              "expires_at": "2026-10-12T09:00:00.000Z"
+            },
+            "calls": 0,
+            "errors": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "est_cost_usd": 0,
+            "est_cost_winner_usd": null,
+            "savings_usd": null,
+            "swapped_calls": 0,
+            "est_cost_anchor_usd": null,
+            "realised_savings_usd": null,
+            "top_winner": null,
+            "files": []
+          },
+          {
+            "process": "purchase item",
+            "mode": "stable",
+            "mode_source": "config",
+            "managed_model": null,
+            "pinned": null,
+            "calls": 30,
+            "errors": 1,
+            "prompt_tokens": 24610,
+            "completion_tokens": 3521,
+            "total_tokens": 28131,
+            "est_cost_usd": 0.22868,
+            "est_cost_winner_usd": 0.077295,
+            "savings_usd": 0.147385,
+            "swapped_calls": 0,
+            "est_cost_anchor_usd": null,
+            "realised_savings_usd": null,
+            "top_winner": {
+              "model": "openai/gpt-5.4",
+              "share": 0.5357
+            },
+            "files": [
+              "/srv/app/cart/flow.py",
+              "C:/app/checkout.py"
+            ]
+          },
+          {
+            "process": "summarize",
+            "mode": "dynamic",
+            "mode_source": "config",
+            "managed_model": null,
+            "pinned": null,
+            "calls": 6,
+            "errors": 0,
+            "prompt_tokens": 13200,
+            "completion_tokens": 1550,
+            "total_tokens": 14750,
+            "est_cost_usd": 0.09365,
+            "est_cost_winner_usd": 0.008125,
+            "savings_usd": 0.085525,
+            "swapped_calls": 1,
+            "est_cost_anchor_usd": null,
+            "realised_savings_usd": null,
+            "top_winner": {
+              "model": "openai/gpt-5-mini",
+              "share": 0.8333
+            },
+            "files": [
+              "/srv/app/summarize.py"
+            ]
+          }
+        ],
+        "totals": {
+          "calls": 36,
+          "errors": 1,
+          "est_cost_usd": 0.32233,
+          "est_cost_winner_usd": 0.08542,
+          "savings_usd": 0.23291,
+          "swapped_calls": 1,
+          "est_cost_anchor_usd": null,
+          "realised_savings_usd": null
+        }
+      }
+    },
+    {
+      "name": "shop-env-mode-override",
+      "description": "TRYAII_MONITOR_MODE applies to every process in the status view.",
+      "input": {
+        "store": "shop",
+        "now": "2026-10-11T12:00:00.000Z",
+        "since": "24h",
+        "env": {
+          "TRYAII_MONITOR_MODE": "dynamic"
+        }
+      },
+      "expected": {
+        "schema": "tryaii.monitor.status/1",
+        "app": "shop",
+        "now": "2026-10-11T12:00:00.000Z",
+        "since": "24h",
+        "source": {
+          "kind": "local",
+          "etag": null,
+          "fetched_at": null
+        },
+        "upload": {
+          "state": "off",
+          "events": 0,
+          "last_ok": null,
+          "last_error": null
+        },
+        "processes": [
+          {
+            "process": "checkout",
+            "mode": "dynamic",
+            "mode_source": "env",
+            "managed_model": null,
+            "pinned": {
+              "model": "openai/gpt-5.4",
+              "expires_at": "2026-10-12T09:00:00.000Z"
+            },
+            "calls": 0,
+            "errors": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "est_cost_usd": 0,
+            "est_cost_winner_usd": null,
+            "savings_usd": null,
+            "swapped_calls": 0,
+            "est_cost_anchor_usd": null,
+            "realised_savings_usd": null,
+            "top_winner": null,
+            "files": []
+          },
+          {
+            "process": "purchase item",
+            "mode": "dynamic",
+            "mode_source": "env",
+            "managed_model": null,
+            "pinned": null,
+            "calls": 24,
+            "errors": 1,
+            "prompt_tokens": 20410,
+            "completion_tokens": 2921,
+            "total_tokens": 23331,
+            "est_cost_usd": 0.18968,
+            "est_cost_winner_usd": 0.075045,
+            "savings_usd": 0.110635,
+            "swapped_calls": 0,
+            "est_cost_anchor_usd": null,
+            "realised_savings_usd": null,
+            "top_winner": {
+              "model": "openai/gpt-5.4",
+              "share": 0.6818
+            },
+            "files": [
+              "/srv/app/cart/flow.py",
+              "C:/app/checkout.py"
+            ]
+          },
+          {
+            "process": "summarize",
+            "mode": "dynamic",
+            "mode_source": "env",
+            "managed_model": null,
+            "pinned": null,
+            "calls": 1,
+            "errors": 0,
+            "prompt_tokens": 2200,
+            "completion_tokens": 300,
+            "total_tokens": 2500,
+            "est_cost_usd": 0.00115,
+            "est_cost_winner_usd": 0.00115,
+            "savings_usd": 0,
+            "swapped_calls": 1,
+            "est_cost_anchor_usd": null,
+            "realised_savings_usd": null,
+            "top_winner": {
+              "model": "openai/gpt-5-mini",
+              "share": 1
+            },
+            "files": [
+              "/srv/app/summarize.py"
+            ]
+          }
+        ],
+        "totals": {
+          "calls": 25,
+          "errors": 1,
+          "est_cost_usd": 0.19083,
+          "est_cost_winner_usd": 0.076195,
+          "savings_usd": 0.110635,
+          "swapped_calls": 1,
+          "est_cost_anchor_usd": null,
+          "realised_savings_usd": null
+        }
+      }
+    },
+    {
+      "name": "shop-empty-window",
+      "description": "A window with no events still lists configured and pinned processes with zero calls.",
+      "input": {
+        "store": "shop",
+        "now": "2026-10-20T12:00:00.000Z",
+        "since": "24h"
+      },
+      "expected": {
+        "schema": "tryaii.monitor.status/1",
+        "app": "shop",
+        "now": "2026-10-20T12:00:00.000Z",
+        "since": "24h",
+        "source": {
+          "kind": "local",
+          "etag": null,
+          "fetched_at": null
+        },
+        "upload": {
+          "state": "off",
+          "events": 0,
+          "last_ok": null,
+          "last_error": null
+        },
+        "processes": [
+          {
+            "process": "checkout",
+            "mode": "off",
+            "mode_source": "config",
+            "managed_model": null,
+            "pinned": null,
+            "calls": 0,
+            "errors": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "est_cost_usd": 0,
+            "est_cost_winner_usd": null,
+            "savings_usd": null,
+            "swapped_calls": 0,
+            "est_cost_anchor_usd": null,
+            "realised_savings_usd": null,
+            "top_winner": null,
+            "files": []
+          },
+          {
+            "process": "purchase item",
+            "mode": "stable",
+            "mode_source": "config",
+            "managed_model": null,
+            "pinned": null,
+            "calls": 0,
+            "errors": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "est_cost_usd": 0,
+            "est_cost_winner_usd": null,
+            "savings_usd": null,
+            "swapped_calls": 0,
+            "est_cost_anchor_usd": null,
+            "realised_savings_usd": null,
+            "top_winner": null,
+            "files": []
+          },
+          {
+            "process": "summarize",
+            "mode": "dynamic",
+            "mode_source": "config",
+            "managed_model": null,
+            "pinned": null,
+            "calls": 0,
+            "errors": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "est_cost_usd": 0,
+            "est_cost_winner_usd": null,
+            "savings_usd": null,
+            "swapped_calls": 0,
+            "est_cost_anchor_usd": null,
+            "realised_savings_usd": null,
+            "top_winner": null,
+            "files": []
+          }
+        ],
+        "totals": {
+          "calls": 0,
+          "errors": 0,
+          "est_cost_usd": 0,
+          "est_cost_winner_usd": null,
+          "savings_usd": null,
+          "swapped_calls": 0,
+          "est_cost_anchor_usd": null,
+          "realised_savings_usd": null
+        }
+      }
+    },
+    {
+      "name": "missing-store",
+      "description": "An app without a store directory aggregates to nothing.",
+      "input": {
+        "store": "nope",
+        "app": "nope",
+        "now": "2026-10-11T12:00:00.000Z",
+        "since": "30d"
+      },
+      "expected": {
+        "schema": "tryaii.monitor.status/1",
+        "app": "nope",
+        "now": "2026-10-11T12:00:00.000Z",
+        "since": "30d",
+        "source": {
+          "kind": "local",
+          "etag": null,
+          "fetched_at": null
+        },
+        "upload": {
+          "state": "off",
+          "events": 0,
+          "last_ok": null,
+          "last_error": null
+        },
+        "processes": [],
+        "totals": {
+          "calls": 0,
+          "errors": 0,
+          "est_cost_usd": 0,
+          "est_cost_winner_usd": null,
+          "savings_usd": null,
+          "swapped_calls": 0,
+          "est_cost_anchor_usd": null,
+          "realised_savings_usd": null
+        }
+      }
+    },
+    {
+      "name": "managed-remote-upload",
+      "description": "SPEC §2.7: remote.json beats config.json per process; managed processes report their model; source = remote; upload ok with the 2 event lines the cursor covers.",
+      "input": {
+        "store": "managed",
+        "now": "2026-10-12T09:00:00.000Z",
+        "since": "24h"
+      },
+      "expected": {
+        "schema": "tryaii.monitor.status/1",
+        "app": "managed",
+        "now": "2026-10-12T09:00:00.000Z",
+        "since": "24h",
+        "source": {
+          "kind": "remote",
+          "etag": "e-42",
+          "fetched_at": "2026-10-12T08:05:00.000Z"
+        },
+        "upload": {
+          "state": "ok",
+          "events": 2,
+          "last_ok": "2026-10-12T08:25:00.000Z",
+          "last_error": null
+        },
+        "processes": [
+          {
+            "process": "classify",
+            "mode": "dynamic",
+            "mode_source": "remote",
+            "managed_model": null,
+            "pinned": null,
+            "calls": 1,
+            "errors": 0,
+            "prompt_tokens": 1000,
+            "completion_tokens": 200,
+            "total_tokens": 1200,
+            "est_cost_usd": 0.00065,
+            "est_cost_winner_usd": 0.00065,
+            "savings_usd": 0,
+            "swapped_calls": 1,
+            "est_cost_anchor_usd": 0.011,
+            "realised_savings_usd": 0.01035,
+            "top_winner": {
+              "model": "openai/gpt-5-mini",
+              "share": 1
+            },
+            "files": [
+              "app/classify.py"
+            ]
+          },
+          {
+            "process": "summarize",
+            "mode": "managed",
+            "mode_source": "config",
+            "managed_model": "openai/gpt-5-mini",
+            "pinned": null,
+            "calls": 1,
+            "errors": 0,
+            "prompt_tokens": 1000,
+            "completion_tokens": 200,
+            "total_tokens": 1200,
+            "est_cost_usd": 0.00065,
+            "est_cost_winner_usd": 0.00065,
+            "savings_usd": 0,
+            "swapped_calls": 1,
+            "est_cost_anchor_usd": 0.011,
+            "realised_savings_usd": 0.01035,
+            "top_winner": {
+              "model": "openai/gpt-5-mini",
+              "share": 1
+            },
+            "files": [
+              "app/summarize.py"
+            ]
+          },
+          {
+            "process": "triage",
+            "mode": "managed",
+            "mode_source": "remote",
+            "managed_model": "openai/gpt-5-nano",
+            "pinned": null,
+            "calls": 1,
+            "errors": 0,
+            "prompt_tokens": 1000,
+            "completion_tokens": 200,
+            "total_tokens": 1200,
+            "est_cost_usd": 0.011,
+            "est_cost_winner_usd": 0.00065,
+            "savings_usd": 0.01035,
+            "swapped_calls": 0,
+            "est_cost_anchor_usd": 0.011,
+            "realised_savings_usd": 0,
+            "top_winner": {
+              "model": "openai/gpt-5-mini",
+              "share": 1
+            },
+            "files": [
+              "app/triage.py"
+            ]
+          }
+        ],
+        "totals": {
+          "calls": 3,
+          "errors": 0,
+          "est_cost_usd": 0.0123,
+          "est_cost_winner_usd": 0.00195,
+          "savings_usd": 0.01035,
+          "swapped_calls": 2,
+          "est_cost_anchor_usd": 0.033,
+          "realised_savings_usd": 0.0207
+        }
+      }
+    },
+    {
+      "name": "flaky-upload-error",
+      "description": "SPEC §2.7: no events, no processes -- the upload block still reports the last error.",
+      "input": {
+        "store": "flaky",
+        "now": "2026-10-12T09:00:00.000Z",
+        "since": "24h"
+      },
+      "expected": {
+        "schema": "tryaii.monitor.status/1",
+        "app": "flaky",
+        "now": "2026-10-12T09:00:00.000Z",
+        "since": "24h",
+        "source": {
+          "kind": "local",
+          "etag": null,
+          "fetched_at": null
+        },
+        "upload": {
+          "state": "error",
+          "events": 0,
+          "last_ok": null,
+          "last_error": "http 503"
+        },
+        "processes": [],
+        "totals": {
+          "calls": 0,
+          "errors": 0,
+          "est_cost_usd": 0,
+          "est_cost_winner_usd": null,
+          "savings_usd": null,
+          "swapped_calls": 0,
+          "est_cost_anchor_usd": null,
+          "realised_savings_usd": null
+        }
+      }
+    }
+  ]
+}

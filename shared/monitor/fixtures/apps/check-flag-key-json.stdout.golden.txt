@@ -1,0 +1,9 @@
+{
+  "app_id": "app_abcdefghijkl",
+  "app_name": "shop",
+  "key_id": "q9w8e7r6t5y4",
+  "scopes": [
+    "monitor:write"
+  ],
+  "expires_at": "2027-01-01T00:00:00.000Z"
+}

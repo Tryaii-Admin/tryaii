@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -25,6 +26,14 @@ from tryaii.classifiers.base import MAX_PROMPT_LENGTH, ClassificationResult
 from tryaii.classifiers.embedding import EmbeddingClassifier
 from tryaii.config import TryaiiDreConfig
 from tryaii.embeddings.local import LocalEmbeddingProvider
+from tryaii.policy import (
+    ModelPolicy,
+    PolicyError,
+    PolicyLike,
+    PolicyResult,
+    evaluate,
+    resolve_policy,
+)
 from tryaii.registry.models import ModelRegistry
 from tryaii.scoring.engine import ModelScore, ScoringEngine
 from tryaii.scoring.priorities import DEFAULT_PRIORITIES, Priorities
@@ -100,6 +109,12 @@ class Router:
                  auto, but raises ``LoginRequiredError`` when not logged in.
                  Raises ``SessionEndedError`` when the stored session was
                  rejected by the server.
+        policy: Which model makers and hosts are allowed
+                (shared/datasave/SPEC.md): ``"auto"`` (default) -- the
+                policy saved with ``tryaii policy set``, if any; ``None`` --
+                no policy; a ``ModelPolicy`` or dict -- that policy. An
+                active policy needs the full catalog's origin data and
+                raises ``PolicyCatalogError`` without it.
     """
 
     def __init__(
@@ -110,6 +125,7 @@ class Router:
         embedding_provider=None,
         bundle=None,
         catalog: str = "auto",
+        policy: PolicyLike = "auto",
     ):
         self._config = config or TryaiiDreConfig()
 
@@ -132,6 +148,14 @@ class Router:
         # Scoring engine with normalizer from benchmark registry
         normalizer = self._benchmark_registry.get_normalizer()
         self._scoring_engine = ScoringEngine(normalizer=normalizer)
+
+        # Data-save policy: evaluated once against the registry's models so a
+        # missing origins.json (starter catalog) fails here, not mid-route.
+        self._policy: ModelPolicy = resolve_policy(policy)
+        self._policy_result: Optional[PolicyResult] = None
+        if self._policy.active:
+            self._policy_result = evaluate(
+                self._policy, self._bundle.origins, self._registry.model_ids)
 
         # Embedding provider (lazy -- only initialized when needed)
         self._embedding_provider = embedding_provider
@@ -183,6 +207,7 @@ class Router:
         filter_provider: Optional[str] = None,
         filter_capability: Optional[str] = None,
         filter_max_cost: Optional[float] = None,
+        allowed_models: Optional[Collection[str]] = None,
     ) -> RouteResult:
         """
         Route a prompt to the best AI model.
@@ -194,6 +219,9 @@ class Router:
             filter_provider: Only consider models from this provider.
             filter_capability: Only consider models with this capability.
             filter_max_cost: Only consider models cheaper than this (input $/1k tokens).
+            allowed_models: Only consider these model ids (the CLI passes the
+                ids its policy allows, so a daemon routes without reading
+                the saved policy itself).
 
         Returns:
             RouteResult with the best model and full scoring breakdown.
@@ -211,6 +239,12 @@ class Router:
 
         # 2. Get available models (with optional filters)
         models = self._registry.all_models
+        if self._policy_result is not None:
+            allowed = set(self._policy_result.allowed)
+            models = [m for m in models if m.model_id in allowed]
+        if allowed_models is not None:
+            only = set(allowed_models)
+            models = [m for m in models if m.model_id in only]
         if filter_provider:
             models = [m for m in models if m.provider.lower() == filter_provider.lower()]
         if filter_capability:
@@ -252,6 +286,29 @@ class Router:
             classification=classification,
             priorities=priorities,
         )
+
+    @property
+    def policy(self) -> ModelPolicy:
+        """The active data-save policy (inactive when none applies)."""
+        return self._policy
+
+    @property
+    def policy_result(self) -> Optional[PolicyResult]:
+        """Which catalog models the policy allows, or None without a policy."""
+        return self._policy_result
+
+    def provider_preferences(self, model_id: str) -> Optional[dict]:
+        """The OpenRouter ``provider`` object a request for ``model_id`` must
+        carry under the active policy, or None when hosts are unconstrained.
+        Raises ``PolicyError`` for a model the policy excludes (e.g. an
+        explicit model override)."""
+        result = self._policy_result
+        if result is None:
+            return None
+        if model_id in result.excluded or model_id not in result.allowed:
+            raise PolicyError(f"model {model_id!r} is not allowed by the active policy "
+                              f"({self._policy.summary()})")
+        return result.provider_preferences(model_id)
 
     def add_model(self, *args, **kwargs):
         """Shortcut to add a model to the registry. See ModelRegistry.add()."""
@@ -319,3 +376,18 @@ class Router:
     def config(self) -> TryaiiDreConfig:
         """Access the configuration."""
         return self._config
+
+    def embed_prompt(self, prompt: str) -> list[float]:
+        """The embedding vector of ``prompt`` as the classifier sees it.
+
+        Same normalization as ``route()`` (non-empty string, truncated to
+        MAX_PROMPT_LENGTH) and the same per-classifier LRU, so asking for the
+        vector right after routing the same text costs no second model call.
+        Used by the daemon's ``includeEmbedding`` request (docs/daemon.md).
+        """
+        if not prompt or not isinstance(prompt, str):
+            raise ValueError("prompt must be a non-empty string")
+        if len(prompt) > MAX_PROMPT_LENGTH:
+            prompt = prompt[:MAX_PROMPT_LENGTH]
+        classifier = self._ensure_classifier()
+        return [float(x) for x in classifier._get_embedding(prompt)]

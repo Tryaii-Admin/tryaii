@@ -50,7 +50,32 @@ export interface DaemonState {
   token: string;
   pid: number;
   startedAtMs: number;
+  /**
+   * Capabilities this daemon supports (e.g. `FEATURE_ROUTE_EMBEDDING`,
+   * `FEATURE_ALLOWED_MODELS`); absent on a daemon from an older release.
+   */
+  features?: string[];
 }
+
+/**
+ * Capability a daemon lists in its state file's `features` when a route
+ * request may ask for the prompt's embedding (`includeEmbedding`).
+ */
+export const FEATURE_ROUTE_EMBEDDING = 'routeEmbedding';
+
+/**
+ * Whether the daemon behind `state` advertises `feature`. A daemon from a
+ * release before the `features` key answers false to everything.
+ */
+export function supports(state: DaemonState, feature: string): boolean {
+  return (state.features ?? []).includes(feature);
+}
+
+/**
+ * Capability a daemon lists in its state file's `features` when it honours a
+ * route request's `allowedModels` (data-save policies).
+ */
+export const FEATURE_ALLOWED_MODELS = 'allowedModels';
 
 interface EnsureOptions {
   autostart?: boolean;
@@ -482,20 +507,85 @@ export function deserializeRouteResult(data: SerializedResult): RouteResult {
   return { bestModel: data.bestModel ?? '', scores, classification, priorities };
 }
 
-/** Route a single prompt through a running daemon. Rejects on failure. */
+/** Wire shape of a prompt embedding returned by `includeEmbedding` requests. */
+export interface DaemonEmbedding {
+  model: string;
+  dim: number;
+  v: number[];
+}
+
+async function routeRequest(
+  state: DaemonState,
+  prompt: string,
+  priorities: Priorities,
+  topK: number,
+  includeEmbedding: boolean,
+  allowedModels?: readonly string[] | null,
+): Promise<{ result: RouteResult; embedding: DaemonEmbedding | null }> {
+  const payload: Record<string, unknown> = {
+    cmd: 'route',
+    prompt,
+    priorities: priorities.toDict(),
+    topK,
+  };
+  if (includeEmbedding) payload.includeEmbedding = true;
+  if (allowedModels != null) {
+    // A daemon from an older release would ignore the list and route
+    // unfiltered: require it to advertise support, else the caller falls back
+    // to in-process routing.
+    if (!supports(state, FEATURE_ALLOWED_MODELS)) {
+      throw new Error('daemon does not support allowedModels');
+    }
+    payload.allowedModels = [...allowedModels];
+  }
+  const resp = await request(state, payload, 30_000);
+  if (!resp.ok) throw new Error(resp.error ?? 'daemon route failed');
+  const data = resp.result as SerializedResult & { embedding?: unknown };
+  const result = deserializeRouteResult(data);
+  if (!includeEmbedding) return { result, embedding: null };
+  const embedding = data.embedding;
+  if (!embedding || typeof embedding !== 'object') {
+    throw new Error('daemon returned no embedding');
+  }
+  return { result, embedding: embedding as DaemonEmbedding };
+}
+
+/**
+ * Route a single prompt through a running daemon. Rejects on failure.
+ *
+ * `allowedModels` (the ids a data-save policy allows) limits the candidates;
+ * null/undefined = every catalog model.
+ */
 export async function routeViaDaemon(
   state: DaemonState,
   prompt: string,
   priorities: Priorities,
   topK: number,
+  allowedModels?: readonly string[] | null,
 ): Promise<RouteResult> {
-  const resp = await request(
-    state,
-    { cmd: 'route', prompt, priorities: priorities.toDict(), topK },
-    30_000,
-  );
-  if (!resp.ok) throw new Error(resp.error ?? 'daemon route failed');
-  return deserializeRouteResult(resp.result as SerializedResult);
+  return (await routeRequest(state, prompt, priorities, topK, false, allowedModels)).result;
+}
+
+/**
+ * Route a single prompt and also fetch its embedding vector
+ * (`{model, dim, v}`, 4-decimal floats). Rejects when the daemon predates the
+ * feature -- the caller should fall back to `routeViaDaemon` and record no
+ * vector. Mirrors the Python `daemon.route_with_embedding`. `allowedModels`
+ * is passed through like `routeViaDaemon`.
+ */
+export async function routeViaDaemonWithEmbedding(
+  state: DaemonState,
+  prompt: string,
+  priorities: Priorities,
+  topK: number,
+  allowedModels?: readonly string[] | null,
+): Promise<{ result: RouteResult; embedding: DaemonEmbedding }> {
+  if (!supports(state, FEATURE_ROUTE_EMBEDDING)) {
+    throw new Error('daemon does not support routeEmbedding');
+  }
+  const { result, embedding } = await routeRequest(
+    state, prompt, priorities, topK, true, allowedModels);
+  return { result, embedding: embedding as DaemonEmbedding };
 }
 
 /**
@@ -507,13 +597,16 @@ export async function routeViaDaemon(
 export function routeWithFallback(
   state: DaemonState,
   fallback: () => (prompt: string, priorities: Priorities, topK: number) => Promise<RouteResult>,
+  allowedModels?: readonly string[] | null,
 ): (prompt: string, priorities: Priorities, topK: number) => Promise<RouteResult> {
   let inProcess: ((prompt: string, priorities: Priorities, topK: number) => Promise<RouteResult>) | null =
     null;
   return async (prompt, priorities, topK) => {
     if (inProcess === null) {
       try {
-        return await routeViaDaemon(state, prompt, priorities, topK);
+        return allowedModels == null
+          ? await routeViaDaemon(state, prompt, priorities, topK)
+          : await routeViaDaemon(state, prompt, priorities, topK, allowedModels);
       } catch {
         inProcess = fallback();
       }

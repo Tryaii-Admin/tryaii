@@ -58,6 +58,13 @@ def _serialize_classification(classification) -> Optional[dict]:
     }
 
 
+def serialize_embedding(vector, model: str) -> dict:
+    """Wire shape of a prompt embedding: {model, dim, v} with v rounded to
+    4 decimals (plain JSON floats; the Node SDK rounds the same way)."""
+    v = [round(float(x), 4) for x in vector]
+    return {"model": model, "dim": len(v), "v": v}
+
+
 def serialize_route_result(result) -> dict:
     return {
         "bestModel": result.best_model,
@@ -102,8 +109,27 @@ def _handle(req: dict, router, token: str, state: dict) -> dict:
             speed=pr.get("speed", 3),
         )
         top_k = int(req.get("topK", 5))
-        result = router.route(prompt, priorities=priorities, top_k=top_k)
-        return {"ok": True, "result": serialize_route_result(result)}
+        # Monitor's vector store asks for the prompt's embedding alongside the
+        # routing result (feature "routeEmbedding", docs/daemon.md).
+        include_embedding = req.get("includeEmbedding", False)
+        if not isinstance(include_embedding, bool):
+            return {"ok": False, "error": "includeEmbedding must be a boolean"}
+        # Data-save policy: the CLI sends the model ids its policy allows; the
+        # daemon itself never reads the saved policy (it would go stale).
+        allowed = req.get("allowedModels")
+        if allowed is not None and (
+                not isinstance(allowed, list) or not all(isinstance(m, str) for m in allowed)):
+            return {"ok": False, "error": "allowedModels must be a list of model ids"}
+        if allowed is None:
+            result = router.route(prompt, priorities=priorities, top_k=top_k)
+        else:
+            result = router.route(prompt, priorities=priorities, top_k=top_k,
+                                  allowed_models=allowed)
+        payload = serialize_route_result(result)
+        if include_embedding:
+            payload["embedding"] = serialize_embedding(
+                router.embed_prompt(prompt), state["embeddingModel"])
+        return {"ok": True, "result": payload}
 
     return {"ok": False, "error": f"unknown command: {cmd}"}
 
@@ -146,7 +172,7 @@ def serve(
     if router is None:
         from tryaii import Priorities, Router
 
-        router = Router(config=config, bundle=bundle)
+        router = Router(config=config, bundle=bundle, policy=None)
         emit(f"[daemon] loading embedding model '{config.embedding_model}' (one-time)...")
         started = time.time()
         router.route("warmup", priorities=Priorities(), top_k=1)
@@ -165,6 +191,7 @@ def serve(
         "token": token,
         "pid": os.getpid(),
         "startedAtMs": int(time.time() * 1000),
+        "features": [_daemon.FEATURE_ALLOWED_MODELS, _daemon.FEATURE_ROUTE_EMBEDDING],
     }
     # Write the state file only now that the model is warm: its presence is the
     # readiness signal clients poll for.

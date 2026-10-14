@@ -1,0 +1,20 @@
+2026-10-11T03:00:00.000Z  purchase item | gpt-5.5 | off | winner openai/gpt-5.4 | 975 tok | 0.0080 | ok
+2026-10-11T03:30:00.000Z  purchase item | gpt-5.5 | off | winner openai/gpt-5.4 | 986 tok | 0.0081 | ok
+2026-10-11T04:00:00.000Z  purchase item | gpt-5.5 | off | winner openai/gpt-5-mini | 997 tok | 0.0082 | ok
+2026-10-11T04:30:00.000Z  purchase item | gpt-5.5 | off | winner openai/gpt-5.4 | 1008 tok | 0.0082 | ok
+2026-10-11T05:00:00.000Z  purchase item | gpt-5.5 | off | winner openai/gpt-5.4 | 1019 tok | 0.0083 | ok
+2026-10-11T05:30:00.000Z  purchase item | gpt-5.5 | off | winner anthropic/claude-sonnet-4.5 | 1030 tok | 0.0084 | ok
+2026-10-11T06:00:00.000Z  purchase item | gpt-5.5 | off | winner openai/gpt-5-mini | 1041 tok | 0.0085 | ok
+2026-10-11T06:30:00.000Z  purchase item | gpt-5.5 | off | winner openai/gpt-5.4 | 1052 tok | 0.0086 | ok
+2026-10-11T07:00:00.000Z  purchase item | gpt-5.5 | off | winner openai/gpt-5.4 | 1063 tok | 0.0086 | ok
+2026-10-11T07:30:00.000Z  purchase item | gpt-5.5 | off | winner openai/gpt-5.4 | 1074 tok | 0.0087 | ok
+2026-10-11T08:00:00.000Z  purchase item | gpt-5.5 | off | winner openai/gpt-5-mini | 1085 tok | 0.0088 | ok
+2026-10-11T08:30:00.000Z  purchase item | gpt-5.5 | off | winner openai/gpt-5.4 | 1096 tok | 0.0089 | ok
+2026-10-11T09:00:00.000Z  purchase item | gpt-5.5 | off | winner openai/gpt-5.4 | 1107 tok | 0.0090 | ok
+2026-10-11T09:30:00.000Z  purchase item | gpt-5.5 | off | winner openai/gpt-5.4 | 1118 tok | 0.0090 | ok
+2026-10-11T10:00:00.000Z  purchase item | gpt-5.5 | off | winner openai/gpt-5-mini | 1129 tok | 0.0091 | ok
+2026-10-11T10:30:00.000Z  purchase item | gpt-5.5 | off | winner openai/gpt-5.4 | 1140 tok | 0.0092 | ok
+2026-10-11T11:00:00.000Z  purchase item | gpt-5.5 | off | winner anthropic/claude-sonnet-4.5 | 1151 tok | 0.0093 | ok
+2026-10-11T11:35:00.000Z  purchase item | gpt-5.5 | off | winner - | - tok | - | ok | error RateLimitError
+2026-10-11T11:40:00.000Z  purchase item | gpt-5.5 | off | winner - | 550 tok | 0.0040 | unavailable
+2026-10-11T11:50:00.000Z  summarize | gpt-5-mini | dynamic | winner openai/gpt-5-mini | 2500 tok | 0.0011 | ok

@@ -10,6 +10,7 @@ Commands (kept in parity with the Node SDK's `tryaii`):
     tryaii benchmarks                    -- List available benchmarks
     tryaii regenerate                    -- Regenerate centroids (after model change)
     tryaii login | logout | whoami       -- tryaii.com account sign-in (device flow)
+    tryaii apps <verb>                   -- tryaii.com apps and app keys (monitor upload)
     tryaii help [command]                -- Global help, or detailed help for one command
 
 Per-command help is also reachable via `tryaii <command> -h/--help`.
@@ -44,8 +45,11 @@ Commands:
   eval <input.json>     Route a JSON dataset; writes results.jsonl, summary.json, index.html
   cachelint <input.json>  Analyze prompt-cache readiness before sending (--json, --provider)
   diagnose <verb>       Agent-driven codebase diagnostics: plan, check (see 'tryaii help diagnose')
+  monitor <verb>        Watch and steer the LLM calls your app makes: status, set, apps, events (see 'tryaii help monitor')
+  apps <verb>           tryaii.com apps and app keys for monitor upload: create, list, keys, check (see 'tryaii help apps')
   designpartner         Enroll as a tryaii design partner (one resumable command)
   models                List available models (--provider <name>, --json)
+  policy                Show, set or clear the model origin / provider policy
   benchmarks            List available benchmarks (--json)
   setup                 Download the embedding model and warm centroids (--model <name>)
   regenerate            Rebuild benchmark centroids, e.g. after changing the embedding model (--model <name>)
@@ -58,6 +62,11 @@ Common options:
   --cost <1-5>          Cost priority for route/eval (default 3)
   --speed <1-5>         Speed priority for route/eval (default 3)
   --top-k <n>           Number of recommendations (default 5)
+
+Policy options (route/eval/models; full catalog, see 'tryaii help policy'):
+  --origin <preset>     no-prc-models, no-prc-hosting or us-eu
+  --providers <a,b>     Only these companies (model maker and host)
+  --platform <name>     Only models served by bedrock, azure or vertex
 
 Eval-only options:
   -o, --output <dir>    Output directory (default: ./tryaii-eval-<timestamp>)
@@ -100,6 +109,9 @@ Options:
   --cost <1-5>          Cost priority (default 3; out-of-range clamped)
   --speed <1-5>         Speed priority (default 3; out-of-range clamped)
   --top-k <n>           Number of recommendations shown (default 5)
+  --origin <preset>     Policy: no-prc-models, no-prc-hosting or us-eu
+  --providers <a,b>     Policy: only these companies (model maker and host)
+  --platform <name>     Policy: only models served by bedrock, azure or vertex
   --no-daemon           Route in-process for this call; do not use or start a daemon
 
 Notes:
@@ -149,6 +161,9 @@ Options:
   --budget-mode <mode>  'strict' (default) or 'fit-output'
   --difficulty-source <s>  'intrinsic' (default), 'capability', or 'blend'
   --difficulty-gamma <n>   Shift budget toward harder prompts (default 1; 0 disables)
+  --origin <preset>     Policy: no-prc-models, no-prc-hosting or us-eu
+  --providers <a,b>     Policy: only these companies (model maker and host)
+  --platform <name>     Policy: only models served by bedrock, azure or vertex
   --no-daemon           Route in-process for this call; do not use or start a daemon
 
 Notes:
@@ -175,10 +190,14 @@ Usage:
 
 Print every model in the default registry, grouped by provider. Each line
 shows: model_id [latency-tier] | $input/output per 1k tokens (price omitted
-when the model has no pricing).
+when the model has no pricing). With the full catalog each line also ends
+with | origin: <countries> (where the model and its base model come from).
 
 Options:
   --provider <name>     Filter to one provider (case-insensitive exact match)
+  --origin <preset>     Policy: no-prc-models, no-prc-hosting or us-eu
+  --providers <a,b>     Policy: only these companies (model maker and host)
+  --platform <name>     Policy: only models served by bedrock, azure or vertex
   --json                Print the (filtered) models as pretty-printed JSON
 
 Examples:
@@ -464,6 +483,187 @@ Exit codes:
 Docs: docs/cli/diagnose/report.md
 """
 
+HELP_MONITOR = """tryaii monitor -- Watch and steer the LLM calls your app makes
+
+Usage:
+  tryaii monitor <verb> [options]
+
+monitor reads the local records written by tryaii.monitor.wrap(client):
+every call your app makes, the model it used, and the model tryaii's
+shadow routing would have picked (best-for-less: at least the anchor's
+quality for at most its price). Records live under
+<data dir>/monitor/<app>/; only metadata and prompt embeddings are stored,
+never prompt text.
+
+Verbs:
+  status                Per app/process: mode, pinned model, calls, tokens, est. cost, savings
+  set <process> <mode>  Set a process's mode: off (monitor only), stable (24h pin), dynamic,
+                        managed --model <id> (always that model)
+  apps                  List the apps with monitor records
+  events                Print the most recent events (--json emits JSONL)
+
+Options:
+  --app <id>            App to inspect (default: every app for status, the only app otherwise)
+  --since <window>      Window for status: 24h (default), 7d, 30d
+  -n <count>            events: number of lines (default 20)
+  --model <id>          set: the model of a managed process
+  --now <iso8601>       Override the current time (window and pin evaluation)
+  --json                Machine-readable output
+
+With TRYAII_API_KEY set, the wrapper also uploads these records (metadata
+only) to your tryaii.com dashboard and follows the modes set there; see
+'tryaii help apps'.
+
+Examples:
+  tryaii monitor status
+  tryaii monitor set "purchase item" stable --app shop
+  tryaii monitor set summarize managed --model openai/gpt-5-mini
+  tryaii monitor events --app shop -n 50 --json
+
+Exit codes:
+  0 success, 1 runtime failure, 2 usage error or unknown app/mode.
+
+Docs: docs/cli/monitor.md
+"""
+
+HELP_MONITOR_STATUS = """tryaii monitor status -- Per-process roll-up of the monitored calls
+
+Usage:
+  tryaii monitor status [--app <id>] [--since 24h|7d|30d] [--now <iso8601>] [--json]
+
+One block per app (or just --app): a table with one row per sub-process
+(mode, pinned model, calls, tokens, est. cost, the cost the shadow-routing
+winners would have had, savings, and the top winner with its share), the
+files each sub-process runs in, and totals. Processes named in config.json,
+remote.json or pins.json show even with zero calls. A managed process shows
+as "managed (<model>)".
+
+Two lines close each block: "source: local" or "source: remote etag <etag>
+fetched <time>" (the dashboard config the wrapper follows), and the upload
+state: "upload: off", "upload: ok <n> events at <time>" or
+"upload: error <reason>".
+
+With --json: the status document (one object with --app, else a list).
+With no records at all: "no monitor records under <data dir>/monitor".
+"""
+
+HELP_MONITOR_SET = """tryaii monitor set -- Set a sub-process's mode
+
+Usage:
+  tryaii monitor set <process> <mode> [--model <id>] [--app <id>]
+
+Modes:
+  off                   Monitor only; the model in your code is used as is
+  stable                Pin, for 24 hours, the model that won most of this process's calls
+  dynamic               Route every call to the best-for-less model
+  managed               Always send --model <id> (when this client can reach it and
+                        your policy allows it; otherwise the model in your code)
+
+Writes <data dir>/monitor/<app>/config.json; a running wrapper picks the
+change up within a few seconds. A mode set on the tryaii.com dashboard
+(remote.json) takes precedence. --app may be omitted when exactly one app
+has records (or TRYAII_APP is set).
+"""
+
+HELP_MONITOR_APPS = """tryaii monitor apps -- List the apps with monitor records
+
+Usage:
+  tryaii monitor apps [--json]
+
+One app name per line (a JSON array with --json), read from
+<data dir>/monitor/.
+"""
+
+HELP_MONITOR_EVENTS = """tryaii monitor events -- Print the most recent events
+
+Usage:
+  tryaii monitor events [--app <id>] [-n <count>] [--json]
+
+The newest <count> events (default 20), oldest first. Human lines show
+timestamp, process, model used, mode, winner, tokens, est. cost, route
+status and any error class; --json prints the raw event lines (JSONL).
+"""
+
+HELP_APPS = """tryaii apps -- tryaii.com apps and app keys for monitor upload
+
+Usage:
+  tryaii apps <verb> [options]
+
+An app groups the monitor records of one program on your tryaii.com
+dashboard. Its app key (tryaii_<key_id>_<secret>) goes into TRYAII_API_KEY
+where the program runs: the monitor wrapper then uploads its call metadata
+(never prompt or response text) and follows the modes set on the dashboard.
+
+Verbs:
+  create <name>         Create an app and its first key (the full key is shown once)
+  list                  Your apps with keys, calls and cost of the last 24 hours
+  keys <app_id>         List an app's keys (prefix only); --new adds one, --revoke removes one
+  check                 Validate TRYAII_API_KEY (or --key) and show its app and scopes
+
+Options:
+  --new                 keys: create a key (at most 2 active keys per app)
+  --label <label>       keys --new: a label for the new key
+  --revoke <key_id>     keys: revoke a key
+  --key <key>           check: the key to validate instead of TRYAII_API_KEY
+  --json                Machine-readable output
+
+create, list and keys act as your account (run 'tryaii login' first);
+check only needs the app key.
+
+Examples:
+  tryaii apps create shop
+  tryaii apps keys app_x1y2z3a4b5c6 --new --label ci
+  TRYAII_API_KEY=tryaii_... tryaii apps check
+
+Exit codes:
+  0 success, 1 server, network or sign-in failure, 2 usage error.
+
+Docs: docs/cli/apps.md
+"""
+
+HELP_APPS_CREATE = """tryaii apps create -- Create an app and its first key
+
+Usage:
+  tryaii apps create <name> [--json]
+
+Creates the app (names are 1-64 characters, unique per account) and a key
+labelled "default". The full key is printed once -- store it, e.g. as
+TRYAII_API_KEY in the environment of the program you monitor. Needs
+'tryaii login'.
+"""
+
+HELP_APPS_LIST = """tryaii apps list -- List your apps
+
+Usage:
+  tryaii apps list [--json]
+
+One row per app: id, name, active keys, calls and estimated cost of the
+last 24 hours, and the time of the last uploaded event. Needs
+'tryaii login'.
+"""
+
+HELP_APPS_KEYS = """tryaii apps keys -- List, create or revoke an app's keys
+
+Usage:
+  tryaii apps keys <app_id> [--json]
+  tryaii apps keys <app_id> --new [--label <label>] [--json]
+  tryaii apps keys <app_id> --revoke <key_id> [--json]
+
+Lists show the key prefix only (tryaii_<key_id>_...). --new prints the full
+new key once; an app has at most 2 active keys (rotate: create the new one,
+deploy it, revoke the old one). Needs 'tryaii login'.
+"""
+
+HELP_APPS_CHECK = """tryaii apps check -- Validate an app key
+
+Usage:
+  tryaii apps check [--key <key>] [--json]
+
+Validates TRYAII_API_KEY (or --key) against TRYAII_API_URL (default
+https://api.tryaii.com) and prints the app, the key id, its scopes and its
+expiry. Exit 1 when the key is rejected.
+"""
+
 HELP_DESIGNPARTNER = """tryaii designpartner -- Enroll as a tryaii design partner
 
 Usage:
@@ -568,6 +768,45 @@ Exit codes:
   0 signed in, 1 not signed in, session ended or network failure, 2 bad flag.
 """
 
+HELP_POLICY = """tryaii policy -- Show, set or clear the model origin / provider policy
+
+Usage:
+  tryaii policy [show]
+  tryaii policy set [options]
+  tryaii policy clear
+
+A policy limits which companies may build the models tryaii picks and which
+may receive your prompts. The saved policy applies to route, eval, models
+and the SDK (Router, DREClient) until cleared; --origin, --providers and
+--platform on a command override it for that call. Policies need the full
+catalog: run 'tryaii login' first.
+
+Options for set (each replaces the saved value; lists are comma-separated):
+  --origin <preset>     no-prc-models   no model made by a PRC company or
+                                        fine-tuned from a PRC model
+                        no-prc-hosting  no host controlled from the PRC
+                        us-eu           models and hosts from the US, the
+                                        EEA, the UK and Switzerland only
+  --providers <a,b>     Only these companies, as model maker and as host
+  --exclude-providers <a,b>  Never these companies
+  --allow-countries <A,B>    Only these countries (ISO codes, e.g. US,FR)
+  --deny-countries <A,B>     Never these countries
+  --platform <name>     Only models served by bedrock, azure or vertex
+
+Models or hosts with unknown origin are always excluded by an active policy.
+
+Examples:
+  tryaii policy set --origin no-prc-models
+  tryaii policy set --providers anthropic,openai
+  tryaii policy set --platform bedrock
+  tryaii policy clear
+
+Exit codes:
+  0 success, 1 runtime failure, 2 bad flag.
+
+Docs: docs/cli/policy.md
+"""
+
 HELP_HELP = """tryaii help -- Show help for tryaii or a specific command
 
 Usage:
@@ -579,8 +818,8 @@ detailed help for that command. The flags -h/--help after any command do
 the same thing.
 
 Topics:
-  route, eval, cachelint, diagnose, designpartner, models, benchmarks,
-  setup, regenerate, login, logout, whoami, help
+  route, eval, cachelint, diagnose, designpartner, monitor, apps, models,
+  policy, benchmarks, setup, regenerate, login, logout, whoami, help
 
 Examples:
   tryaii help
@@ -599,8 +838,11 @@ COMMAND_HELP = {
     "eval": HELP_EVAL,
     "cachelint": HELP_CACHELINT,
     "diagnose": HELP_DIAGNOSE,
+    "monitor": HELP_MONITOR,
+    "apps": HELP_APPS,
     "designpartner": HELP_DESIGNPARTNER,
     "models": HELP_MODELS,
+    "policy": HELP_POLICY,
     "benchmarks": HELP_BENCHMARKS,
     "setup": HELP_SETUP,
     "regenerate": HELP_REGENERATE,
@@ -617,6 +859,24 @@ DIAGNOSE_VERB_HELP = {
     "plan": HELP_DIAGNOSE_PLAN,
     "check": HELP_DIAGNOSE_CHECK,
     "report": HELP_DIAGNOSE_REPORT,
+}
+
+# Per-verb help for the monitor command. Mirrors MONITOR_VERB_HELP in the
+# Node CLI (same parity guard).
+MONITOR_VERB_HELP = {
+    "status": HELP_MONITOR_STATUS,
+    "set": HELP_MONITOR_SET,
+    "apps": HELP_MONITOR_APPS,
+    "events": HELP_MONITOR_EVENTS,
+}
+
+# Per-verb help for the apps command. Mirrors APPS_VERB_HELP in the Node CLI
+# (same parity guard).
+APPS_VERB_HELP = {
+    "create": HELP_APPS_CREATE,
+    "list": HELP_APPS_LIST,
+    "keys": HELP_APPS_KEYS,
+    "check": HELP_APPS_CHECK,
 }
 
 # Per-line delay (seconds) when revealing human-readable output interactively.
@@ -671,14 +931,56 @@ def _cli_catalog(nudge: bool = False):
     return selection.bundle
 
 
-def _acquire_route_fn(config, no_daemon: bool, bundle=None):
+def _cli_policy(args, bundle):
+    """The data-save policy for this command (shared/datasave/SPEC.md): the
+    saved policy with --origin / --providers / --platform overriding it.
+    Returns a PolicyResult over the catalog's models, or None when no policy
+    is active. Exits 2 on a bad flag value, 1 when the saved policy file is
+    broken or the catalog has no origin data (never routes unfiltered)."""
+    from tryaii import policy as pol
+    from tryaii.registry.models import ModelRegistry
+
+    try:
+        saved = pol.load_saved_policy()
+    except pol.PolicyError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    try:
+        policy = saved.merged({
+            "origin": getattr(args, "origin", None),
+            "providers": getattr(args, "providers", None),
+            "platform": getattr(args, "platform", None),
+        })
+    except pol.PolicyError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(2)
+    if not policy.active:
+        return None
+    try:
+        return pol.evaluate(policy, bundle.origins, ModelRegistry.from_bundle(bundle).model_ids)
+    except pol.PolicyCatalogError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+    except pol.PolicyError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(2)
+
+
+def _policy_line(result) -> str:
+    """``Policy: <summary> (<allowed> of <total> models allowed)``."""
+    return (f"Policy: {result.policy.summary()} "
+            f"({len(result.allowed)} of {result.total} models allowed)")
+
+
+def _acquire_route_fn(config, no_daemon: bool, bundle=None, allowed_models=None):
     """Return (route_fn, source) where route_fn(prompt, priorities, top_k) -> RouteResult.
 
     Prefers a warm background daemon (auto-starting one if needed) so repeated
     CLI calls skip the embedding-model load. Falls back to an in-process Router
     when the daemon is disabled, unavailable, or fails to start in time. Both
     route on ``bundle`` (the catalog the command selected); a daemon on another
-    catalog is replaced.
+    catalog is replaced. ``allowed_models`` (a data-save policy's allowed ids)
+    limits the candidates on both paths.
     """
     from tryaii import daemon as daemon_mod
 
@@ -697,20 +999,23 @@ def _acquire_route_fn(config, no_daemon: bool, bundle=None):
             logging.getLogger("tryaii").warning("daemon unavailable, routing in-process: %s", exc)
             state = None
         if state is not None:
-            return _daemon_route_fn(state, config, bundle), "daemon"
+            return _daemon_route_fn(state, config, bundle, allowed_models), "daemon"
 
-    return _inprocess_route_fn(config, bundle), "inprocess"
+    if allowed_models is None:
+        return _inprocess_route_fn(config, bundle), "inprocess"
+    return _inprocess_route_fn(config, bundle, allowed_models), "inprocess"
 
 
-def _inprocess_route_fn(config, bundle):
+def _inprocess_route_fn(config, bundle, allowed_models=None):
     from tryaii import Router
 
-    router = Router(config=config, bundle=bundle, catalog="starter")
+    # policy=None: the command already resolved its policy into allowed_models.
+    router = Router(config=config, bundle=bundle, catalog="starter", policy=None)
     return lambda prompt, priorities, top_k: router.route(
-        prompt, priorities=priorities, top_k=top_k)
+        prompt, priorities=priorities, top_k=top_k, allowed_models=allowed_models)
 
 
-def _daemon_route_fn(state, config, bundle):
+def _daemon_route_fn(state, config, bundle, allowed_models=None):
     """Route through the daemon; if it fails mid-request (died, restarted on
     another catalog by a concurrent CLI, bad response), route in-process on
     the same ``bundle`` from then on. Mirrors routeViaDaemonOrFallback in
@@ -722,13 +1027,16 @@ def _daemon_route_fn(state, config, bundle):
     def route_fn(prompt, priorities, top_k):
         if not fallback:
             try:
-                return daemon_mod.route(state, prompt, priorities, top_k)
+                if allowed_models is None:
+                    return daemon_mod.route(state, prompt, priorities, top_k)
+                return daemon_mod.route(state, prompt, priorities, top_k, allowed_models)
             except Exception as exc:  # noqa: BLE001 -- never let daemon issues break routing
                 # debug, not warning: the Node CLI falls back silently too
                 # (byte-identical stderr).
                 logging.getLogger("tryaii").debug(
                     "daemon request failed, routing in-process: %s", exc)
-                fallback.append(_inprocess_route_fn(config, bundle))
+                fallback.append(_inprocess_route_fn(config, bundle) if allowed_models is None
+                                else _inprocess_route_fn(config, bundle, allowed_models))
         return fallback[0](prompt, priorities, top_k)
 
     return route_fn
@@ -748,7 +1056,10 @@ def cmd_route(args):
     )
 
     bundle = _cli_catalog(nudge=True)
-    route_fn, _source = _acquire_route_fn(config, getattr(args, "no_daemon", False), bundle)
+    policy_result = _cli_policy(args, bundle)
+    allowed = policy_result.allowed if policy_result is not None else None
+    route_fn, _source = _acquire_route_fn(
+        config, getattr(args, "no_daemon", False), bundle, allowed)
     result = route_fn(args.prompt, priorities, args.top_k)
 
     # Provider/pricing for display come from the (cheap, torch-free) model
@@ -759,6 +1070,8 @@ def cmd_route(args):
     buf += f"Category: {result.classification.broad_category} > {result.classification.subcategory}\n"
     buf += f"Confidence: {result.classification.confidence:.3f}\n"
     buf += f"Classifier: {result.classification.classifier_used}\n"
+    if policy_result is not None:
+        buf += _policy_line(policy_result) + "\n"
     buf += f"\nTop {len(result.scores)} Recommendations:\n"
     buf += "-" * 70 + "\n"
 
@@ -1137,11 +1450,16 @@ def cmd_eval(args):
 
     config = TryaiiDreConfig()
     bundle = _cli_catalog(nudge=True)
+    policy_result = _cli_policy(args, bundle)
+    if policy_result is not None:
+        print(f"[eval] policy     : {policy_result.policy.summary()} "
+              f"({len(policy_result.allowed)} of {policy_result.total} models allowed)")
     budget_summary = None
     if args.max_price is not None:
         # Budget optimization drives the scoring engine directly, so it needs a
         # real in-process Router rather than the daemon's route() surface.
-        router = Router(config=config, bundle=bundle)
+        router = Router(config=config, bundle=bundle,
+                        policy=policy_result.policy if policy_result is not None else None)
         print("[eval] warming up router...")
         router.route("warmup", priorities=priorities, top_k=1)
         print(
@@ -1244,7 +1562,8 @@ def cmd_eval(args):
             )
     else:
         route_fn, _source = _acquire_route_fn(
-            config, getattr(args, "no_daemon", False), bundle)
+            config, getattr(args, "no_daemon", False), bundle,
+            policy_result.allowed if policy_result is not None else None)
         print("[eval] warming up router...")
         route_fn("warmup", priorities, 1)
         results = []
@@ -1270,6 +1589,12 @@ def cmd_eval(args):
     summary = _build_eval_summary(results, priorities)
     if budget_summary is not None:
         summary["budget"] = budget_summary
+    if policy_result is not None:
+        summary["policy"] = {
+            **policy_result.policy.to_dict(),
+            "allowedModels": len(policy_result.allowed),
+            "totalModels": policy_result.total,
+        }
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     dashboard_path.write_text(
         _render_eval_dashboard(summary, str(input_path)),
@@ -1340,19 +1665,31 @@ def cmd_setup(args):
 def cmd_models(args):
     """List available models."""
     from tryaii import ModelRegistry
+    from tryaii.policy import origin_label
 
-    registry = ModelRegistry.from_bundle(_cli_catalog(nudge=True))
+    bundle = _cli_catalog(nudge=True)
+    registry = ModelRegistry.from_bundle(bundle)
     models = registry.all_models
+    policy_result = _cli_policy(args, bundle)
+    if policy_result is not None:
+        allowed = set(policy_result.allowed)
+        models = [m for m in models if m.model_id in allowed]
+    origins = bundle.origins
 
     if args.provider:
         models = [m for m in models if m.provider.lower() == args.provider.lower()]
 
     if args.json:
         data = [m.to_dict() for m in models]
+        if origins is not None:
+            for entry in data:
+                entry["origin"] = origin_label(origins, entry["model_id"])
         print(json.dumps(data, indent=2))
         return
 
     buf = f"\nAvailable Models ({len(models)}):\n"
+    if policy_result is not None:
+        buf += _policy_line(policy_result) + "\n"
     buf += "-" * 70 + "\n"
 
     by_provider: dict[str, list] = {}
@@ -1366,9 +1703,52 @@ def cmd_models(args):
             price = ""
             if m.pricing:
                 price = f" | ${m.pricing.input_per_1k:.4f}/{m.pricing.output_per_1k:.4f}"
-            buf += f"    - {m.model_id} [{latency}]{price}\n"
+            origin = f" | origin: {origin_label(origins, m.model_id)}" if origins is not None else ""
+            buf += f"    - {m.model_id} [{latency}]{price}{origin}\n"
 
     _write_paced(buf)
+
+
+POLICY_SET_FLAGS = ("origin", "providers", "exclude_providers", "allow_countries",
+                    "deny_countries", "platform")
+
+
+def cmd_policy(args):
+    """Show, set or clear the saved data-save policy (shared/datasave/SPEC.md)."""
+    from tryaii import policy as pol
+
+    action = args.action or "show"
+    if action == "clear":
+        print("Policy cleared." if pol.clear_saved_policy() else "No policy saved.")
+        return
+    if action == "set":
+        values = {name: getattr(args, name, None) for name in POLICY_SET_FLAGS}
+        if not any(v for v in values.values()):
+            print("error: policy set needs at least one of --origin, --providers, "
+                  "--exclude-providers, --allow-countries, --deny-countries, --platform",
+                  file=sys.stderr)
+            sys.exit(2)
+        try:
+            saved = pol.load_saved_policy()
+        except pol.PolicyError:
+            saved = pol.ModelPolicy()  # a broken file is replaced by set
+        try:
+            policy = saved.merged(values)
+        except pol.PolicyError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            sys.exit(2)
+        pol.save_policy(policy)
+        print(f"Saved policy: {policy.summary()}")
+        return
+    try:
+        policy = pol.load_saved_policy()
+    except pol.PolicyError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if policy.active:
+        print(f"Saved policy: {policy.summary()}")
+    else:
+        print("No policy saved. All models are allowed.")
 
 
 def cmd_benchmarks(args):
@@ -2202,6 +2582,9 @@ def cli():
     route_parser.add_argument("--cost", type=int, default=3, help="Cost priority (1-5)")
     route_parser.add_argument("--speed", type=int, default=3, help="Speed priority (1-5)")
     route_parser.add_argument("--top-k", type=int, default=5, help="Number of recommendations")
+    route_parser.add_argument("--origin", help="Policy preset: no-prc-models, no-prc-hosting, us-eu")
+    route_parser.add_argument("--providers", help="Policy: only these companies (comma-separated)")
+    route_parser.add_argument("--platform", help="Policy: only models served by bedrock, azure or vertex")
     route_parser.add_argument(
         "--no-daemon", action="store_true", help="Route in-process; do not use or start a daemon"
     )
@@ -2215,6 +2598,9 @@ def cli():
     eval_parser.add_argument("--speed", type=int, default=3, help="Speed priority (1-5)")
     eval_parser.add_argument("--top-k", type=int, default=5, help="Number of recommendations")
     eval_parser.add_argument("--max-price", type=float, help="Global dataset budget in USD")
+    eval_parser.add_argument("--origin", help="Policy preset: no-prc-models, no-prc-hosting, us-eu")
+    eval_parser.add_argument("--providers", help="Policy: only these companies (comma-separated)")
+    eval_parser.add_argument("--platform", help="Policy: only models served by bedrock, azure or vertex")
     eval_parser.add_argument(
         "--output-tokens",
         type=int,
@@ -2278,6 +2664,19 @@ def cli():
     models_parser = subparsers.add_parser("models", help="List available models")
     models_parser.add_argument("--provider", help="Filter by provider")
     models_parser.add_argument("--json", action="store_true", help="Output as JSON")
+    models_parser.add_argument("--origin", help="Policy preset: no-prc-models, no-prc-hosting, us-eu")
+    models_parser.add_argument("--providers", help="Policy: only these companies (comma-separated)")
+    models_parser.add_argument("--platform", help="Policy: only models served by bedrock, azure or vertex")
+
+    # policy
+    policy_parser = subparsers.add_parser("policy", help="Show, set or clear the model policy")
+    policy_parser.add_argument("action", nargs="?", choices=("show", "set", "clear"))
+    policy_parser.add_argument("--origin", help="Policy preset: no-prc-models, no-prc-hosting, us-eu")
+    policy_parser.add_argument("--providers", help="Policy: only these companies (comma-separated)")
+    policy_parser.add_argument("--platform", help="Policy: only models served by bedrock, azure or vertex")
+    policy_parser.add_argument("--exclude-providers", dest="exclude_providers")
+    policy_parser.add_argument("--allow-countries", dest="allow_countries")
+    policy_parser.add_argument("--deny-countries", dest="deny_countries")
 
     # benchmarks
     bench_parser = subparsers.add_parser("benchmarks", help="List available benchmarks")
@@ -2366,6 +2765,16 @@ def cli():
             verb_help = DIAGNOSE_VERB_HELP.get(verbs[0]) if verbs else None
             _write_paced(verb_help or COMMAND_HELP["diagnose"])
             return
+        if command == "monitor":
+            verbs = [a for a in filtered[1:] if not a.startswith("-")]
+            verb_help = MONITOR_VERB_HELP.get(verbs[0]) if verbs else None
+            _write_paced(verb_help or COMMAND_HELP["monitor"])
+            return
+        if command == "apps":
+            verbs = [a for a in filtered[1:] if not a.startswith("-")]
+            verb_help = APPS_VERB_HELP.get(verbs[0]) if verbs else None
+            _write_paced(verb_help or COMMAND_HELP["apps"])
+            return
         # Unknown command + --help still gets the global overview.
         _write_paced(COMMAND_HELP.get(command, HELP))
         return
@@ -2374,6 +2783,18 @@ def cli():
         # Verb-peeling dispatch (like the `help <topic>` handling above);
         # diagnose is not registered with argparse at all.
         cmd_diagnose(filtered[1:])
+        return
+
+    if command == "monitor":
+        from tryaii.cli.monitor import cmd_monitor
+
+        cmd_monitor(filtered[1:])
+        return
+
+    if command == "apps":
+        from tryaii.cli.apps import cmd_apps
+
+        cmd_apps(filtered[1:])
         return
 
     args = parser.parse_args(filtered)
@@ -2385,6 +2806,7 @@ def cli():
         "designpartner": cmd_designpartner,
         "setup": cmd_setup,
         "models": cmd_models,
+        "policy": cmd_policy,
         "benchmarks": cmd_benchmarks,
         "regenerate": cmd_regenerate,
         "login": cmd_login,

@@ -10,7 +10,9 @@
  * Integrity rules (all enforced by `loadBundle` / `bundleFromTexts`):
  *  - every one of the five data files in `BUNDLE_DATA_FILES` must be present,
  *    and the sha256 of its exact UTF-8 bytes must equal `manifest.files[name]`
- *    -- the bytes are hashed as read, never re-serialized;
+ *    -- the bytes are hashed as read, never re-serialized; an optional file
+ *    (`OPTIONAL_DATA_FILES`, contract v1.2) follows the same rule whenever
+ *    the manifest lists it, and is absent otherwise;
  *  - `manifest.schema` must be an integer no greater than `SUPPORTED_SCHEMA`
  *    (a newer schema throws `BundleSchemaError`);
  *  - the benchmark name sets of benchmarks.json, normalization_ranges.json,
@@ -53,6 +55,54 @@ export const BUNDLE_DATA_FILES = [
 ] as const;
 
 export type BundleDataFile = (typeof BUNDLE_DATA_FILES)[number];
+
+/**
+ * Optional data files (contract v1.2): verified and parsed when the manifest
+ * lists them. `origins.json` = model origin / host data for policies
+ * (shared/datasave/SPEC.md); the full catalog carries it, the starter not.
+ */
+export const OPTIONAL_DATA_FILES = ['origins.json'] as const;
+
+export type OptionalDataFile = (typeof OPTIONAL_DATA_FILES)[number];
+
+/** `origins.json` (shared/datasave/SPEC.md section 1). */
+export interface OriginsJson {
+  schema?: number;
+  as_of?: string | null;
+  orgs: Record<string, OriginOrg>;
+  hosts: Record<string, OriginHost>;
+  models: Record<string, OriginModel>;
+  [key: string]: unknown;
+}
+
+export interface OriginOrg {
+  name?: string;
+  country?: string | null;
+  control_country?: string | null;
+  flags?: string[];
+  namespaces?: string[];
+  [key: string]: unknown;
+}
+
+export interface OriginHost {
+  name?: string;
+  org?: string | null;
+  headquarters?: string | null;
+  datacenters?: string[];
+  [key: string]: unknown;
+}
+
+export interface OriginModel {
+  developer?: string | null;
+  lineage?: string[];
+  known?: boolean;
+  kind?: string;
+  open_weights?: boolean | null;
+  license?: string | null;
+  hosts?: string[];
+  platforms?: Record<string, unknown>;
+  [key: string]: unknown;
+}
 
 export const BUNDLE_KINDS = ['starter', 'full'] as const;
 export type BundleKind = (typeof BUNDLE_KINDS)[number];
@@ -127,7 +177,7 @@ export interface BundleManifest {
   created_at?: string;
   counts?: { models: number; benchmarks: number };
   full_counts?: { models: number; benchmarks: number };
-  files: Record<BundleDataFile, string>;
+  files: Record<BundleDataFile, string> & Partial<Record<OptionalDataFile, string>>;
   signature?: string | null;
   key_id?: string | null;
   [key: string]: unknown;
@@ -186,6 +236,8 @@ export class CatalogBundle {
   readonly centroids: CentroidsJson & { metadata: CentroidsJson['metadata'] & { benchmark_fingerprint?: string } };
   readonly trainingQueries: TrainingQueriesJson;
   readonly directory: string | null;
+  /** `origins.json` when the bundle carries it (contract v1.2), else null. */
+  readonly origins: OriginsJson | null;
 
   constructor(parts: {
     manifest: BundleManifest;
@@ -195,6 +247,7 @@ export class CatalogBundle {
     centroids: CentroidsJson;
     trainingQueries: TrainingQueriesJson;
     directory?: string | null;
+    origins?: OriginsJson | null;
   }) {
     this.manifest = parts.manifest;
     this.models = parts.models;
@@ -203,6 +256,7 @@ export class CatalogBundle {
     this.centroids = parts.centroids;
     this.trainingQueries = parts.trainingQueries;
     this.directory = parts.directory ?? null;
+    this.origins = parts.origins ?? null;
   }
 
   get schema(): number {
@@ -315,7 +369,20 @@ function parseManifest(manifest: unknown): BundleManifest {
   if (missing.length > 0) {
     throw new BundleError(`manifest.json 'files' is missing: ${missing.join(', ')}`);
   }
+  const bad = OPTIONAL_DATA_FILES.filter((name) => name in files && typeof files[name] !== 'string');
+  if (bad.length > 0) {
+    throw new BundleError(`manifest.json 'files' has a non-string hash for: ${bad.join(', ')}`);
+  }
   return manifest as unknown as BundleManifest;
+}
+
+/**
+ * The data files this manifest requires: the five, plus each optional file
+ * it lists (in `OPTIONAL_DATA_FILES` order).
+ */
+export function listedDataFiles(manifest: { files?: Record<string, unknown> | null }): string[] {
+  const files = manifest.files ?? {};
+  return [...BUNDLE_DATA_FILES, ...OPTIONAL_DATA_FILES.filter((name) => name in files)];
 }
 
 function sortedDiff(a: Set<string>, b: Set<string>): string[] {
@@ -353,6 +420,15 @@ function checkConsistency(bundle: CatalogBundle): void {
   if (!Array.isArray(bundle.models.models)) {
     throw new BundleError("models.json has no 'models' array");
   }
+  if (bundle.origins !== null) {
+    const origins = bundle.origins as unknown;
+    if (
+      !isPlainObject(origins) ||
+      !(['orgs', 'hosts', 'models'] as const).every((key) => isPlainObject(origins[key]))
+    ) {
+      throw new BundleError("origins.json must have 'orgs', 'hosts' and 'models' objects");
+    }
+  }
 }
 
 /**
@@ -374,14 +450,14 @@ export function bundleFromTexts(
   const parsedManifest = parseManifest(manifest);
   if (opts.verifySignature) verifyManifestSignature(parsedManifest, opts.env);
   const parsed: Record<string, unknown> = {};
-  for (const name of BUNDLE_DATA_FILES) {
+  for (const name of listedDataFiles(parsedManifest)) {
     if (!(name in files)) throw new BundleIntegrityError(`catalog bundle is missing ${name}`);
     const raw = files[name] as unknown;
     if (typeof raw !== 'string' && !(raw instanceof Uint8Array)) {
       throw new BundleError(`${name} must be text or bytes, got ${raw === null ? 'null' : typeof raw}`);
     }
     const data = typeof raw === 'string' ? Buffer.from(raw, 'utf-8') : Buffer.from(raw);
-    if (sha256Hex(data) !== parsedManifest.files[name]) {
+    if (sha256Hex(data) !== (parsedManifest.files as Record<string, string>)[name]) {
       throw new BundleIntegrityError(`${name} does not match its manifest sha256`);
     }
     try {
@@ -398,6 +474,7 @@ export function bundleFromTexts(
     centroids: parsed['centroids.json'] as CentroidsJson,
     trainingQueries: parsed['training_queries.json'] as TrainingQueriesJson,
     directory,
+    origins: (parsed['origins.json'] as OriginsJson | undefined) ?? null,
   });
   try {
     checkConsistency(bundle);
@@ -437,7 +514,7 @@ export function loadBundle(directory: string, opts: BundleLoadOptions = {}): Cat
   parseManifest(manifest); // schema before touching the data files
   if (opts.verifySignature) verifyManifestSignature(manifest, opts.env);
   const files: Record<string, Uint8Array> = {};
-  for (const name of BUNDLE_DATA_FILES) {
+  for (const name of listedDataFiles(manifest as BundleManifest)) {
     const path = join(directory, name);
     if (!isFile(path)) {
       throw new BundleIntegrityError(`catalog bundle at ${directory} is missing ${name}`);

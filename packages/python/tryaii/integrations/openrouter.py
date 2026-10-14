@@ -183,6 +183,13 @@ class OpenRouterIntegration:
             timeout=120.0,
         )
 
+    def _provider_preferences(self, model_id: str) -> Optional[dict]:
+        """The ``provider`` object the router's data-save policy requires for
+        ``model_id`` (shared/datasave/SPEC.md section 4), or None. Raises
+        ``PolicyError`` when the policy excludes the model."""
+        prefs = getattr(getattr(self, "_router", None), "provider_preferences", None)
+        return prefs(model_id) if callable(prefs) else None
+
     def _resolve_model(self, model_id: str) -> str:
         """Convert TryAii model ID to OpenRouter slug."""
         return MODEL_ID_TO_OPENROUTER.get(model_id, model_id)
@@ -321,6 +328,7 @@ class OpenRouterIntegration:
             raise ValueError("routing returned no model for this prompt")
 
         openrouter_model = self._resolve_model(model_id)
+        provider_prefs = self._provider_preferences(model_id)
 
         # Build messages
         messages = []
@@ -341,6 +349,9 @@ class OpenRouterIntegration:
         # Only forward max_tokens when it is a positive, finite value.
         if max_tokens is not None and math.isfinite(max_tokens) and max_tokens > 0:
             payload["max_tokens"] = max_tokens
+        # Data-save policy: pin the OpenRouter hosts the policy allows.
+        if provider_prefs is not None:
+            payload["provider"] = provider_prefs
 
         response = self._request_with_retry("POST", "/chat/completions", json=payload)
         if response.status_code >= 400:
@@ -419,6 +430,7 @@ class OpenRouterIntegration:
             raise ValueError("routing returned no model for this prompt")
 
         openrouter_model = self._resolve_model(model_id)
+        provider_prefs = self._provider_preferences(model_id)
 
         logger.debug("OpenRouter stream started model=%s", openrouter_model)
 
@@ -440,6 +452,9 @@ class OpenRouterIntegration:
         # Only forward max_tokens when it is a positive, finite value.
         if max_tokens is not None and math.isfinite(max_tokens) and max_tokens > 0:
             payload["max_tokens"] = max_tokens
+        # Data-save policy: pin the OpenRouter hosts the policy allows.
+        if provider_prefs is not None:
+            payload["provider"] = provider_prefs
 
         import httpx
 

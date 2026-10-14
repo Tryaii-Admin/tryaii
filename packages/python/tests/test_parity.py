@@ -201,8 +201,11 @@ COMMAND_HELP_CONSTANTS = {
     "eval": "HELP_EVAL",
     "cachelint": "HELP_CACHELINT",
     "diagnose": "HELP_DIAGNOSE",
+    "monitor": "HELP_MONITOR",
+    "apps": "HELP_APPS",
     "designpartner": "HELP_DESIGNPARTNER",
     "models": "HELP_MODELS",
+    "policy": "HELP_POLICY",
     "benchmarks": "HELP_BENCHMARKS",
     "setup": "HELP_SETUP",
     "regenerate": "HELP_REGENERATE",
@@ -219,6 +222,22 @@ DIAGNOSE_VERB_HELP_CONSTANTS = {
     "plan": "HELP_DIAGNOSE_PLAN",
     "check": "HELP_DIAGNOSE_CHECK",
     "report": "HELP_DIAGNOSE_REPORT",
+}
+
+# monitor verb -> the constant that holds its help text in both CLIs.
+MONITOR_VERB_HELP_CONSTANTS = {
+    "status": "HELP_MONITOR_STATUS",
+    "set": "HELP_MONITOR_SET",
+    "apps": "HELP_MONITOR_APPS",
+    "events": "HELP_MONITOR_EVENTS",
+}
+
+# apps verb -> the constant that holds its help text in both CLIs.
+APPS_VERB_HELP_CONSTANTS = {
+    "create": "HELP_APPS_CREATE",
+    "list": "HELP_APPS_LIST",
+    "keys": "HELP_APPS_KEYS",
+    "check": "HELP_APPS_CHECK",
 }
 
 
@@ -276,6 +295,62 @@ def test_diagnose_verb_help_text_identical_across_sdks():
         "Diagnose verb help diverged between Node and Python for: "
         + ", ".join(diffs)
         + " -- keep the HELP_DIAGNOSE_<VERB> blocks identical across both CLIs"
+    )
+
+
+def test_monitor_verb_help_text_identical_across_sdks():
+    """Monitor verb help (`tryaii monitor <verb> --help`) must match too."""
+    if not NODE_CLI.exists():
+        pytest.skip("Node CLI source not present (python-only checkout)")
+
+    from tryaii.cli.main import MONITOR_VERB_HELP
+
+    assert set(MONITOR_VERB_HELP) == set(MONITOR_VERB_HELP_CONSTANTS), (
+        "Python MONITOR_VERB_HELP keys differ from the expected verb set: "
+        f"python={sorted(MONITOR_VERB_HELP)} "
+        f"expected={sorted(MONITOR_VERB_HELP_CONSTANTS)}"
+    )
+
+    source = NODE_CLI.read_text(encoding="utf-8")
+    diffs: list[str] = []
+    for verb, const_name in MONITOR_VERB_HELP_CONSTANTS.items():
+        node_text = _node_template_literal(source, const_name)
+        if node_text != MONITOR_VERB_HELP[verb]:
+            diffs.append(verb)
+
+    assert not diffs, (
+        "Monitor verb help diverged between Node and Python for: "
+        + ", ".join(diffs)
+        + " -- keep the HELP_MONITOR_<VERB> blocks identical across both CLIs"
+    )
+
+
+def test_apps_verb_help_text_identical_across_sdks():
+    """Apps verb help (`tryaii apps <verb> --help`) must match too."""
+    if not NODE_CLI.exists():
+        pytest.skip("Node CLI source not present (python-only checkout)")
+
+    from tryaii.cli.main import APPS_VERB_HELP
+
+    assert set(APPS_VERB_HELP) == set(APPS_VERB_HELP_CONSTANTS), (
+        "Python APPS_VERB_HELP keys differ from the expected verb set: "
+        f"python={sorted(APPS_VERB_HELP)} expected={sorted(APPS_VERB_HELP_CONSTANTS)}"
+    )
+
+    source = NODE_CLI.read_text(encoding="utf-8")
+    diffs: list[str] = []
+    for verb, const_name in APPS_VERB_HELP_CONSTANTS.items():
+        if f"const {const_name} = `" not in source:
+            diffs.append(f"{verb} (Node lacks {const_name})")
+            continue
+        node_text = _node_template_literal(source, const_name)
+        if node_text != APPS_VERB_HELP[verb]:
+            diffs.append(verb)
+
+    assert not diffs, (
+        "Apps verb help diverged between Node and Python for: "
+        + ", ".join(diffs)
+        + " -- keep the HELP_APPS_<VERB> blocks identical across both CLIs"
     )
 
 

@@ -1,0 +1,456 @@
+{
+  "suite": "resolve",
+  "target": "tryaii.monitor.winner.provider_class / resolve_anchor / allowed_models / native_model_id",
+  "cases": [
+    {
+      "name": "openai-default-base-url",
+      "description": "No base_url means api.openai.com; a bare native id resolves to the openai/ catalog id; allowed models = every openai/* id in catalog order.",
+      "input": {
+        "base_url": null,
+        "model": "gpt-5.5"
+      },
+      "expected": {
+        "provider": "openai",
+        "anchor": "openai/gpt-5.5",
+        "anchor_reachable": true,
+        "allowed_models": [
+          "openai/gpt-4o",
+          "openai/gpt-4o-mini",
+          "openai/o3",
+          "openai/o4-mini",
+          "openai/gpt-5",
+          "openai/gpt-5-mini",
+          "openai/gpt-5-nano",
+          "openai/gpt-4.1",
+          "openai/gpt-5.1",
+          "openai/gpt-5.2",
+          "openai/gpt-5.4",
+          "openai/gpt-5.4-mini",
+          "openai/gpt-5.4-nano",
+          "openai/gpt-5.5",
+          "openai/gpt-6-sol",
+          "openai/gpt-oss-120b"
+        ],
+        "native": "gpt-5.5",
+        "policy_allowed": null,
+        "route_allowed": [
+          "openai/gpt-4o",
+          "openai/gpt-4o-mini",
+          "openai/o3",
+          "openai/o4-mini",
+          "openai/gpt-5",
+          "openai/gpt-5-mini",
+          "openai/gpt-5-nano",
+          "openai/gpt-4.1",
+          "openai/gpt-5.1",
+          "openai/gpt-5.2",
+          "openai/gpt-5.4",
+          "openai/gpt-5.4-mini",
+          "openai/gpt-5.4-nano",
+          "openai/gpt-5.5",
+          "openai/gpt-6-sol",
+          "openai/gpt-oss-120b"
+        ],
+        "shadow_allowed": null
+      }
+    },
+    {
+      "name": "openai-explicit-base-url",
+      "description": "api.openai.com with a versioned path is the openai class.",
+      "input": {
+        "base_url": "https://api.openai.com/v1",
+        "model": "gpt-4o"
+      },
+      "expected": {
+        "provider": "openai",
+        "anchor": "openai/gpt-4o",
+        "anchor_reachable": true,
+        "allowed_models": [
+          "openai/gpt-4o",
+          "openai/gpt-4o-mini",
+          "openai/o3",
+          "openai/o4-mini",
+          "openai/gpt-5",
+          "openai/gpt-5-mini",
+          "openai/gpt-5-nano",
+          "openai/gpt-4.1",
+          "openai/gpt-5.1",
+          "openai/gpt-5.2",
+          "openai/gpt-5.4",
+          "openai/gpt-5.4-mini",
+          "openai/gpt-5.4-nano",
+          "openai/gpt-5.5",
+          "openai/gpt-6-sol",
+          "openai/gpt-oss-120b"
+        ],
+        "native": "gpt-4o",
+        "policy_allowed": null,
+        "route_allowed": [
+          "openai/gpt-4o",
+          "openai/gpt-4o-mini",
+          "openai/o3",
+          "openai/o4-mini",
+          "openai/gpt-5",
+          "openai/gpt-5-mini",
+          "openai/gpt-5-nano",
+          "openai/gpt-4.1",
+          "openai/gpt-5.1",
+          "openai/gpt-5.2",
+          "openai/gpt-5.4",
+          "openai/gpt-5.4-mini",
+          "openai/gpt-5.4-nano",
+          "openai/gpt-5.5",
+          "openai/gpt-6-sol",
+          "openai/gpt-oss-120b"
+        ],
+        "shadow_allowed": null
+      }
+    },
+    {
+      "name": "openrouter-reaches-everything",
+      "description": "openrouter.ai is unfiltered (allowed_models null); the native id of a slug is the slug.",
+      "input": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "model": "openai/gpt-5.5"
+      },
+      "expected": {
+        "provider": "openrouter",
+        "anchor": "openai/gpt-5.5",
+        "anchor_reachable": true,
+        "allowed_models": null,
+        "native": "openai/gpt-5.5",
+        "policy_allowed": null,
+        "route_allowed": null,
+        "shadow_allowed": null
+      }
+    },
+    {
+      "name": "azure-openai-is-other",
+      "description": "*.openai.azure.com is not *.openai.com: class other, only the anchor is allowed.",
+      "input": {
+        "base_url": "https://myco.openai.azure.com/openai/v1",
+        "model": "gpt-5.5"
+      },
+      "expected": {
+        "provider": "other",
+        "anchor": "openai/gpt-5.5",
+        "anchor_reachable": true,
+        "allowed_models": [
+          "openai/gpt-5.5"
+        ],
+        "native": "openai/gpt-5.5",
+        "policy_allowed": null,
+        "route_allowed": [
+          "openai/gpt-5.5"
+        ],
+        "shadow_allowed": null
+      }
+    },
+    {
+      "name": "local-server-unknown-model",
+      "description": "A local OpenAI-compatible server with a model outside the catalog: class other, no anchor, nothing allowed.",
+      "input": {
+        "base_url": "http://localhost:11434/v1",
+        "model": "llama3.2"
+      },
+      "expected": {
+        "provider": "other",
+        "anchor": null,
+        "anchor_reachable": false,
+        "allowed_models": [],
+        "native": null,
+        "policy_allowed": null,
+        "route_allowed": [],
+        "shadow_allowed": null
+      }
+    },
+    {
+      "name": "dated-anthropic-id-on-openai-client",
+      "description": "The anchor resolves through diagnose's alias rule even when the client class cannot reach it; the native id strips the namespace.",
+      "input": {
+        "base_url": null,
+        "model": "claude-sonnet-4-5-20250929"
+      },
+      "expected": {
+        "provider": "openai",
+        "anchor": "anthropic/claude-sonnet-4.5",
+        "anchor_reachable": false,
+        "allowed_models": [
+          "openai/gpt-4o",
+          "openai/gpt-4o-mini",
+          "openai/o3",
+          "openai/o4-mini",
+          "openai/gpt-5",
+          "openai/gpt-5-mini",
+          "openai/gpt-5-nano",
+          "openai/gpt-4.1",
+          "openai/gpt-5.1",
+          "openai/gpt-5.2",
+          "openai/gpt-5.4",
+          "openai/gpt-5.4-mini",
+          "openai/gpt-5.4-nano",
+          "openai/gpt-5.5",
+          "openai/gpt-6-sol",
+          "openai/gpt-oss-120b"
+        ],
+        "native": "claude-sonnet-4.5",
+        "policy_allowed": null,
+        "route_allowed": [
+          "openai/gpt-4o",
+          "openai/gpt-4o-mini",
+          "openai/o3",
+          "openai/o4-mini",
+          "openai/gpt-5",
+          "openai/gpt-5-mini",
+          "openai/gpt-5-nano",
+          "openai/gpt-4.1",
+          "openai/gpt-5.1",
+          "openai/gpt-5.2",
+          "openai/gpt-5.4",
+          "openai/gpt-5.4-mini",
+          "openai/gpt-5.4-nano",
+          "openai/gpt-5.5",
+          "openai/gpt-6-sol",
+          "openai/gpt-oss-120b"
+        ],
+        "shadow_allowed": null
+      }
+    },
+    {
+      "name": "host-without-scheme",
+      "description": "A bare host is read as https://host.",
+      "input": {
+        "base_url": "openrouter.ai",
+        "model": "x-ai/grok-4"
+      },
+      "expected": {
+        "provider": "openrouter",
+        "anchor": "x-ai/grok-4",
+        "anchor_reachable": true,
+        "allowed_models": null,
+        "native": "x-ai/grok-4",
+        "policy_allowed": null,
+        "route_allowed": null,
+        "shadow_allowed": null
+      }
+    },
+    {
+      "name": "no-model",
+      "description": "A missing model has no anchor; the openai class still lists its reachable ids.",
+      "input": {
+        "base_url": "https://api.openai.com/v1",
+        "model": null
+      },
+      "expected": {
+        "provider": "openai",
+        "anchor": null,
+        "anchor_reachable": false,
+        "allowed_models": [
+          "openai/gpt-4o",
+          "openai/gpt-4o-mini",
+          "openai/o3",
+          "openai/o4-mini",
+          "openai/gpt-5",
+          "openai/gpt-5-mini",
+          "openai/gpt-5-nano",
+          "openai/gpt-4.1",
+          "openai/gpt-5.1",
+          "openai/gpt-5.2",
+          "openai/gpt-5.4",
+          "openai/gpt-5.4-mini",
+          "openai/gpt-5.4-nano",
+          "openai/gpt-5.5",
+          "openai/gpt-6-sol",
+          "openai/gpt-oss-120b"
+        ],
+        "native": null,
+        "policy_allowed": null,
+        "route_allowed": [
+          "openai/gpt-4o",
+          "openai/gpt-4o-mini",
+          "openai/o3",
+          "openai/o4-mini",
+          "openai/gpt-5",
+          "openai/gpt-5-mini",
+          "openai/gpt-5-nano",
+          "openai/gpt-4.1",
+          "openai/gpt-5.1",
+          "openai/gpt-5.2",
+          "openai/gpt-5.4",
+          "openai/gpt-5.4-mini",
+          "openai/gpt-5.4-nano",
+          "openai/gpt-5.5",
+          "openai/gpt-6-sol",
+          "openai/gpt-oss-120b"
+        ],
+        "shadow_allowed": null
+      }
+    },
+    {
+      "name": "policy-openai-intersects-reachable",
+      "description": "SPEC §2.8: an openai client with a policy -- the in-path candidates are reachable ∩ policy (catalog order); the shadow candidates are the whole policy list.",
+      "input": {
+        "base_url": null,
+        "model": "gpt-5.5",
+        "policy_allowed": [
+          "anthropic/claude-haiku-4.5",
+          "openai/gpt-5.5",
+          "openai/gpt-5-mini"
+        ]
+      },
+      "expected": {
+        "provider": "openai",
+        "anchor": "openai/gpt-5.5",
+        "anchor_reachable": true,
+        "allowed_models": [
+          "openai/gpt-4o",
+          "openai/gpt-4o-mini",
+          "openai/o3",
+          "openai/o4-mini",
+          "openai/gpt-5",
+          "openai/gpt-5-mini",
+          "openai/gpt-5-nano",
+          "openai/gpt-4.1",
+          "openai/gpt-5.1",
+          "openai/gpt-5.2",
+          "openai/gpt-5.4",
+          "openai/gpt-5.4-mini",
+          "openai/gpt-5.4-nano",
+          "openai/gpt-5.5",
+          "openai/gpt-6-sol",
+          "openai/gpt-oss-120b"
+        ],
+        "native": "gpt-5.5",
+        "policy_allowed": [
+          "anthropic/claude-haiku-4.5",
+          "openai/gpt-5.5",
+          "openai/gpt-5-mini"
+        ],
+        "route_allowed": [
+          "openai/gpt-5-mini",
+          "openai/gpt-5.5"
+        ],
+        "shadow_allowed": [
+          "openai/gpt-5-mini",
+          "openai/gpt-5.5",
+          "anthropic/claude-haiku-4.5"
+        ]
+      }
+    },
+    {
+      "name": "policy-openrouter-is-the-policy",
+      "description": "SPEC §2.8: openrouter reaches everything, so both candidate lists are the policy's ids in catalog order.",
+      "input": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "model": "openai/gpt-5.5",
+        "policy_allowed": [
+          "openai/gpt-5-mini",
+          "anthropic/claude-haiku-4.5"
+        ]
+      },
+      "expected": {
+        "provider": "openrouter",
+        "anchor": "openai/gpt-5.5",
+        "anchor_reachable": true,
+        "allowed_models": null,
+        "native": "openai/gpt-5.5",
+        "policy_allowed": [
+          "openai/gpt-5-mini",
+          "anthropic/claude-haiku-4.5"
+        ],
+        "route_allowed": [
+          "openai/gpt-5-mini",
+          "anthropic/claude-haiku-4.5"
+        ],
+        "shadow_allowed": [
+          "openai/gpt-5-mini",
+          "anthropic/claude-haiku-4.5"
+        ]
+      }
+    },
+    {
+      "name": "policy-none-openrouter-unfiltered",
+      "description": "SPEC §2.8: no policy and an openrouter client -- both requests are unfiltered (null).",
+      "input": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "model": "openai/gpt-5.5",
+        "policy_allowed": null
+      },
+      "expected": {
+        "provider": "openrouter",
+        "anchor": "openai/gpt-5.5",
+        "anchor_reachable": true,
+        "allowed_models": null,
+        "native": "openai/gpt-5.5",
+        "policy_allowed": null,
+        "route_allowed": null,
+        "shadow_allowed": null
+      }
+    },
+    {
+      "name": "policy-fails-closed-without-origins",
+      "description": "SPEC §2.8: an active policy that cannot be evaluated (the starter bundle has no origins.json) allows nothing: both candidate lists are [].",
+      "input": {
+        "base_url": null,
+        "model": "gpt-5.5",
+        "policy": {
+          "origin": "no-prc-models"
+        }
+      },
+      "expected": {
+        "provider": "openai",
+        "anchor": "openai/gpt-5.5",
+        "anchor_reachable": true,
+        "allowed_models": [
+          "openai/gpt-4o",
+          "openai/gpt-4o-mini",
+          "openai/o3",
+          "openai/o4-mini",
+          "openai/gpt-5",
+          "openai/gpt-5-mini",
+          "openai/gpt-5-nano",
+          "openai/gpt-4.1",
+          "openai/gpt-5.1",
+          "openai/gpt-5.2",
+          "openai/gpt-5.4",
+          "openai/gpt-5.4-mini",
+          "openai/gpt-5.4-nano",
+          "openai/gpt-5.5",
+          "openai/gpt-6-sol",
+          "openai/gpt-oss-120b"
+        ],
+        "native": "gpt-5.5",
+        "policy_allowed": [],
+        "route_allowed": [],
+        "shadow_allowed": []
+      }
+    },
+    {
+      "name": "policy-other-excludes-anchor",
+      "description": "SPEC §2.8: an 'other' client can only send the anchor; a policy without it leaves no in-path candidate at all.",
+      "input": {
+        "base_url": "http://localhost:11434/v1",
+        "model": "gpt-5.5",
+        "policy_allowed": [
+          "openai/gpt-5-mini"
+        ]
+      },
+      "expected": {
+        "provider": "other",
+        "anchor": "openai/gpt-5.5",
+        "anchor_reachable": true,
+        "allowed_models": [
+          "openai/gpt-5.5"
+        ],
+        "native": "openai/gpt-5.5",
+        "policy_allowed": [
+          "openai/gpt-5-mini"
+        ],
+        "route_allowed": [],
+        "shadow_allowed": [
+          "openai/gpt-5-mini"
+        ]
+      }
+    }
+  ]
+}

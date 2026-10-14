@@ -25,11 +25,9 @@
 import { readFileSync, statSync } from 'node:fs';
 import * as acorn from 'acorn';
 
-export interface CallSite {
-  file: string;
-  line: number; // 1-based (V8)
-  col: number | null; // 1-based (V8); null when unknown
-}
+import type { CallSite } from '../callsite.js';
+
+export type { CallSite };
 
 export interface Segment {
   kind: 'text' | 'slot';

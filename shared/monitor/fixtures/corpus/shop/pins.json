@@ -1,0 +1,29 @@
+{
+  "schema": "tryaii.monitor.pins/1",
+  "processes": {
+    "checkout": {
+      "model": "openai/gpt-5.4",
+      "pinned_at": "2026-10-11T09:00:00.000Z",
+      "expires_at": "2026-10-12T09:00:00.000Z",
+      "basis": {
+        "window": "first_call",
+        "events": 1,
+        "counts": {
+          "openai/gpt-5.4": 1
+        }
+      }
+    },
+    "purchase item": {
+      "model": "openai/gpt-5-mini",
+      "pinned_at": "2026-10-10T06:00:00.000Z",
+      "expires_at": "2026-10-11T06:00:00.000Z",
+      "basis": {
+        "window": "7d",
+        "events": 6,
+        "counts": {
+          "openai/gpt-5-mini": 6
+        }
+      }
+    }
+  }
+}
