@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
 import time
 import uuid
@@ -30,6 +31,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from tryaii.monitor import api, store
+from tryaii.monitor.callsite import is_absolute_file
 from tryaii.monitor.events import EVENT_SCHEMA, format_ts
 
 logger = logging.getLogger("tryaii.monitor")
@@ -78,6 +80,17 @@ def find_forbidden(obj) -> Optional[str]:
             if found:
                 return found
     return None
+
+
+def strip_machine_path(obj: dict, raw: bytes) -> bytes:
+    """An absolute ``call_site.file`` never leaves the machine (TS-226): the
+    line is re-serialised with the base name only. Any other line is sent
+    verbatim (``raw``)."""
+    site = obj.get("call_site")
+    if not isinstance(site, dict) or not is_absolute_file(site.get("file")):
+        return raw
+    site["file"] = re.split(r"[\\/]", str(site["file"]))[-1]
+    return store.dumps_line(obj).rstrip("\n").encode("utf-8")
 
 
 def _valid_event_id(value) -> bool:
@@ -175,6 +188,7 @@ def next_batch(directory, cursor: dict, *, max_events: int = MAX_EVENTS,
                     batch.forbidden = batch.forbidden or bad
                 else:
                     keep = True
+                    raw = strip_machine_path(obj, raw)
             if keep:
                 cost = len(raw) + (1 if batch.lines else 0)
                 if batch.lines and (len(batch.lines) >= max_events or used + cost > budget):

@@ -539,3 +539,35 @@ describe('lock and wiring', () => {
     }
   });
 });
+
+describe('call-site paths never leave the machine (TS-226)', () => {
+  it('relativeFile keeps app-relative paths and drops everything outside the working directory', async () => {
+    const { relativeFile, isAbsoluteFile } = await import('../src/monitor/relpath.js');
+    const cwd = join(tmpdir(), 'app-root');
+    expect(relativeFile(join(cwd, 'src', 'app.js'), cwd)).toBe('src/app.js');
+    expect(relativeFile(join(cwd, 'main.js'), cwd)).toBe('main.js');
+    expect(relativeFile(join(tmpdir(), 'elsewhere', 'job.js'), cwd)).toBe('job.js');
+    expect(relativeFile('already/relative.js', cwd)).toBe('already/relative.js');
+    expect(relativeFile('win\\style.js', cwd)).toBe('win/style.js');
+    expect(relativeFile(null, cwd)).toBeNull();
+    expect(isAbsoluteFile('C:\\Users\\x\\a.js')).toBe(true);
+    expect(isAbsoluteFile('/home/x/a.js')).toBe(true);
+    expect(isAbsoluteFile('~/a.js')).toBe(true);
+    expect(isAbsoluteFile('src/a.js')).toBe(false);
+  });
+
+  it('an absolute call_site.file is uploaded as its base name; a relative one is sent verbatim', () => {
+    writeEvents([
+      event(1, { call_site: { file: 'C:\\Users\\koren\\Desktop\\app\\worker.js', line: 7, function: 'run' } }),
+      event(2, { call_site: { file: '/home/koren/app/worker.js', line: 7, function: 'run' } }),
+      event(3, { call_site: { file: 'app/worker.js', line: 7, function: 'run' } }),
+    ]);
+    const rawLines = readFileSync(join(dir, 'events-2026-10-12.jsonl'), 'utf-8').split('\n').filter(Boolean);
+    const batch = upload.nextBatch(dir, store.emptyUploadCursor());
+    expect(batch).not.toBeNull();
+    const sent = batch!.lines.map((b) => JSON.parse(b.toString('utf-8')) as { call_site: { file: string } });
+    expect(sent.map((s) => s.call_site.file)).toEqual(['worker.js', 'worker.js', 'app/worker.js']);
+    expect(batch!.lines[2].toString('utf-8')).toBe(rawLines[2]);
+    expect(Buffer.concat(batch!.lines).includes('koren')).toBe(false);
+  });
+});

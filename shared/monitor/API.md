@@ -1,5 +1,6 @@
-# monitor upload and dashboard API — contract v1.1 (2026-10-12)
+# monitor upload and dashboard API — contract v1.2 (2026-10-14)
 
+v1.2: `call_site.file` in an uploaded event is relative to the application's working directory (base name only when outside it); the SDK never uploads an absolute path (TS-226). Servers and dashboards must not assume a path on the developer's machine.
 v1.1: adds `est_cost_anchor_usd` to events and fixes the realised-savings formula.
 
 The single contract shared by the SDKs (`packages/python`, `packages/node`), the

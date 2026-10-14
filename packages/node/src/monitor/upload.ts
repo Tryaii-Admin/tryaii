@@ -31,6 +31,7 @@ import { performance } from 'node:perf_hooks';
 
 import * as api from './api.js';
 import { EVENT_SCHEMA, formatTs } from './events.js';
+import { isAbsoluteFile } from './relpath.js';
 import * as store from './store.js';
 
 export const UPLOAD_SCHEMA = 'tryaii.monitor.upload/1';
@@ -206,6 +207,18 @@ export interface NextBatchOptions {
  * a forbidden field. A trailing line without a newline is left for later. A
  * file shorter than its cursor (rewritten) restarts at 0.
  */
+/**
+ * An absolute `call_site.file` never leaves the machine (TS-226): the line is
+ * re-serialised with the base name only. Any other line is sent verbatim.
+ */
+export function stripMachinePath(obj: Record<string, unknown>, raw: Buffer): Buffer {
+  const site = obj.call_site;
+  if (!isRecord(site) || !isAbsoluteFile(site.file)) return raw;
+  const parts = String(site.file).split(/[\\/]/);
+  site.file = parts[parts.length - 1];
+  return Buffer.from(store.dumpsLine(obj).replace(/\n$/, ''), 'utf-8');
+}
+
 export function nextBatch(directory: string, cursor: store.UploadCursor, opts: NextBatchOptions = {}): Batch | null {
   const maxEvents = opts.maxEvents ?? MAX_EVENTS;
   const maxBytes = opts.maxBytes ?? MAX_BYTES;
@@ -246,13 +259,14 @@ export function nextBatch(directory: string, cursor: store.UploadCursor, opts: N
         if (bad) batch.forbidden = batch.forbidden || bad;
         else keep = true;
       }
+      const line = keep ? stripMachinePath(obj as Record<string, unknown>, raw) : raw;
       if (keep) {
-        const cost = raw.length + (batch.lines.length ? 1 : 0);
+        const cost = line.length + (batch.lines.length ? 1 : 0);
         if (batch.lines.length && (batch.lines.length >= maxEvents || used + cost > budget)) break;
         if (!batch.lines.length && cost > budget) {
           batch.skipped += 1; // one line larger than a whole batch
         } else {
-          batch.lines.push(Buffer.from(raw));
+          batch.lines.push(Buffer.from(line));
           used += cost;
         }
       } else {

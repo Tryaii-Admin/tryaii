@@ -175,8 +175,8 @@ state: `source: local | remote etag ... fetched ...` and `upload: off | ok
 ### What is uploaded
 
 Each uploaded event is the local event line (`shared/monitor/SPEC.md`
-§3.1): `event_id`, timestamp, app, sub-process, call site (file name, line,
-function), provider class, the model requested / resolved / used, mode, the
+§3.1): `event_id`, timestamp, app, sub-process, call site (file relative to the working directory, never an
+absolute path, line, function), provider class, the model requested / resolved / used, mode, the
 shadow-routing winner and whether it was reachable, route status, the
 prompt's classification (category, subcategory, confidence), the taxonomy
 version, token counts, the estimated costs (at the model used, at the

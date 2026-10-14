@@ -30,6 +30,7 @@ import { basename, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
 import { captureCallSite } from '../callsite.js';
+import { relativeFile } from './relpath.js';
 import { envFromOs, resolveApp, resolveMode, resolveProcess } from './config.js';
 import { currentProcess } from './context.js';
 import {
@@ -270,7 +271,7 @@ export class Monitor {
     try {
       const site = captureCallSite();
       const callSite: CallSiteRecord | null = site
-        ? { file: site.file, line: site.line, function: site.function ?? null }
+        ? { file: relativeFile(site.file) ?? site.file, line: site.line, function: site.function ?? null }
         : null;
       const proc = resolveProcess({
         perCall: perCallProcess,

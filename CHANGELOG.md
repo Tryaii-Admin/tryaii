@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.1 (2026-10-14)
+
+- **Privacy: the call site never names your machine** (TS-226, TS-225):
+  `call_site.file` is now recorded relative to the application's working
+  directory with `/` separators (base name only for a file outside it), and
+  the uploader replaces any absolute path left in an older record with the
+  base name before sending. Before, the full local path (including the OS
+  user name) was uploaded and shown on the dashboard. Contract
+  `shared/monitor/API.md` v1.2.
+
 ## 0.7.0 (2026-10-14)
 
 ### Highlights
