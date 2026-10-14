@@ -370,7 +370,12 @@ unknown and tolerate missing keys, so slice-1 lines stay readable):
   `est_cost_winner_usd`.
 
 - `call_site` is `null` when no user-code frame was found; `function` may be
-  `null`.
+  `null`. `call_site.file` is the path **relative to the application's
+  working directory** at the time of the call, with `/` separators; a file
+  outside that directory (or on another drive) is its base name only. An
+  absolute path names the developer's machine, not the app, and never leaves
+  it: the uploader replaces an absolute `call_site.file` (drive letter, root
+  slash or `~`) with the base name before the batch is built (TS-226).
 - `provider` ∈ `openai|openrouter|other` (§2.2).
 - `model_requested` = the id as written in the call; `model_resolved` = the
   anchor catalog id or `null`; `model_used` = the native id actually sent.

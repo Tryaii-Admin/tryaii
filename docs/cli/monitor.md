@@ -81,7 +81,7 @@ Everything lives under `~/.tryaii/monitor/<app>/` (or `$TRYAII_DRE_DATA_DIR/moni
 
 | File | Content |
 |---|---|
-| `events-YYYY-MM-DD.jsonl` | One line per call: app, sub-process, call site (file, line, function), provider class, model requested / resolved / used, mode, the shadow-routing winner and whether this client could have sent it, route status, classification, token usage, estimated cost at the model used and at the winner, latency, stream flag, error class, and a hash of the routing text. **No prompt or response text.** |
+| `events-YYYY-MM-DD.jsonl` | One line per call: app, sub-process, call site (file relative to the working directory, line, function), provider class, model requested / resolved / used, mode, the shadow-routing winner and whether this client could have sent it, route status, classification, token usage, estimated cost at the model used and at the winner, latency, stream flag, error class, and a hash of the routing text. **No prompt or response text.** |
 | `vectors-YYYY-MM-DD.jsonl` | The prompt's embedding vector (the one the router computed), keyed by the same hash, one line per distinct prompt per day. `TRYAII_MONITOR_VECTORS=0` turns this off. |
 | `pins.json` | The pinned model per sub-process in `stable` mode, with its expiry and the counts it was chosen from. |
 | `config.json` | The mode per sub-process (and the model of a `managed` one), written by `tryaii monitor set`. |

@@ -368,3 +368,24 @@ def test_status_source_and_upload_blocks():
                                  "last_error": None}
     assert upload_info({"last_ok": "t", "last_error": None}, 7)["state"] == "ok"
     assert upload_info({"last_ok": "t", "last_error": "http 503"}, 7)["state"] == "error"
+
+
+def test_call_site_file_is_relative_to_the_working_directory(tmp_path):
+    """TS-226: the record names the file inside the app, never the machine."""
+    import os
+
+    from tryaii.monitor import callsite
+
+    cwd = str(tmp_path)
+    inside = os.path.join(cwd, "src", "app.py")
+    assert callsite.relative_file(inside, cwd) == "src/app.py"
+    assert callsite.relative_file(os.path.join(cwd, "main.py"), cwd) == "main.py"
+    outside = os.path.join(os.path.dirname(cwd), "elsewhere", "job.py")
+    assert callsite.relative_file(outside, cwd) == "job.py"
+    assert callsite.relative_file("already/relative.py", cwd) == "already/relative.py"
+    assert callsite.relative_file("win\\style.py", cwd) == "win/style.py"
+    assert callsite.relative_file("~/secret/app.py", cwd) == "app.py"
+    assert callsite.relative_file(None, cwd) is None
+    assert callsite.is_absolute_file("C:\\Users\\x\\a.py")
+    assert callsite.is_absolute_file("/home/x/a.py")
+    assert not callsite.is_absolute_file("src/a.py")

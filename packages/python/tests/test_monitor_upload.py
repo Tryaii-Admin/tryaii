@@ -430,3 +430,28 @@ def test_drain_without_a_thread_is_a_no_op(tmp_path):
     up, opener, _ = make(tmp_path, {"/v1/apps/keys/validate": [(200, VALID)]})
     up.drain(0.1)
     assert opener.calls == []
+
+
+def test_absolute_call_site_path_never_leaves_the_machine(tmp_path):
+    """TS-226: a line with an absolute call_site.file is sent with the base
+    name only; a line with a relative path is sent byte for byte."""
+    ts = "2026-10-12T08:00:00.000Z"
+    common = dict(ts=ts, app="shop", process="p", provider="openai", model_requested="gpt-5.5",
+                  model_resolved="openai/gpt-5.5", model_used="gpt-5.5", mode="off",
+                  winner=None, winner_reachable=False, route_status="unavailable",
+                  classification=None, usage=None, est_cost_usd=None, est_cost_winner_usd=None,
+                  latency_ms=10, stream=False, error=None, prompt_hash="a" * 64, vector=False)
+    windows = build_event(call_site={"file": "C:\\Users\\koren\\Desktop\\app\\worker.py", "line": 7,
+                                     "function": "run"}, **common)
+    posix = build_event(call_site={"file": "/home/koren/app/worker.py", "line": 7,
+                                   "function": "run"}, **common)
+    clean = build_event(call_site={"file": "app/worker.py", "line": 7, "function": "run"}, **common)
+    for e in (windows, posix, clean):
+        store.append_event(tmp_path, e)
+    data = (tmp_path / "events-2026-10-12.jsonl").read_bytes()
+    raw_lines = [ln for ln in data.splitlines() if ln]
+    batch = upload.next_batch(tmp_path, store.empty_upload_cursor())
+    sent = [json.loads(ln) for ln in batch.lines]
+    assert [s["call_site"]["file"] for s in sent] == ["worker.py", "worker.py", "app/worker.py"]
+    assert batch.lines[2] == raw_lines[2]            # untouched line: verbatim bytes
+    assert b"koren" not in b"".join(batch.lines)
