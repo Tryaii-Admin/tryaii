@@ -1,9 +1,26 @@
 name: Version check
 
+# The four version spots (RELEASING.md) must agree; release.yml re-checks them
+# against the tag, so this is the early warning on the PR that bumps them.
+# Runs only when a PR touches a version spot or the checker: a PR that changes
+# none of these files cannot make them disagree. Same file in tryaii-dev and
+# the public release repo.
+
 on:
-  push:
-    branches: [main, dev]
   pull_request:
+    branches: [main]
+    paths:
+      - "packages/node/package.json"
+      - "packages/node/package-lock.json"
+      - "packages/python/pyproject.toml"
+      - "packages/python/tryaii/__init__.py"
+      - "scripts/bump-version.py"
+      - ".github/workflows/version-check.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
