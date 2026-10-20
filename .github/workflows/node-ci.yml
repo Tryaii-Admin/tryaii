@@ -1,14 +1,37 @@
 name: Node CI
 
+# Production (public release) repo: the FULL check (Node 18/20/22, full suite, publish-check) runs on every
+# pull request into main and on manual runs, and on nothing else: no push
+# runs on any branch (main only changes through reviewed PRs, and a release
+# tag is verified by release.yml itself). A newer push to the same PR
+# cancels the running check.
+#
+# tryaii-dev carries a mode-aware copy of this file (light there, full here,
+# decided by github.repository), so a release that copies the dev tree
+# across keeps this repo on the full matrix.
+
 on:
-  push:
-    paths:
-      - "packages/node/**"
-      - "shared/**"
   pull_request:
+    branches: [main]
     paths:
       - "packages/node/**"
       - "shared/**"
+      - ".github/workflows/node-ci.yml"
+      # Prose-only changes run nothing...
+      - "!**/*.md"
+      # ...except the Markdown that tests read.
+      - "shared/*/skill/**"
+      - "shared/*/fixtures/**"
+      - "docs/auth/CONTRACT-*.md"
+      - "docs/catalog/CONTRACT-*.md"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   test:
