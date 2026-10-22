@@ -1,0 +1,17 @@
+{
+  "name": "tryaii-minilm-int8",
+  "version": "1.0.0",
+  "description": "The embedding model of the tryaii SDK: all-MiniLM-L6-v2 as an int8 ONNX file (run with onnxruntime-node).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": { "types": "./index.d.ts", "default": "./index.js" },
+    "./model.onnx": "./model.onnx",
+    "./package.json": "./package.json"
+  },
+  "files": ["index.js", "index.d.ts", "model.onnx", "README.md"],
+  "repository": { "type": "git", "url": "git+https://github.com/Tryaii-Admin/tryaii.git", "directory": "packages/node-model" },
+  "homepage": "https://github.com/Tryaii-Admin/tryaii"
+}

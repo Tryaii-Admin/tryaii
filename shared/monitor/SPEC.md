@@ -8,6 +8,19 @@ policy-aware reachability (§2.8, Jira TS-170); `remote.json` (§3.3) and
 §5.2). The wire contract with the API server and the website is
 `shared/monitor/API.md` (v1.1); this SPEC is the SDK side of it.
 
+API.md v1.4 (2026-10-19) adds two optional event fields, `usage.cached_tokens`
+and `cache` (the runtime cachelint outcome and a redacted report), §3.1.
+
+v2.2 (2026-10-20, Jira TS-228, API.md v1.5) adds the write side of
+prompt-cache usage to the event, on top of v1.4's `usage.cached_tokens`:
+`usage.cache_write_tokens`, `usage.cache_writes[].ttl` and the top-level
+`cache_ttl_policy` (§3.1b), the `normalize_cache_usage` helper and its
+`cache_usage` fixture suite, the status `cached_tokens` /
+`cache_write_tokens` sums (§2.7) and the optional cache segments of the
+human `events` line (§5.5). The wrappers start filling the write fields in
+TS-229; the cost estimate learns about them in TS-230; the server stores
+them in TS-231.
+
 This file freezes the behavior of `tryaii monitor` and the `tryaii.monitor`
 wrapper across both SDKs (`packages/python/tryaii/monitor` — the REFERENCE
 implementation — and `packages/node/src/monitor`). Any behavior change is a
@@ -224,10 +237,12 @@ now` (`since` ∈ `24h|7d|30d`):
  "processes": [{"process", "mode", "mode_source", "managed_model",
                 "pinned": {"model", "expires_at"}|null,
                 "calls", "errors", "prompt_tokens", "completion_tokens", "total_tokens",
+                "cached_tokens", "cache_write_tokens",
                 "est_cost_usd", "est_cost_winner_usd", "savings_usd",
                 "swapped_calls", "est_cost_anchor_usd", "realised_savings_usd",
                 "top_winner": {"model", "share"}|null, "files": [...]}],
- "totals": {"calls", "errors", "est_cost_usd", "est_cost_winner_usd", "savings_usd",
+ "totals": {"calls", "errors", "cached_tokens", "cache_write_tokens",
+            "est_cost_usd", "est_cost_winner_usd", "savings_usd",
             "swapped_calls", "est_cost_anchor_usd", "realised_savings_usd"}}
 ```
 
@@ -251,7 +266,13 @@ now` (`since` ∈ `24h|7d|30d`):
   set carries `est_cost_anchor_usd` (slice-1 records).
 - `pinned` only while the pin is valid at `now`.
 - `errors` = events with a non-null `error`. Token totals sum the numeric
-  usage fields.
+  usage fields (`prompt_tokens`, `completion_tokens`, `total_tokens`; a
+  missing or null field counts 0).
+- `cached_tokens` / `cache_write_tokens` (v2.2) sum the numeric
+  `usage.cached_tokens` / `usage.cache_write_tokens` of the set and are
+  `null` when no event in the set carries that field (pre-v2.2 records, or a
+  provider that does not report it) — null, not 0, keeps "unknown" apart
+  from "nothing cached". Same rule for `totals`.
 - `est_cost_usd` sums every event's `est_cost_usd`; `est_cost_winner_usd`
   and `savings_usd` (= Σ est_cost − Σ est_cost_winner) only over events that
   carry **both** estimates, and are `null` when none do (same rule for
@@ -345,7 +366,9 @@ daemon state).
  "model_used":"gpt-5.5","mode":"stable","winner":"openai/gpt-5-mini","winner_reachable":true,
  "route_status":"ok","classification":{"category":"coding","subcategory":"debugging","confidence":0.81},
  "taxonomy_version":null,
- "usage":{"prompt_tokens":812,"completion_tokens":140,"total_tokens":952},
+ "usage":{"prompt_tokens":812,"completion_tokens":140,"total_tokens":952,
+          "cached_tokens":512,"cache_write_tokens":null,"cache_writes":null},
+ "cache_ttl_policy":null,
  "est_cost_usd":0.004213,"est_cost_winner_usd":0.000731,"est_cost_anchor_usd":0.004213,
  "latency_ms":1432,"stream":false,"error":null,"prompt_hash":"<sha256>","vector":true}
 ```
@@ -387,7 +410,12 @@ unknown and tolerate missing keys, so slice-1 lines stay readable):
 - `classification` = `{"category", "subcategory", "confidence"}` from the
   daemon (`broadCategory` → `category`), or `null`.
 - `usage` = the provider's token counts (`null` fields when absent; `null`
-  when the provider sent none, e.g. a stream without `include_usage`).
+  when the provider sent none, e.g. a stream without `include_usage`), in
+  the key order `prompt_tokens`, `completion_tokens`, `total_tokens`,
+  `cached_tokens`, `cache_write_tokens`, `cache_writes` (`cached_tokens`
+  since API v1.4, the last two since v2.2, §3.1b). A writer always emits all six keys; a reader
+  treats a missing key as `null`.
+- `cache_ttl_policy` (v2.2, §3.1b) — right after `usage`.
 - `est_cost_usd` = `estimate_generation_cost(model_used)` and
   `est_cost_winner_usd` the same usage priced at the winner; `null` for
   unknown/unpriced models or missing usage.
@@ -395,6 +423,133 @@ unknown and tolerate missing keys, so slice-1 lines stay readable):
   or `null`. Never message text.
 - `prompt_hash` per §2.1; `vector` = whether a vectors line was written for
   this call (false when deduplicated, disabled, or no embedding).
+
+v1.4 fields (API.md §3.2.1 is normative for shape, limits and redaction):
+
+- `usage.cached_tokens` — the provider's cached prompt tokens for the call
+  (`usage.prompt_tokens_details.cached_tokens`, or `cache_read_input_tokens` in
+  Anthropic-shaped usage); `null` when the provider reported nothing. Key order
+  inside `usage`: `prompt_tokens`, `completion_tokens`, `total_tokens`,
+  `cached_tokens`. Recorded whether or not cachelint is on; a `usage` object
+  from an older SDK simply lacks the key.
+- `cache` — only when the call ran the runtime cache lint
+  (`wrap(client, cachelint=True)`): `{"outcome": "hit"|"partial"|"miss"|null,
+  "report": CacheReport|null}`, the **last key** of the line (after `vector`).
+  Absent when cachelint is off. `outcome` is the cachelint pair prediction from
+  the previous linted call of the same process in this SDK process (null for the
+  first, and for `UNKNOWN` / `AT_RISK`). `report` is attached on the first linted
+  call of a process and then when it changed and 60 s have passed since the last
+  one attached for that process; the full analysis behind it runs at most once per
+  60 s per process (and only when the prompt changed), whether or not the report
+  changes, while the cheap `outcome` prediction runs on every linted call. The
+  linted prompt is the request's `messages` plus its tool schemas (`tools`, then
+  legacy `functions`) as the engine's `tools` input. Finding excerpts are **masked
+  at record time** (matched span only, per code point: ASCII digit → `0`;
+  whitespace → space; printable ASCII punctuation kept; every other code point,
+  including non-ASCII letters, digits, combining marks and emoji → `x`; ≤ 40 code
+  points, `…` when cut; API.md §3.2.1 lists the exact sets): the local line never
+  holds prompt text, so the uploader sends it unchanged (§9.4). Report sections
+  follow API.md §3.2.1's section mapping: a `system` or `developer` message
+  (`messages[0]:system`, `messages[2]:developer`) counts as `system` (its findings
+  and its tokens, in `system_tokens`); `tools` as `tools`; every other message as
+  `messages`.
+
+### §3.1b Prompt-cache usage (v2.2, TS-228; API.md v1.5)
+
+Four optional fields record what the provider's prompt cache did for the
+call, so the dashboard can show per developer how much of the prompt volume
+was served from cache and until when a cache is still hot. The read count,
+`usage.cached_tokens`, is the v1.4 field above; v2.2 adds the write side.
+The schema id stays `tryaii.monitor.event/1`: readers tolerate missing
+keys, every older line stays valid, and the `cache` block (v1.4, the lint
+outcome and report) is untouched and stays the last key.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `usage.cached_tokens` | int \| null | input tokens the provider **read** from its prompt cache for this call — always the read count, never a write count |
+| `usage.cache_write_tokens` | int \| null | input tokens the provider **wrote** to its cache on this call, in total |
+| `usage.cache_writes` | list \| null | the write broken down by lifetime: `[{"tokens": int, "ttl": <ttl>}, ...]`, in the provider's order; `null` when the provider gives no breakdown (then `cache_write_tokens` holds the total) |
+| `cache_ttl_policy` (top level) | `<ttl>` \| null | the cache lifetime the **request** asked for (e.g. Anthropic `cache_control.ttl`, OpenAI `prompt_cache_retention`, Bedrock `cachePoint.ttl`), `null` when it asked for none |
+
+`<ttl>` ∈ `"5m" | "1h" | "30m" | "24h" | "explicit"`. The first four are
+provider-promised lifetimes measured from the write (Claude 5 m and 1 h,
+GPT-5.6+ 30 m minimum, OpenAI extended retention 24 h); `"explicit"` is a
+cache the developer created and manages (Gemini `cachedContents`), whose
+expiry is known to the developer and not to the call.
+
+**Normalisation rule** (applied by `normalize_cache_usage`, below, and by
+`build_event`, which re-emits whatever it is handed in contract order):
+
+1. `cached_tokens` is always the **read** count. A provider's
+   "cache hit" / "cached" field maps here; nothing else does.
+2. `prompt_tokens` is recorded **unchanged**, as the provider reported it.
+   Whether it already includes the cached tokens is a per-provider
+   convention (table below) that TS-230's cost estimate applies; the event
+   never re-derives one from the other.
+3. A provider that reports writes only in aggregate →
+   `cache_write_tokens` = that total, `cache_writes` = `null`. A provider
+   that reports a breakdown → `cache_writes` = the breakdown (entries with
+   zero tokens dropped, so an empty breakdown is `[]`, not `null`), and
+   `cache_write_tokens` = its aggregate field when it has one, else the sum
+   of the entries.
+4. A field the provider does not report is `null`, **not 0**. A field the
+   provider reports as 0 is `0` (below the provider's minimum prompt size
+   caching silently does nothing and the fields come back 0 — that is a
+   real observation).
+5. Booleans are never token counts; numbers are truncated to integers;
+   negative or non-numeric values count as absent.
+6. `cache_writes[].ttl` is lower-cased and must be one of `<ttl>`; an entry
+   with an unknown ttl is dropped. `cache_ttl_policy` outside `<ttl>` is
+   recorded as `null`.
+
+**Provider field map** — `normalize_cache_usage(provider, raw_usage)` →
+`{"cached_tokens", "cache_write_tokens", "cache_writes"}` (that key
+order; every key present). `provider` is one of the ids below; an unknown
+id answers all `null`. `raw_usage` is the provider's usage object as a dict
+(an object with attributes is read the same way); Gemini may pass either
+the response or its `usageMetadata`. The ids are the *API shapes*, not the
+event's `provider` class (§2.2): an Azure or OpenRouter client has class
+`other` / `openrouter` but the `openai` **shape**.
+
+| `provider` id | Read (→ `cached_tokens`) | Write (→ `cache_write_tokens`) | Breakdown (→ `cache_writes`) | `prompt_tokens` convention |
+|---|---|---|---|---|
+| `openai` (Chat Completions; also Azure OpenAI and any OpenAI-compatible host) | `prompt_tokens_details.cached_tokens` | `prompt_tokens_details.cache_write_tokens`, else top-level `cache_write_tokens` (GPT-5.6+; absent → null) | null | includes cached tokens |
+| `openai_responses` (Responses API) | `input_tokens_details.cached_tokens` | `input_tokens_details.cache_write_tokens`, else top-level `cache_write_tokens` | null | `input_tokens` includes cached tokens |
+| `openrouter` | `prompt_tokens_details.cached_tokens`, else top-level `cached_tokens` | `prompt_tokens_details.cache_write_tokens`, else top-level `cache_write_tokens` | null | includes cached tokens; `cache_discount` (money) is not recorded |
+| `azure` | same as `openai` | same as `openai` (no write field before GPT-5.6) | null | includes cached tokens |
+| `anthropic` (Messages API) | `cache_read_input_tokens` | `cache_creation_input_tokens` | `cache_creation.ephemeral_5m_input_tokens` → `"5m"`, `cache_creation.ephemeral_1h_input_tokens` → `"1h"` (that order); no `cache_creation` object → null | `input_tokens` **excludes** cached and written tokens |
+| `bedrock` (Converse) | `cacheReadInputTokens` | `cacheWriteInputTokens` | `cacheDetails[]` → `{"tokens": inputTokens, "ttl": ttl}` in the given order | `inputTokens` **excludes** cached tokens |
+| `gemini` (generateContent) | `usageMetadata.cachedContentTokenCount` (also `cached_content_token_count`) | null (explicit caches are written by `cachedContents.create`, outside the call) | null | `promptTokenCount` includes cached tokens |
+
+TS-229 maps `prompt_tokens` / `completion_tokens` / `total_tokens` of the
+non-OpenAI shapes in the wrappers; this helper only covers the cache
+columns. The `cache_usage` fixture suite freezes the helper's output per
+provider on representative raw usage objects (every row above, plus the
+absent / zero / malformed cases).
+
+**How the dashboard will use the lifetimes** (no SDK implementation; TS-231
+stores, the website renders): a cache write with an exact lifetime is hot
+until `event.ts + lifetime` (`5m`, `1h`, `30m`, `24h`), so the per-developer
+hot-cache bar is the union, over recent events, of the intervals `[ts, ts +
+ttl]` of each `cache_writes` entry, weighted by its `tokens`; a read on a
+later call (`cached_tokens > 0`) shows that the cache paid off but
+does not extend the bar (only providers that document refresh-on-read may
+be modelled so later, per provider). Writes with `"explicit"` lifetime and
+providers with best-effort caches (no `cache_writes`) draw nothing in the
+bar: only provider-promised lifetimes are shown. `cache_ttl_policy` tells
+which lifetime the developer asked for, so the bar can flag a request that
+asked for `1h` and was answered with a `5m` write.
+
+### §3.1a Embedding model state (`<data_dir>/embedding-model.json`)
+
+Python since TS-252, Node since TS-253. Written by the transport's warm-up when
+the embedding model file is not available (no daemon is started; calls are
+recorded as `unavailable`), deleted when it is found again:
+`{"model", "reason", "since" (ISO Z, first seen), "last_warned" (local
+YYYY-MM-DD)}`. The warning is logged at most once per machine per day for
+the same reason. While the file exists, `tryaii monitor status` (text, not
+`--json`) prints one last line after every app block: `classification: off
+since <since> (<reason>)`. The fixtures never create it.
 
 ### §3.2 Vector line (`tryaii.monitor.vector/1`), key order
 
@@ -442,7 +597,7 @@ when `TRYAII_API_KEY` is set and `TRYAII_MONITOR_REMOTE` is not `"0"`:
 
 - runs on its own daemon thread (not the routing worker, so a slow upload
   never delays recording), started by the transport only when
-  `TRYAII_API_KEY` is set and `TRYAII_MONITOR_UPLOAD` is not `"0"`; no key →
+  `TRYAII_API_KEY` is set and no opt-out is set (§9.1); no key →
   no upload, silently; local recording is unaffected either way;
 - first validates the key once per process (`GET /v1/apps/keys/validate`):
   `200` → cached; `401` → upload (and remote) off for the process, one
@@ -465,7 +620,7 @@ when `TRYAII_API_KEY` is set and `TRYAII_MONITOR_REMOTE` is not `"0"`:
 - caps a batch at **500 events** and a **1 MiB** body; the body is the
   envelope `{"schema":"tryaii.monitor.upload/1","batch_id":"<uuid4>",
   "sdk":{"lang":"python"|"node","version":"<sdk version>"},
-  "notice_version":"2026-10","events":[` + the stored lines **verbatim**,
+  "notice_version":"2026-10-18","events":[` + the outgoing lines (§9.4),
   comma-joined + `]}` (minified, that key order; `notice_version` =
   the constant `NOTICE_VERSION`);
 - POSTs `/v1/monitor/events` with `Authorization: Bearer <key>`, at most
@@ -493,9 +648,10 @@ application's calls.
 per suite, machine-generated `expected` blocks from the Python reference via
 `scripts/gen-monitor-fixtures.py` (`--suite`, `--check`). Suites:
 `extract` (§2.1), `resolve` (§2.2, §2.8), `winner` (§2.3–§2.4, §2.8–§2.9),
-`pin` (§2.5), `config` (§2.6), `status` (§2.7), `cli` (stdout/stderr/exit
-goldens of `tryaii monitor`) and `apps` (goldens plus the request log of
-`tryaii apps`, §7.4). `corpus/<store>/` holds hand-frozen store snapshots
+`pin` (§2.5), `config` (§2.6), `status` (§2.7), `cache_usage` (§3.1b,
+v2.2: `normalize_cache_usage(provider, raw_usage)` per case), `cli`
+(stdout/stderr/exit goldens of `tryaii monitor`) and `apps` (goldens plus
+the request log of `tryaii apps`, §7.4). `corpus/<store>/` holds hand-frozen store snapshots
 (`events-*.jsonl`, `pins.json`, `config.json`, `vectors-*.jsonl`, v2:
 `remote.json`, `upload.json`) that the `pin`, `status` and `cli` suites
 read through the engine's own store reader; the generator never rewrites
@@ -503,6 +659,10 @@ them. v2 stores: `managed` (v2 event lines with `event_id` /
 `taxonomy_version` / `est_cost_anchor_usd`, a managed process in
 config.json, remote.json with etag `e-42`, an upload cursor covering the
 first two lines) and `flaky` (only an upload cursor with `last_error`).
+v2.2 store: `cached` (event lines with the §3.1b cache fields in every
+combination — an OpenAI 30 m write with policy, an Azure read without a
+write field, a 5 m + 1 h breakdown, an OpenRouter zero read, plus one v2
+line without any cache key — read by the `status` and `cli` suites).
 Every suite is routing-free, clock-free (`now` is an input) and
 network-free.
 
@@ -604,8 +764,13 @@ The newest `-n` events of the selected app across its daily files, oldest
 first. Human line:
 
 ```
-<ts>  <process> | <model_used> | <mode> | winner <winner|-> | <total_tokens|-> tok | <est_cost|-> | <route_status>[ | error <class|status>]
+<ts>  <process> | <model_used> | <mode> | winner <winner|-> | <total_tokens|-> tok[ | cached <n>][ | cache write <n>] | <est_cost|-> | <route_status>[ | error <class|status>]
 ```
+
+v2.2: `cached <n>` follows the token segment when
+`usage.cached_tokens` is a number (0 included), and `cache write <n>`
+when `usage.cache_write_tokens` is; a line without the fields (or with
+`null`) prints neither segment, so pre-v2.2 output is unchanged.
 
 `--json` prints each event exactly as stored (one minified line each).
 No events → `no events for app <app>`.
@@ -787,3 +952,78 @@ refresh request is ever made):
 `expected` = `{"stdout_golden", "stderr", "exit_code", "requests"}` where
 `requests` is the parsed request log (§6.3), in order. Fixture app keys
 have the real shape (`tryaii_k1a2b3c4d5e6_fixtureSecret…`) and are fake.
+
+## §9 Privacy: notice, upload switch, keyed hash (contract v1.3)
+
+Module `privacy` (`tryaii/monitor/privacy.py`, `src/monitor/privacy.ts`),
+byte-identical in both SDKs. API side: API.md §7.
+
+### §9.1 The upload decision
+
+`upload_decision(env, root)` → `(enabled, reason)`, first match wins:
+
+| Condition | `reason` |
+|---|---|
+| `TRYAII_MONITOR_UPLOAD` is `0`, `false`, `off` or `no` (any case) | `TRYAII_MONITOR_UPLOAD=0` |
+| `TRYAII_TELEMETRY` is `0`, `false`, `off` or `no` | `TRYAII_TELEMETRY=0` |
+| `DO_NOT_TRACK` is `1`, `true`, `yes` or `on` | `DO_NOT_TRACK=1` |
+| `<root>/settings.json` says `"upload": false` | `tryaii monitor upload off` |
+| otherwise | enabled, `null` |
+
+`root` is `<data dir>/monitor`. The environment rows decide whether the
+transport starts the uploader at all; the settings file is read on every
+pass. The remote switch comes on top, per app directory: while `remote.json`
+has `"upload": false` a pass skips the directory and sets `last_error =
+"upload_disabled"` (`"upload_off"` for the local setting); a `403
+{"error":"upload_disabled"}` answer sets the same error, keeps the cursor and
+retries after `BACKOFF_MAX` (5 min). Nothing is lost while paused: the
+cursor resumes where it stopped.
+
+`settings.json`: `{"schema": "tryaii.monitor.settings/1", "upload": bool}`,
+indent 2 + `\n`, written atomically.
+
+### §9.2 The notice
+
+`NOTICE_VERSION = "2026-10-18"` and `NOTICE_TEXT` (four lines, each ending
+`\n`):
+
+```
+[tryaii] monitor records sync to your TryAii account.
+Sent: model names, token counts, costs, timings, file paths, a task profile.
+Never sent: your prompts, responses or API keys.
+Turn off: tryaii monitor upload off   Details: https://tryaii.com/privacy-policy#cli-sdk
+```
+
+It is shown only to a person: the stream is a TTY and `CI` is unset. Where:
+
+- the uploader, before its first POST from a machine, on stderr, once per
+  version (`notice.json` = `{"schema": "tryaii.monitor.notice/1", "version",
+  "shown_at"}`); no consent record (an app key is not a person);
+- `tryaii apps create` after the key, on stderr, then
+  `POST /v1/monitor/consent {"source": "cli"}` (best effort);
+- `tryaii monitor upload` and `upload on` (§9.3), on stdout; when stdout is a
+  TTY also `notice.json` and the consent POST.
+
+### §9.3 `tryaii monitor upload [status|on|off] [--json]`
+
+`on` / `off` write `settings.json` first. Then: with `--json` the document
+`{"upload": bool, "reason": str|null, "notice_version": "..."}` (indent 2);
+otherwise `NOTICE_TEXT` + an empty line (not for `off`), then `upload: on` or
+`upload: off (<reason>)`. Any other argument: usage error
+`usage: tryaii monitor upload [on|off]. Run "tryaii help monitor".`, exit 2.
+`tryaii monitor status` ends each block with `upload: off (<reason>)` instead
+of the cursor line while the decision says off (the `--json` document is
+unchanged). The `cli` fixture suite never inherits `TRYAII_MONITOR_UPLOAD`,
+`TRYAII_TELEMETRY`, `DO_NOT_TRACK` or `CI` from the caller.
+
+### §9.4 Outgoing lines and the keyed hash
+
+The uploader sends each kept line as stored except for two fields, then
+re-serialises it with the store's own line format (§1.2): an absolute
+`call_site.file` becomes its base name (TS-226), and `prompt_hash` becomes
+`HMAC-SHA256(key, <stored prompt_hash as ASCII>)`, lowercase hex. `key` is 32
+random bytes kept as 64 hex characters + `\n` in
+`<data dir>/monitor/upload-hash.key` (mode 0600 where the OS has modes),
+created on the first upload and never sent. Local files keep the plain
+sha256 (§2.1), so local tools and fixtures are unchanged; the server sees a
+hash it cannot test guesses against, stable for one installation.

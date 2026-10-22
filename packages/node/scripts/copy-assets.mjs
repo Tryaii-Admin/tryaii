@@ -21,6 +21,8 @@ const assetCopies = [
   ['src/cachelint/data', 'dist/cachelint/data'],
   ['src/diagnose/data', 'dist/diagnose/data'],
   ['src/designpartner/data', 'dist/designpartner/data'],
+  // The int8 ONNX embedding model's tokenizer (TS-253; master: shared/embeddings).
+  ['src/embeddings/data/all-MiniLM-L6-v2-onnx-int8', 'dist/embeddings/data/all-MiniLM-L6-v2-onnx-int8'],
 ];
 
 for (const [sourceRelativePath, targetRelativePath] of assetCopies) {

@@ -1,0 +1,536 @@
+{
+  "suite": "cache_usage",
+  "target": "tryaii.monitor.events.normalize_cache_usage",
+  "description": "The provider field map of SPEC.md §3.1b: each case maps one raw usage object (the provider's shape, as a dict) to the event's cache columns. Both SDKs must reproduce every expected block, key order included.",
+  "cases": [
+    {
+      "name": "openai-chat-read-only",
+      "description": "Chat Completions before GPT-5.6: a cached read, no write field at all.",
+      "input": {
+        "provider": "openai",
+        "raw_usage": {
+          "prompt_tokens": 1137,
+          "completion_tokens": 40,
+          "total_tokens": 1177,
+          "prompt_tokens_details": {
+            "cached_tokens": 1024,
+            "audio_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          }
+        }
+      },
+      "expected": {
+        "cached_tokens": 1024,
+        "cache_write_tokens": null,
+        "cache_writes": null
+      }
+    },
+    {
+      "name": "openai-chat-write-gpt56",
+      "description": "GPT-5.6+: cached_tokens plus cache_write_tokens inside prompt_tokens_details; no breakdown is offered, so cache_writes is null.",
+      "input": {
+        "provider": "openai",
+        "raw_usage": {
+          "prompt_tokens": 3200,
+          "completion_tokens": 180,
+          "total_tokens": 3380,
+          "prompt_tokens_details": {
+            "cached_tokens": 1024,
+            "cache_write_tokens": 2048
+          }
+        }
+      },
+      "expected": {
+        "cached_tokens": 1024,
+        "cache_write_tokens": 2048,
+        "cache_writes": null
+      }
+    },
+    {
+      "name": "openai-chat-write-top-level",
+      "description": "A cache_write_tokens next to the details object (the alternative placement) is read too.",
+      "input": {
+        "provider": "openai",
+        "raw_usage": {
+          "prompt_tokens": 3200,
+          "completion_tokens": 180,
+          "total_tokens": 3380,
+          "cache_write_tokens": 2048,
+          "prompt_tokens_details": {
+            "cached_tokens": 1024
+          }
+        }
+      },
+      "expected": {
+        "cached_tokens": 1024,
+        "cache_write_tokens": 2048,
+        "cache_writes": null
+      }
+    },
+    {
+      "name": "openai-chat-zero",
+      "description": "Below the minimum prompt size the provider reports 0, which is recorded as 0 (not null).",
+      "input": {
+        "provider": "openai",
+        "raw_usage": {
+          "prompt_tokens": 500,
+          "completion_tokens": 20,
+          "total_tokens": 520,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        }
+      },
+      "expected": {
+        "cached_tokens": 0,
+        "cache_write_tokens": null,
+        "cache_writes": null
+      }
+    },
+    {
+      "name": "openai-chat-no-details",
+      "description": "No prompt_tokens_details at all (an older host): everything null.",
+      "input": {
+        "provider": "openai",
+        "raw_usage": {
+          "prompt_tokens": 500,
+          "completion_tokens": 20,
+          "total_tokens": 520
+        }
+      },
+      "expected": {
+        "cached_tokens": null,
+        "cache_write_tokens": null,
+        "cache_writes": null
+      }
+    },
+    {
+      "name": "openai-responses",
+      "description": "Responses API: input_tokens_details.cached_tokens and cache_write_tokens.",
+      "input": {
+        "provider": "openai_responses",
+        "raw_usage": {
+          "input_tokens": 2600,
+          "output_tokens": 70,
+          "total_tokens": 2670,
+          "input_tokens_details": {
+            "cached_tokens": 2048,
+            "cache_write_tokens": 512
+          },
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          }
+        }
+      },
+      "expected": {
+        "cached_tokens": 2048,
+        "cache_write_tokens": 512,
+        "cache_writes": null
+      }
+    },
+    {
+      "name": "openai-responses-read-only",
+      "description": "Responses API without a write field.",
+      "input": {
+        "provider": "openai_responses",
+        "raw_usage": {
+          "input_tokens": 2600,
+          "output_tokens": 70,
+          "total_tokens": 2670,
+          "input_tokens_details": {
+            "cached_tokens": 2048
+          }
+        }
+      },
+      "expected": {
+        "cached_tokens": 2048,
+        "cache_write_tokens": null,
+        "cache_writes": null
+      }
+    },
+    {
+      "name": "openrouter-details",
+      "description": "OpenRouter in the OpenAI shape: prompt_tokens_details.cached_tokens; cache_discount is not recorded.",
+      "input": {
+        "provider": "openrouter",
+        "raw_usage": {
+          "prompt_tokens": 1500,
+          "completion_tokens": 60,
+          "total_tokens": 1560,
+          "cache_discount": -0.0012,
+          "prompt_tokens_details": {
+            "cached_tokens": 1280
+          }
+        }
+      },
+      "expected": {
+        "cached_tokens": 1280,
+        "cache_write_tokens": null,
+        "cache_writes": null
+      }
+    },
+    {
+      "name": "openrouter-top-level",
+      "description": "OpenRouter with a top-level cached_tokens only.",
+      "input": {
+        "provider": "openrouter",
+        "raw_usage": {
+          "prompt_tokens": 1500,
+          "completion_tokens": 60,
+          "total_tokens": 1560,
+          "cached_tokens": 1280
+        }
+      },
+      "expected": {
+        "cached_tokens": 1280,
+        "cache_write_tokens": null,
+        "cache_writes": null
+      }
+    },
+    {
+      "name": "azure-read",
+      "description": "Azure OpenAI: same shape as OpenAI; prompt_tokens includes the cached tokens and no write field exists before GPT-5.6.",
+      "input": {
+        "provider": "azure",
+        "raw_usage": {
+          "prompt_tokens": 1137,
+          "completion_tokens": 40,
+          "total_tokens": 1177,
+          "prompt_tokens_details": {
+            "cached_tokens": 1024
+          }
+        }
+      },
+      "expected": {
+        "cached_tokens": 1024,
+        "cache_write_tokens": null,
+        "cache_writes": null
+      }
+    },
+    {
+      "name": "anthropic-write-5m",
+      "description": "Messages API: a 5 m write with the cache_creation breakdown (the 1 h entry is 0 and dropped).",
+      "input": {
+        "provider": "anthropic",
+        "raw_usage": {
+          "input_tokens": 55,
+          "output_tokens": 210,
+          "cache_read_input_tokens": 0,
+          "cache_creation_input_tokens": 2400,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 2400,
+            "ephemeral_1h_input_tokens": 0
+          }
+        }
+      },
+      "expected": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 2400,
+        "cache_writes": [
+          {
+            "tokens": 2400,
+            "ttl": "5m"
+          }
+        ]
+      }
+    },
+    {
+      "name": "anthropic-write-both",
+      "description": "Messages API: 5 m and 1 h writes in one call, in that order.",
+      "input": {
+        "provider": "anthropic",
+        "raw_usage": {
+          "input_tokens": 55,
+          "output_tokens": 210,
+          "cache_read_input_tokens": 0,
+          "cache_creation_input_tokens": 6400,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 2400,
+            "ephemeral_1h_input_tokens": 4000
+          }
+        }
+      },
+      "expected": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 6400,
+        "cache_writes": [
+          {
+            "tokens": 2400,
+            "ttl": "5m"
+          },
+          {
+            "tokens": 4000,
+            "ttl": "1h"
+          }
+        ]
+      }
+    },
+    {
+      "name": "anthropic-read",
+      "description": "Messages API: a read on a later call; the breakdown is present but empty, so cache_writes is [].",
+      "input": {
+        "provider": "anthropic",
+        "raw_usage": {
+          "input_tokens": 12,
+          "output_tokens": 180,
+          "cache_read_input_tokens": 6400,
+          "cache_creation_input_tokens": 0,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 0
+          }
+        }
+      },
+      "expected": {
+        "cached_tokens": 6400,
+        "cache_write_tokens": 0,
+        "cache_writes": []
+      }
+    },
+    {
+      "name": "anthropic-no-breakdown",
+      "description": "An older Messages response without cache_creation: the aggregate only.",
+      "input": {
+        "provider": "anthropic",
+        "raw_usage": {
+          "input_tokens": 12,
+          "output_tokens": 180,
+          "cache_read_input_tokens": 100,
+          "cache_creation_input_tokens": 300
+        }
+      },
+      "expected": {
+        "cached_tokens": 100,
+        "cache_write_tokens": 300,
+        "cache_writes": null
+      }
+    },
+    {
+      "name": "anthropic-nothing",
+      "description": "A Messages response that reports no cache field (null, not 0).",
+      "input": {
+        "provider": "anthropic",
+        "raw_usage": {
+          "input_tokens": 12,
+          "output_tokens": 180
+        }
+      },
+      "expected": {
+        "cached_tokens": null,
+        "cache_write_tokens": null,
+        "cache_writes": null
+      }
+    },
+    {
+      "name": "bedrock-write",
+      "description": "Converse: a cache write with cacheDetails (inputTokens excludes cached tokens).",
+      "input": {
+        "provider": "bedrock",
+        "raw_usage": {
+          "inputTokens": 4,
+          "outputTokens": 3,
+          "totalTokens": 942,
+          "cacheReadInputTokens": 0,
+          "cacheWriteInputTokens": 935,
+          "cacheDetails": [
+            {
+              "inputTokens": 935,
+              "ttl": "5m"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 935,
+        "cache_writes": [
+          {
+            "tokens": 935,
+            "ttl": "5m"
+          }
+        ]
+      }
+    },
+    {
+      "name": "bedrock-read-1h",
+      "description": "Converse: a read, and a 1 h write entry in the breakdown (Claude on Bedrock).",
+      "input": {
+        "provider": "bedrock",
+        "raw_usage": {
+          "inputTokens": 4,
+          "outputTokens": 3,
+          "totalTokens": 2007,
+          "cacheReadInputTokens": 1000,
+          "cacheWriteInputTokens": 1000,
+          "cacheDetails": [
+            {
+              "inputTokens": 1000,
+              "ttl": "1h"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "cached_tokens": 1000,
+        "cache_write_tokens": 1000,
+        "cache_writes": [
+          {
+            "tokens": 1000,
+            "ttl": "1h"
+          }
+        ]
+      }
+    },
+    {
+      "name": "bedrock-no-details",
+      "description": "Converse without cacheDetails: aggregates only, cache_writes null.",
+      "input": {
+        "provider": "bedrock",
+        "raw_usage": {
+          "inputTokens": 4,
+          "outputTokens": 3,
+          "totalTokens": 942,
+          "cacheReadInputTokens": 935,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "expected": {
+        "cached_tokens": 935,
+        "cache_write_tokens": 0,
+        "cache_writes": null
+      }
+    },
+    {
+      "name": "bedrock-unknown-ttl",
+      "description": "A cacheDetails entry with an unknown ttl is dropped; the aggregate stays.",
+      "input": {
+        "provider": "bedrock",
+        "raw_usage": {
+          "inputTokens": 4,
+          "cacheReadInputTokens": 0,
+          "cacheWriteInputTokens": 935,
+          "cacheDetails": [
+            {
+              "inputTokens": 935,
+              "ttl": "2h"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 935,
+        "cache_writes": []
+      }
+    },
+    {
+      "name": "gemini-usage-metadata",
+      "description": "generateContent: the response's usageMetadata (promptTokenCount includes cached tokens); explicit caches are written outside the call.",
+      "input": {
+        "provider": "gemini",
+        "raw_usage": {
+          "usageMetadata": {
+            "promptTokenCount": 4152,
+            "candidatesTokenCount": 5,
+            "totalTokenCount": 4157,
+            "cachedContentTokenCount": 4065
+          }
+        }
+      },
+      "expected": {
+        "cached_tokens": 4065,
+        "cache_write_tokens": null,
+        "cache_writes": null
+      }
+    },
+    {
+      "name": "gemini-metadata-object",
+      "description": "The usageMetadata object itself, in the Python SDK's snake_case.",
+      "input": {
+        "provider": "gemini",
+        "raw_usage": {
+          "prompt_token_count": 4152,
+          "candidates_token_count": 5,
+          "total_token_count": 4157,
+          "cached_content_token_count": 4065
+        }
+      },
+      "expected": {
+        "cached_tokens": 4065,
+        "cache_write_tokens": null,
+        "cache_writes": null
+      }
+    },
+    {
+      "name": "gemini-no-cache",
+      "description": "generateContent below the implicit-cache minimum: no cachedContentTokenCount at all.",
+      "input": {
+        "provider": "gemini",
+        "raw_usage": {
+          "usageMetadata": {
+            "promptTokenCount": 120,
+            "candidatesTokenCount": 5,
+            "totalTokenCount": 125
+          }
+        }
+      },
+      "expected": {
+        "cached_tokens": null,
+        "cache_write_tokens": null,
+        "cache_writes": null
+      }
+    },
+    {
+      "name": "unknown-provider",
+      "description": "An unknown shape answers all null.",
+      "input": {
+        "provider": "ollama",
+        "raw_usage": {
+          "prompt_tokens": 10,
+          "prompt_tokens_details": {
+            "cached_tokens": 10
+          }
+        }
+      },
+      "expected": {
+        "cached_tokens": null,
+        "cache_write_tokens": null,
+        "cache_writes": null
+      }
+    },
+    {
+      "name": "no-usage",
+      "description": "No usage object at all.",
+      "input": {
+        "provider": "openai",
+        "raw_usage": null
+      },
+      "expected": {
+        "cached_tokens": null,
+        "cache_write_tokens": null,
+        "cache_writes": null
+      }
+    },
+    {
+      "name": "malformed-values",
+      "description": "Booleans, negatives, strings and fractions: only a non-negative number counts, truncated.",
+      "input": {
+        "provider": "openai",
+        "raw_usage": {
+          "prompt_tokens_details": {
+            "cached_tokens": 12.9,
+            "cache_write_tokens": -5
+          },
+          "cache_write_tokens": true
+        }
+      },
+      "expected": {
+        "cached_tokens": 12,
+        "cache_write_tokens": null,
+        "cache_writes": null
+      }
+    }
+  ]
+}

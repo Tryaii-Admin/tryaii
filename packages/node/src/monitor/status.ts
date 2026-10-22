@@ -132,6 +132,7 @@ export function aggregate(
   let totalAnchor = 0;
   let totalRealised = 0;
   let anyAnchored = false;
+  const totalCache: Record<string, number | null> = { cached_tokens: null, cache_write_tokens: null };
   for (const name of Array.from(names).sort(cmp)) {
     const rows = byProcess.get(name) ?? [];
     const mode = resolveMode(name, { env, remote, config: configDoc });
@@ -141,11 +142,16 @@ export function aggregate(
     const calls = rows.length;
     const errors = rows.filter((e) => truthy(e.error)).length;
     const tokens: Record<string, number> = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+    const cache: Record<string, number | null> = { cached_tokens: null, cache_write_tokens: null };
     for (const e of rows) {
       const usage = isRecord(e.usage) ? e.usage : {};
       for (const key of Object.keys(tokens)) {
         const value = usage[key];
         if (typeof value === 'number') tokens[key] += Math.trunc(value);
+      }
+      for (const key of Object.keys(cache)) {
+        const value = usage[key];
+        if (typeof value === 'number') cache[key] = (cache[key] ?? 0) + Math.trunc(value);
       }
     }
     const costOf = (e: EventLike, key: string): number | null =>
@@ -201,6 +207,8 @@ export function aggregate(
       prompt_tokens: tokens.prompt_tokens,
       completion_tokens: tokens.completion_tokens,
       total_tokens: tokens.total_tokens,
+      cached_tokens: cache.cached_tokens,
+      cache_write_tokens: cache.cache_write_tokens,
       est_cost_usd: roundCost(cost),
       est_cost_winner_usd: paired.length ? roundCost(costWinner) : null,
       savings_usd: paired.length ? roundCost(costPaired - costWinner) : null,
@@ -212,6 +220,10 @@ export function aggregate(
     });
     totalCalls += calls;
     totalErrors += errors;
+    for (const key of Object.keys(totalCache)) {
+      const value = cache[key];
+      if (value !== null) totalCache[key] = (totalCache[key] ?? 0) + value;
+    }
     totalCost += cost;
     totalPaired += costPaired;
     totalWinner += costWinner;
@@ -232,6 +244,8 @@ export function aggregate(
     totals: {
       calls: totalCalls,
       errors: totalErrors,
+      cached_tokens: totalCache.cached_tokens,
+      cache_write_tokens: totalCache.cache_write_tokens,
       est_cost_usd: roundCost(totalCost),
       est_cost_winner_usd: anyPaired ? roundCost(totalWinner) : null,
       savings_usd: anyPaired ? roundCost(totalPaired - totalWinner) : null,

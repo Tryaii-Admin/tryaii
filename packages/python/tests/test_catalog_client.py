@@ -19,7 +19,7 @@ import pytest
 from tests.fake_auth_server import make_full_bundle, start_server
 from tryaii.auth import flow, store
 from tryaii.catalog import client
-from tryaii.catalog.bundle import BUNDLE_DATA_FILES, starter_bundle
+from tryaii.catalog.bundle import BUNDLE_DATA_FILES, listed_data_files, starter_bundle
 from tryaii.cli import main as cli_main
 
 NOW = 1791028800.0  # 2026-10-03T12:00:00Z
@@ -745,9 +745,9 @@ def test_bundle_from_texts_rejects_non_text_values_and_bad_shapes():
     from tryaii.catalog.bundle import BundleError, bundle_from_texts, sha256_hex
 
     starter = starter_bundle()
-    texts = {name: (starter.directory / name).read_text(encoding="utf-8")
-             for name in BUNDLE_DATA_FILES}
     manifest = json.loads(json.dumps(starter.manifest))
+    texts = {name: (starter.directory / name).read_text(encoding="utf-8")
+             for name in listed_data_files(manifest)}
     # 10**12 must be rejected by type, not turned into a 1 TB bytes object.
     for bad in (10 ** 12, {"a": 1}, None):
         with pytest.raises(BundleError):

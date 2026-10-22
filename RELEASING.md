@@ -45,6 +45,32 @@ Trusted Publishing means the registry trusts a GitHub identity (repo + workflow 
    - Environment name: `release`
 3. Click **Add**. No API token is created; PyPI will accept uploads whose OIDC identity matches exactly those four values.
 
+### PyPI (new project `tryaii-minilm-int8`, the embedding model)
+
+`tryaii` depends on `tryaii-minilm-int8` (`packages/python-model`, the 23 MB
+model file), pinned exactly. The release workflow builds it with every
+release and publishes it first, in its own step, before `tryaii`; an
+existing version is skipped (`skip-existing`), so it only really publishes
+when its version changes, which happens only when the model weights change.
+
+The project does not exist yet, so register a **pending** publisher once,
+before the first release that needs it:
+
+1. Log in at pypi.org, open **Your account → Publishing → Add a new pending publisher → GitHub**.
+2. Fill in PyPI Project Name `tryaii-minilm-int8` and the same four values as above
+   (`Tryaii-Admin`, `tryaii`, `release.yml`, `release`).
+3. Click **Add**. The first tagged release creates the project.
+
+Until it is registered, the model step fails and the `tryaii` step never
+runs, so `pip install tryaii` can never resolve to a release whose model is
+missing.
+
+When the weights change (`scripts/export-onnx-embedding.py` prints a new
+sha256): pin it in `tryaii/embeddings/model_store.py` and in
+`packages/python-model/tryaii_minilm_int8/__init__.py`, bump the model
+package version and the `tryaii-minilm-int8==` pin in
+`packages/python/pyproject.toml`, and rebuild the int8 centroids.
+
 ### npm (package `tryaii`)
 
 1. Log in at npmjs.com, open the `tryaii` package page → **Settings** → **Trusted Publisher**.
@@ -54,6 +80,26 @@ Trusted Publishing means the registry trusts a GitHub identity (repo + workflow 
    - Workflow filename: `release.yml`
    - Environment name: `release`
 3. Save. Then, on the same Settings page under **Publishing access**, select **Require two-factor authentication and disallow tokens** (trusted publisher only). Recommended: it makes the workflow the only way to publish, so a leaked personal token cannot push a release.
+
+### npm (new package `tryaii-minilm-int8`, the embedding model)
+
+The Node SDK runs the same model file as Python (`packages/node-model`, an
+optional peer dependency of `tryaii`, TS-253). The release workflow publishes
+it before `tryaii`, and only when its version is not on npm yet.
+
+npm has no pending publishers: a trusted publisher can only be added to a
+package that exists. So the first version is published once by hand, by the
+npm account owner, then locked to the workflow:
+
+1. From a clean checkout: `cd packages/node-model && npm publish --access public`
+   (npm asks for your login and 2FA; the package is 18 MB packed).
+2. On npmjs.com, open `tryaii-minilm-int8` → **Settings** → **Trusted Publisher**
+   and add the same four values as for `tryaii` above.
+3. Under **Publishing access**, select **Require two-factor authentication and
+   disallow tokens**.
+
+Until step 1 is done, the release's model step tries to publish with the
+workflow's identity and fails, and `tryaii` is not published.
 
 ### GitHub (in place since 2026-09-30)
 

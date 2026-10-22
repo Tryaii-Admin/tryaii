@@ -28,6 +28,10 @@ from pathlib import Path
 
 import pytest
 
+# Black-box contract suite (spawns the CLI per case): full CI only, see
+# the `slow` marker in pyproject.toml.
+pytestmark = pytest.mark.slow
+
 PKG_DIR = Path(__file__).resolve().parents[1]
 
 DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"

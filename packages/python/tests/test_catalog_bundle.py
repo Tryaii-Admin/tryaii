@@ -40,7 +40,7 @@ from tryaii.catalog import (
     resolve_bundle,
     starter_bundle,
 )
-from tryaii.catalog.bundle import STARTER_BUNDLE_DIR
+from tryaii.catalog.bundle import STARTER_BUNDLE_DIR, listed_data_files
 from tryaii.registry.models import ModelRegistry
 from tryaii.scoring.engine import ScoringEngine
 from tryaii.scoring.priorities import Priorities
@@ -180,7 +180,7 @@ class TestLoader:
         """GET /v1/catalog/live hands over {manifest, files: {name: text}}."""
         manifest = _manifest(STARTER_BUNDLE_DIR)
         files = {name: (STARTER_BUNDLE_DIR / name).read_text(encoding="utf-8")
-                 for name in BUNDLE_DATA_FILES}
+                 for name in listed_data_files(manifest)}
         bundle = bundle_from_texts(manifest, files)
         assert bundle.version == starter_bundle().version
         assert bundle.benchmark_names == starter_bundle().benchmark_names

@@ -168,9 +168,11 @@ describe('off', () => {
       'schema', 'event_id', 'ts', 'app', 'process', 'call_site', 'provider',
       'model_requested', 'model_resolved', 'model_used', 'mode', 'winner',
       'winner_reachable', 'route_status', 'classification', 'taxonomy_version', 'usage',
+      'cache_ttl_policy',
       'est_cost_usd', 'est_cost_winner_usd', 'est_cost_anchor_usd', 'latency_ms',
       'stream', 'error', 'prompt_hash', 'vector',
     ]);
+    expect(event.cache_ttl_policy).toBeNull(); // TS-229 fills it from the request
     expect(event.event_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(event.taxonomy_version).toBeNull(); // no bundle carries one yet
     expect(event.ts).toBe('2026-10-11T12:00:00.123Z');
@@ -188,7 +190,10 @@ describe('off', () => {
     expect(event.winner_reachable).toBe(true);
     expect(event.route_status).toBe('ok');
     expect(event.classification).toEqual({ category: 'coding', subcategory: 'debugging', confidence: 0.8123 });
-    expect(event.usage).toEqual({ prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 });
+    expect(event.usage).toEqual({
+      prompt_tokens: 100, completion_tokens: 50, total_tokens: 150,
+      cached_tokens: null, cache_write_tokens: null, cache_writes: null,
+    });
     expect(event.est_cost_usd).toBe(0.002); // 100*0.005/1k + 50*0.03/1k
     expect(event.est_cost_winner_usd).toBe(0.000125);
     expect(event.est_cost_anchor_usd).toBe(0.002); // no swap: equals est_cost_usd
@@ -495,7 +500,10 @@ describe('errors and streams', () => {
     await monitor.drain();
     const [event] = eventsOf(monitor);
     expect(event.stream).toBe(true);
-    expect(event.usage).toEqual({ prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 });
+    expect(event.usage).toEqual({
+      prompt_tokens: 100, completion_tokens: 50, total_tokens: 150,
+      cached_tokens: null, cache_write_tokens: null, cache_writes: null,
+    });
   });
 
   it('records a stream left early', async () => {

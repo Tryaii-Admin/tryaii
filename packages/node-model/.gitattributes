@@ -1,0 +1,2 @@
+# Model weights are binary: never touch line endings.
+*.onnx binary

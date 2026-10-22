@@ -47,8 +47,11 @@ function runCase(input: CliCase['input'], inspect?: (tmp: string) => void): [num
       ...process.env,
       TRYAII_NO_BANNER: '1',
       TRYAII_DRE_DATA_DIR: tmp,
-      ...(input.env ?? {}),
     };
+    // The upload opt-outs change `status` and `upload` output (SPEC.md §9);
+    // like the generator, a case never inherits them from the caller.
+    for (const name of ['TRYAII_MONITOR_UPLOAD', 'TRYAII_TELEMETRY', 'DO_NOT_TRACK', 'CI']) delete env[name];
+    Object.assign(env, input.env ?? {});
     for (const name of input.copy_store ?? []) {
       cpSync(join(FIXTURES, 'corpus', name), join(tmp, 'monitor', name), { recursive: true });
     }

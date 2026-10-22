@@ -23,14 +23,23 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
+import * as engine from '../src/cachelint/index.js';
 import { starterBundle } from '../src/catalog/bundle.js';
 import {
   aggregate,
   allowedModels,
+  buildReport,
+  CacheTracker,
+  lintPrompt,
+  maskExcerpt,
+  sectionKind,
+  recommendationFrom,
+  usageFromResponse,
   evaluatePin,
   filterRanking,
   managedTarget,
   nativeModelId,
+  normalizeCacheUsage,
   pickWinner,
   pinFromFirstCall,
   policyAllowed,
@@ -201,6 +210,43 @@ function genStatus(inp: Record<string, any>): unknown {
   );
 }
 
+/** API.md v1.4 cache fields; mirrors gen_cache (`kind` picks the function). */
+function genCache(inp: Record<string, any>): unknown {
+  switch (inp.kind) {
+    case 'usage':
+      return { usage: usageFromResponse(inp.usage) };
+    case 'mask':
+      return { excerpt: maskExcerpt(inp.text) };
+    case 'section':
+      return { sections: (inp.labels as unknown[]).map((label) => sectionKind(label)) };
+    case 'recommendation':
+      return { recommendation: recommendationFrom(inp.recommendations, inp.verdict) };
+    case 'report': {
+      const item = engine.analyzeItem({
+        prompt: lintPrompt(inp.messages, inp.tools, inp.functions),
+        llm: { provider: 'openrouter', name: inp.model },
+      });
+      return { report: buildReport(item.data, item.canonical) };
+    }
+    case 'tracker': {
+      let t = 0;
+      const tracker = new CacheTracker(engine, () => t);
+      const blocks = (inp.calls as Array<Record<string, any>>).map((call) => {
+        t = Number(call.t ?? 0) * 1000;
+        return tracker.observe(call.process, call.model, call.messages, call.tools, call.functions);
+      });
+      return { blocks, analyses: tracker.analyses };
+    }
+    default:
+      throw new Error(`unknown cache fixture kind: ${inp.kind}`);
+  }
+}
+
+/** The provider field map of SPEC.md §3.1b (suite `cache_usage`). */
+function genCacheUsage(inp: Record<string, any>): unknown {
+  return normalizeCacheUsage(inp.provider, inp.raw_usage ?? null);
+}
+
 const SUITES: Record<string, (inp: Record<string, any>) => unknown> = {
   extract: genExtract,
   resolve: genResolve,
@@ -208,6 +254,8 @@ const SUITES: Record<string, (inp: Record<string, any>) => unknown> = {
   pin: genPin,
   config: genConfig,
   status: genStatus,
+  cache: genCache,
+  cache_usage: genCacheUsage,
 };
 
 describe.skipIf(!existsSync(FIXTURES))('monitor fixtures', () => {

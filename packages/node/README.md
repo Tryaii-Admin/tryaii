@@ -268,6 +268,31 @@ Pass `{ summaryHref, resultsHref }` as the third argument to override the footer
 - Node.js >= 18.0.0
 - TypeScript >= 5.3 (for development)
 
+## Data and privacy
+
+The monitor classifies prompts in your process (no Python, no daemon) once
+its two optional peer dependencies are installed:
+`npm install onnxruntime-node tryaii-minilm-int8` (the same int8 ONNX model as
+the Python SDK). Without them, calls are still recorded, without a
+classification.
+
+Without an app key, nothing leaves your machine: the monitor writes its
+records under `~/.tryaii/monitor/` and that is all. With `TRYAII_API_KEY`
+set, it sends **metadata about each LLM call** to your tryaii.com account:
+model names, token counts, estimated costs, timings, the file (relative to
+your project) and function that made the call, and a task profile (how
+similar the prompt is to public benchmark categories). It **never** sends
+prompt or response text, embeddings, provider API keys or file contents.
+The prompt hash it sends is keyed with a secret that stays on your machine.
+
+- See what is sent and switch it off: `tryaii monitor upload` /
+  `tryaii monitor upload off`, or set `TRYAII_TELEMETRY=0` or `DO_NOT_TRACK=1`.
+- Call records are deleted after 90 days; a deleted app is restorable for
+  30 days, then removed for good.
+- Full text: [privacy policy, "Command-line tool and SDK"](https://tryaii.com/privacy-policy#cli-sdk)
+  and [PRIVACY.md](https://github.com/Tryaii-Admin/tryaii/blob/main/PRIVACY.md).
+  Questions or deletion requests: support@tryaii.com.
+
 ## License
 
 Apache 2.0

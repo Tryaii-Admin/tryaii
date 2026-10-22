@@ -4,13 +4,21 @@
  *
  * The `Uploader` runs its own async loop (never the routing jobs, so a slow
  * upload never delays recording), started by the transport only when
- * `TRYAII_API_KEY` is set and `TRYAII_MONITOR_UPLOAD` is not `"0"`. It reads
+ * `TRYAII_API_KEY` is set and no opt-out is set (`TRYAII_MONITOR_UPLOAD=0`,
+ * `TRYAII_TELEMETRY=0`, `DO_NOT_TRACK=1`; SPEC.md §9). It reads
  * the UNREAD bytes of every `events-*.jsonl` of the app directories this
  * process records to, batches whole lines (at most 500 events and a 1 MiB
  * body, one file per batch), and POSTs them to `/v1/monitor/events` -- at
  * most one batch every 5 s, with exponential backoff (5 s -> 5 min) on
  * 429/5xx/network. `upload.json` (the cursor) says how many bytes of each
  * file were uploaded. Local files are never deleted or rewritten.
+ *
+ * Privacy (SPEC.md §9): a pass pauses an app directory while the local
+ * setting (`tryaii monitor upload off`) or the account switch (remote.json
+ * `"upload": false`, or a 403 `upload_disabled`) says off; every sent line
+ * carries the keyed `prompt_hash` (HMAC with the per-installation secret),
+ * never the plain one; the first upload of a machine prints the Data Notice
+ * once to a terminal.
  *
  * Hard rules: prompt text never leaves the machine (a line carrying a field
  * named `prompt`, `messages`, `response`, `content`, `text` or `raw` at any
@@ -26,16 +34,17 @@
 
 import { closeSync, openSync, readSync, statSync, unlinkSync, writeSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
 import * as api from './api.js';
 import { EVENT_SCHEMA, formatTs } from './events.js';
+import * as privacy from './privacy.js';
 import { isAbsoluteFile } from './relpath.js';
 import * as store from './store.js';
 
 export const UPLOAD_SCHEMA = 'tryaii.monitor.upload/1';
-export const ENV_UPLOAD = 'TRYAII_MONITOR_UPLOAD';
+export const ENV_UPLOAD = privacy.ENV_UPLOAD;
 export const MAX_EVENTS = 500;
 export const MAX_BYTES = 1024 * 1024;
 export const INTERVAL_MS = 5000;
@@ -45,17 +54,24 @@ export const DRAIN_TIMEOUT_MS = 2000;
 export const LOCK_STALE_MS = 60_000;
 export const FORBIDDEN_FIELDS = ['prompt', 'messages', 'response', 'content', 'text', 'raw'] as const;
 /** Mirrors `tryaii.monitor.NOTICE_VERSION` (monitor/index.ts re-exports it). */
-export const NOTICE_VERSION = '2026-10';
+export const NOTICE_VERSION = privacy.NOTICE_VERSION;
 
 export const KEY_REJECTED_MESSAGE =
   'tryaii monitor: TRYAII_API_KEY was rejected (invalid_key); upload and remote config are off for this process';
 
 let rejectedLogged = false;
 
-/** False when `TRYAII_MONITOR_UPLOAD` is `"0"`. */
+/** False when an environment opt-out is set (SPEC.md §9). */
 export function uploadEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return (env[ENV_UPLOAD] || '1').trim() !== '0';
+  return privacy.uploadDecision(env)[0];
 }
+
+/** The sink of the one-time Data Notice (tests replace it). */
+export const notices = {
+  write(text: string): void {
+    process.stderr.write(text);
+  },
+};
 
 /** The sink of the one warning line (tests replace it). */
 export const warnings = {
@@ -126,7 +142,7 @@ export function envelopeHead(batchId: string, version: string): Buffer {
   return Buffer.from(head.slice(0, -1) + ',"events":[', 'utf-8');
 }
 
-/** The exact request body: the envelope with the stored lines spliced in verbatim. */
+/** The exact request body: the envelope with the outgoing event lines (`outgoingLine`) spliced in. */
 export function buildBody(batchId: string, version: string, lines: Buffer[]): Buffer {
   return Buffer.concat([envelopeHead(batchId, version), joinLines(lines), Buffer.from(']}')]);
 }
@@ -195,6 +211,8 @@ export interface NextBatchOptions {
   maxEvents?: number;
   maxBytes?: number;
   headBytes?: number;
+  /** The per-installation secret: sent lines carry the keyed `prompt_hash`. */
+  hashKey?: Buffer | null;
 }
 
 /**
@@ -212,10 +230,27 @@ export interface NextBatchOptions {
  * re-serialised with the base name only. Any other line is sent verbatim.
  */
 export function stripMachinePath(obj: Record<string, unknown>, raw: Buffer): Buffer {
+  return outgoingLine(obj, raw, null);
+}
+
+/**
+ * The line as uploaded: an absolute `call_site.file` reduced to its base name
+ * (TS-226) and, with `hashKey`, `prompt_hash` replaced by its keyed form
+ * (SPEC.md §9). Re-serialised only when something changed; otherwise `raw`.
+ */
+export function outgoingLine(obj: Record<string, unknown>, raw: Buffer, hashKey: Buffer | null): Buffer {
+  let changed = false;
   const site = obj.call_site;
-  if (!isRecord(site) || !isAbsoluteFile(site.file)) return raw;
-  const parts = String(site.file).split(/[\\/]/);
-  site.file = parts[parts.length - 1];
+  if (isRecord(site) && isAbsoluteFile(site.file)) {
+    const parts = String(site.file).split(/[\\/]/);
+    site.file = parts[parts.length - 1];
+    changed = true;
+  }
+  if (hashKey !== null && typeof obj.prompt_hash === 'string') {
+    obj.prompt_hash = privacy.keyedHash(hashKey, obj.prompt_hash);
+    changed = true;
+  }
+  if (!changed) return raw;
   return Buffer.from(store.dumpsLine(obj).replace(/\n$/, ''), 'utf-8');
 }
 
@@ -259,7 +294,7 @@ export function nextBatch(directory: string, cursor: store.UploadCursor, opts: N
         if (bad) batch.forbidden = batch.forbidden || bad;
         else keep = true;
       }
-      const line = keep ? stripMachinePath(obj as Record<string, unknown>, raw) : raw;
+      const line = keep ? outgoingLine(obj as Record<string, unknown>, raw, opts.hashKey ?? null) : raw;
       if (keep) {
         const cost = line.length + (batch.lines.length ? 1 : 0);
         if (batch.lines.length && (batch.lines.length >= maxEvents || used + cost > budget)) break;
@@ -507,13 +542,46 @@ export class Uploader {
     return 'idle';
   }
 
+  /**
+   * True (and `last_error` set) while the local setting or the account
+   * switch in remote.json says off.
+   */
+  private paused(directory: string, cursor: store.UploadCursor): boolean {
+    const [enabled] = privacy.uploadDecision({}, dirname(directory));
+    const remote = store.readRemote(directory);
+    let reason: string | null = null;
+    if (!enabled) reason = 'upload_off';
+    else if (isRecord(remote) && remote.upload === false) reason = 'upload_disabled';
+    if (reason === null) return false;
+    if (cursor.last_error !== reason) {
+      cursor.last_error = reason;
+      store.writeUploadCursor(directory, cursor);
+    }
+    return true;
+  }
+
+  /** The Data Notice, once per machine and version, to a terminal only. */
+  private firstUploadNotice(root: string): void {
+    try {
+      if (privacy.noticeShown(root) || !privacy.canShowNotice(process.stderr, this.env ?? process.env)) return;
+      notices.write(privacy.NOTICE_TEXT);
+      privacy.markNoticeShown(root, this.nowTs());
+    } catch {
+      // fail-open
+    }
+  }
+
   private async uploadDir(directory: string, now: number, pass: PassOptions): Promise<UploadOutcome> {
     const lock = new DirLock(directory);
     if (!isDir(directory) || !lock.acquire()) return 'idle';
     try {
       const cursor = store.readUploadCursor(directory) ?? store.emptyUploadCursor();
+      if (this.paused(directory, cursor)) return 'idle';
       const head = envelopeHead(randomUUID(), this.version);
-      const batch = nextBatch(directory, cursor, { headBytes: head.length });
+      const batch = nextBatch(directory, cursor, {
+        headBytes: head.length,
+        hashKey: privacy.hashKey(dirname(directory)),
+      });
       if (batch === null) return 'idle';
       if (batch.forbidden) cursor.last_error = `forbidden_field: ${batch.forbidden}`;
       if (!batch.lines.length) {
@@ -522,6 +590,7 @@ export class Uploader {
         return 'skipped';
       }
       const body = Buffer.concat([head, joinLines(batch.lines), Buffer.from(']}')]);
+      this.firstUploadNotice(dirname(directory));
       let resp: api.ApiResponse;
       try {
         resp = await this.request('POST', '/v1/monitor/events', pass, body);
@@ -564,6 +633,13 @@ export class Uploader {
       store.writeUploadCursor(directory, cursor);
       this.nextAt = now + INTERVAL_MS;
       return 'skipped';
+    }
+    if (status === 403 && resp.error === 'upload_disabled') {
+      // The account switch is off: retry rarely; remote.json says when it is on.
+      cursor.last_error = 'upload_disabled';
+      store.writeUploadCursor(directory, cursor);
+      this.nextAt = now + BACKOFF_MAX_MS;
+      return 'backoff';
     }
     if (status === 401) {
       cursor.last_error = 'invalid_key';

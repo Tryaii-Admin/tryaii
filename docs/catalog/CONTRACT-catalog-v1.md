@@ -1,4 +1,4 @@
-# tryaii model catalog — contract v1.2
+# tryaii model catalog — contract v1.3
 
 This is the client-side specification of the model catalog: the bundle format
 both SDKs (Python and Node) route on, how a logged-in client downloads, verifies,
@@ -20,6 +20,7 @@ A bundle is a directory (on disk) or a `files` map (on the wire) with exactly:
 | `benchmarks.json` | the benchmark taxonomy, weights and classifier labels. Exact shape: Appendix A |
 | `normalization_ranges.json` | `{"benchmarks": {<name>: {lo, hi, fallback, description}}, ...metadata keys}` |
 | `centroids.json` | `{"metadata": {model, dimension, benchmark_count, benchmark_fingerprint}, "centroids": {<name>: [floats]}}`, for `manifest.embedding_model` |
+| `centroids.<model id>.json` | optional, v1.3 (section 8): the same shape, built for another embedding model |
 | `training_queries.json` | `{"benchmarks": {<name>: {description, queries: [strings]}}, ...metadata keys}` |
 
 `manifest.json`:
@@ -261,3 +262,39 @@ forgery, because the manifest travels with the files.
   `catalog_releases.files_sha256` lists it.
 - Clients (both SDKs): verified and parsed when listed; the full-catalog cache writes it
   with the other files.
+
+## 8. Centroids per embedding model (catalog contract v1.3, 2026-10-19)
+
+Centroids are versioned per embedding model and published side by side
+(TS-252; Confluence 6881283 section 5). A vector is only ever scored with the
+centroids of the model that produced it.
+
+- A bundle may carry centroids for further embedding models as optional files
+  named `centroids.<model id>.json`, where `<model id>` matches
+  `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`. v1.3 publishes one:
+  `centroids.all-MiniLM-L6-v2-onnx-int8.json`, for the int8 ONNX build that
+  the Python SDK runs by default.
+- Each file has the shape of `centroids.json`. Its benchmark set equals
+  `benchmarks.json`'s, and its `metadata.model` equals `<model id>`. It never
+  repeats `manifest.embedding_model`, which stays the primary model
+  (`all-MiniLM-L6-v2`, in `centroids.json`).
+- The files follow the section 7 rules: canonical text, present exactly when
+  `manifest.files` lists them, hashed and signed with the rest, and a listed
+  file that is missing or mismatched makes the bundle invalid.
+- `schema` stays 1: the change is additive. Clients older than v1.3 ignore the
+  files.
+- Clients: the Python SDK (v1.3) verifies and parses every listed
+  `centroids.<model id>.json` and caches it with the other files. Its centroid
+  loader takes `centroids.json` for the primary model and
+  `centroids.<model id>.json` for any other; for a model the bundle has no
+  centroids for, it builds them from `training_queries.json`. It never scores
+  with another model's centroids. The Node SDK does the same since TS-253
+  (`CatalogBundle.centroidsFor`).
+- Build: `scripts/gen-centroids.py --model <model id>` writes
+  `shared/centroids/centroids_<model id>.json`.
+  `scripts/build-catalog-bundles.py` publishes each model in
+  `EXTRA_EMBEDDING_MODELS` into the starter and full bundles.
+- Server (to do): the publisher must accept, store and serve these files the
+  way it handles `origins.json`. Until it does, a full catalog without them
+  makes the Python SDK build the int8 centroids locally once per full-catalog
+  version, which takes a few seconds.

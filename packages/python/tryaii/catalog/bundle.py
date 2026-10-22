@@ -20,6 +20,11 @@ Integrity rules (all enforced by :func:`load_bundle` / :func:`bundle_from_texts`
 * the benchmark name sets of ``benchmarks.json``, ``normalization_ranges.json``,
   ``centroids.json`` and ``training_queries.json`` must be identical, and the
   centroids must be built for ``manifest["embedding_model"]``;
+* centroids for further embedding models (contract v1.3) are optional files
+  ``centroids.<model id>.json`` listed in the manifest like any other file:
+  same shape and benchmark set as ``centroids.json``, built for ``<model id>``.
+  A vector is only ever scored with the centroids of its own model
+  (:meth:`CatalogBundle.centroids_for`);
 * with ``verify_signature=True`` (the full catalog: downloaded or loaded from
   the cache) the manifest's Ed25519 signature must verify against a trusted
   key (contract section 6, :mod:`tryaii.catalog.signing`) -- checked after the
@@ -35,6 +40,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -58,6 +64,25 @@ BUNDLE_DATA_FILES: tuple[str, ...] = (
 #: lists them. ``origins.json`` = model origin / host data for policies
 #: (shared/datasave/SPEC.md); the full catalog carries it, the starter not.
 OPTIONAL_DATA_FILES: tuple[str, ...] = ("origins.json",)
+
+#: Centroids for an additional embedding model (contract v1.3):
+#: ``centroids.<model id>.json``, verified and parsed when the manifest lists
+#: it. Older SDKs ignore these files.
+_MODEL_CENTROIDS_RE = re.compile(r"centroids\.([A-Za-z0-9][A-Za-z0-9._-]{0,127})\.json",
+                                 re.ASCII)
+
+
+def model_centroids_file(model_id: str) -> str:
+    """The bundle file name of ``model_id``'s centroids (contract v1.3)."""
+    name = f"centroids.{model_id}.json"
+    if not _MODEL_CENTROIDS_RE.fullmatch(name):
+        raise ValueError(f"invalid embedding model id for a bundle file: {model_id!r}")
+    return name
+
+
+def model_centroid_files(files: Mapping[str, Any]) -> tuple[str, ...]:
+    """The ``centroids.<model id>.json`` names a manifest's files map lists, sorted."""
+    return tuple(sorted(name for name in files if _MODEL_CENTROIDS_RE.fullmatch(name)))
 
 BUNDLE_KINDS = ("starter", "full")
 
@@ -109,6 +134,9 @@ class CatalogBundle:
     directory: Optional[Path] = None
     #: ``origins.json`` when the bundle carries it (contract v1.2), else None.
     origins: Optional[dict] = None
+    #: ``{model id: centroids document}`` of the ``centroids.<model id>.json``
+    #: files (contract v1.3), else None.
+    model_centroids: Optional[dict] = None
 
     # ------------------------------------------------------------ manifest
     @property
@@ -126,6 +154,19 @@ class CatalogBundle:
     @property
     def embedding_model(self) -> str:
         return str(self.manifest["embedding_model"])
+
+    @property
+    def embedding_models(self) -> list[str]:
+        """Every embedding model this bundle has centroids for, primary first."""
+        return [self.embedding_model] + sorted(self.model_centroids or {})
+
+    def centroids_for(self, model_id: str) -> Optional[dict]:
+        """The centroids document built for ``model_id`` (``centroids.json``
+        for the manifest's model, else its ``centroids.<model id>.json``), or
+        None when the bundle has none for it."""
+        if model_id == self.embedding_model:
+            return self.centroids
+        return (self.model_centroids or {}).get(model_id)
 
     @property
     def counts(self) -> dict:
@@ -212,7 +253,7 @@ def _parse_manifest(manifest: Any) -> dict:
     missing = [name for name in BUNDLE_DATA_FILES if not isinstance(files.get(name), str)]
     if missing:
         raise BundleError(f"manifest.json 'files' is missing: {', '.join(missing)}")
-    bad = [name for name in OPTIONAL_DATA_FILES
+    bad = [name for name in OPTIONAL_DATA_FILES + model_centroid_files(files)
            if name in files and not isinstance(files[name], str)]
     if bad:
         raise BundleError(f"manifest.json 'files' has a non-string hash for: {', '.join(bad)}")
@@ -221,9 +262,12 @@ def _parse_manifest(manifest: Any) -> dict:
 
 def listed_data_files(manifest: Mapping[str, Any]) -> tuple[str, ...]:
     """The data files this manifest requires: the five, plus each optional
-    file it lists (in ``OPTIONAL_DATA_FILES`` order)."""
+    file it lists (in ``OPTIONAL_DATA_FILES`` order), plus its
+    ``centroids.<model id>.json`` files (sorted, contract v1.3)."""
     files = manifest.get("files") or {}
-    return BUNDLE_DATA_FILES + tuple(name for name in OPTIONAL_DATA_FILES if name in files)
+    return (BUNDLE_DATA_FILES
+            + tuple(name for name in OPTIONAL_DATA_FILES if name in files)
+            + model_centroid_files(files))
 
 
 def _check_consistency(bundle: CatalogBundle) -> None:
@@ -249,6 +293,20 @@ def _check_consistency(bundle: CatalogBundle) -> None:
             f"centroids.json was built for {model!r}, manifest says "
             f"{bundle.embedding_model!r}"
         )
+    for model_id, doc in (bundle.model_centroids or {}).items():
+        label = model_centroids_file(model_id)
+        if model_id == bundle.embedding_model:
+            raise BundleError(f"{label} duplicates centroids.json")
+        got = set(doc.get("centroids", {}))
+        if got != expected:
+            raise BundleError(
+                f"{label} benchmark set does not match benchmarks.json "
+                f"(only in {label}: {sorted(got - expected)}, "
+                f"missing: {sorted(expected - got)})"
+            )
+        built_for = (doc.get("metadata") or {}).get("model")
+        if built_for != model_id:
+            raise BundleError(f"{label} was built for {built_for!r}")
     if not isinstance(bundle.models.get("models"), list):
         raise BundleError("models.json has no 'models' array")
     if bundle.origins is not None:
@@ -315,6 +373,10 @@ def bundle_from_texts(
         training_queries=parsed["training_queries.json"],
         directory=directory,
         origins=parsed.get("origins.json"),
+        model_centroids={
+            name[len("centroids."):-len(".json")]: parsed[name]
+            for name in model_centroid_files(manifest["files"])
+        } or None,
     )
     try:
         _check_consistency(bundle)

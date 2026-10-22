@@ -39,7 +39,8 @@ PKG_PYTHON = REPO / "packages" / "python"
 
 sys.path.insert(0, str(PKG_PYTHON))
 
-SUITES = ("extract", "resolve", "winner", "pin", "config", "status", "cli", "apps")
+SUITES = ("extract", "resolve", "winner", "pin", "config", "status", "cache", "cache_usage",
+          "cli", "apps")
 
 #: The API base every `apps` case talks to (never resolvable).
 FIXTURE_API_URL = "https://api.tryaii.test"
@@ -130,6 +131,47 @@ def gen_extract(inp):
 
     text, digest = routing_text(inp.get("messages"))
     return {"text": text, "prompt_hash": digest}
+
+
+def gen_cache(inp):
+    """API.md v1.4 cache fields (tryaii.monitor.cache). ``kind`` picks the
+    function: ``usage`` (usage_from_response), ``mask`` (mask_excerpt),
+    ``section`` (section_kind over a list of engine labels),
+    ``recommendation`` (recommendation_from), ``report`` (one call through
+    the engine on lint_prompt(messages, tools, functions), build_report) or
+    ``tracker`` (CacheTracker over a list of calls, each with its process,
+    model, messages, optional tools/functions and clock ``t`` seconds; the
+    output adds ``analyses``, the number of full analyses run)."""
+    from tryaii.monitor import cache
+    from tryaii.monitor.events import usage_from_response
+
+    kind = inp["kind"]
+    if kind == "usage":
+        return {"usage": usage_from_response(inp.get("usage"))}
+    if kind == "mask":
+        return {"excerpt": cache.mask_excerpt(inp["text"])}
+    if kind == "section":
+        return {"sections": [cache.section_kind(label) for label in inp["labels"]]}
+    if kind == "recommendation":
+        return {"recommendation": cache.recommendation_from(inp.get("recommendations"),
+                                                            inp.get("verdict"))}
+    if kind == "report":
+        from tryaii.cachelint.analyzer import analyze_item
+
+        prompt = cache.lint_prompt(inp["messages"], inp.get("tools"), inp.get("functions"))
+        item = analyze_item({"prompt": prompt,
+                             "llm": {"provider": cache.LINT_PROVIDER, "name": inp["model"]}})
+        return {"report": cache.build_report(item.data, item.canonical)}
+    if kind == "tracker":
+        clock = {"t": 0.0}
+        tracker = cache.CacheTracker(clock=lambda: clock["t"])
+        out = []
+        for call in inp["calls"]:
+            clock["t"] = float(call.get("t", 0))
+            out.append(tracker.observe(call["process"], call["model"], call["messages"],
+                                       call.get("tools"), call.get("functions")))
+        return {"blocks": out, "analyses": tracker.analyses}
+    raise ValueError(f"unknown cache fixture kind: {kind}")
 
 
 def gen_resolve(inp):
@@ -254,6 +296,19 @@ def gen_status(inp):
                      uploaded_events=uploaded)
 
 
+def gen_cache_usage(inp):
+    """The provider field map of SPEC.md §3.1b: raw usage (a dict in the
+    provider's shape, or null) -> the event's cache columns."""
+    from tryaii.monitor.events import normalize_cache_usage
+
+    return normalize_cache_usage(inp.get("provider"), inp.get("raw_usage"))
+
+
+#: Environment variables a `cli` case never inherits from the caller (the
+#: upload opt-outs change `status` and `upload` output; SPEC.md §9).
+_CLI_SCRUBBED_ENV = ("TRYAII_MONITOR_UPLOAD", "TRYAII_TELEMETRY", "DO_NOT_TRACK", "CI")
+
+
 def run_cli_case(inp: dict) -> subprocess.CompletedProcess:
     """Run the Python CLI for a cli-suite case in a FRESH temp cwd.
 
@@ -269,6 +324,8 @@ def run_cli_case(inp: dict) -> subprocess.CompletedProcess:
                    PYTHONIOENCODING="utf-8",
                    PYTHONPATH=str(PKG_PYTHON),
                    TRYAII_DRE_DATA_DIR=tmp)
+        for name in _CLI_SCRUBBED_ENV:
+            env.pop(name, None)
         env.update(inp.get("env") or {})
         for name in inp.get("copy_store", []):
             shutil.copytree(_store_dir(name), Path(tmp) / "monitor" / name)

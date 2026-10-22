@@ -1,6 +1,6 @@
 {
   "name": "tryaii",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "AI model router for Node.js and TypeScript with benchmark, cost, and speed-based ranking",
   "type": "module",
   "main": "dist/index.js",
@@ -41,6 +41,7 @@
     "build": "tsc && node ./scripts/copy-assets.mjs",
     "prepack": "npm run build && npm run verify:dist",
     "test": "vitest run",
+    "test:light": "vitest run --config vitest.light.config.ts",
     "test:watch": "vitest",
     "verify:dist": "node ./scripts/verify-dist.mjs",
     "verify:release": "node ./scripts/verify-dist.mjs --release",
@@ -77,16 +78,26 @@
     "vitest": "^1.2.0",
     "eslint": "^8.56.0",
     "@typescript-eslint/eslint-plugin": "^6.19.0",
-    "@typescript-eslint/parser": "^6.19.0"
+    "@typescript-eslint/parser": "^6.19.0",
+    "onnxruntime-node": "^1.30.0",
+    "tryaii-minilm-int8": "file:../node-model"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "peerDependencies": {
-    "typescript": ">=4.7"
+    "typescript": ">=4.7",
+    "onnxruntime-node": ">=1.17.0",
+    "tryaii-minilm-int8": "1.0.0"
   },
   "peerDependenciesMeta": {
     "typescript": {
+      "optional": true
+    },
+    "onnxruntime-node": {
+      "optional": true
+    },
+    "tryaii-minilm-int8": {
       "optional": true
     }
   }

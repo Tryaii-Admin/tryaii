@@ -54,6 +54,7 @@ from tryaii.catalog.bundle import (
     bundle_from_texts,
     listed_data_files,
     load_bundle,
+    model_centroid_files,
     starter_bundle,
 )
 
@@ -337,6 +338,7 @@ def save_full(manifest: dict, files: dict, bundle: CatalogBundle) -> CatalogBund
         training_queries=bundle.training_queries,
         directory=target,
         origins=bundle.origins,
+        model_centroids=bundle.model_centroids,
     )
     with _LOADED_LOCK:
         _LOADED[str(target)] = placed
@@ -474,7 +476,8 @@ def _run_check(creds: dict, cached: Optional[CatalogBundle], *, opener=None
         return _FAILED, None
     # The wire format carries text only (same rule as the Node SDK).
     if any(name in files and not isinstance(files[name], str)
-           for name in BUNDLE_DATA_FILES + OPTIONAL_DATA_FILES):
+           for name in BUNDLE_DATA_FILES + OPTIONAL_DATA_FILES
+           + model_centroid_files(manifest.get("files") or {})):
         return _FAILED, None
     try:
         # Signature first (contract section 6), before anything is written to

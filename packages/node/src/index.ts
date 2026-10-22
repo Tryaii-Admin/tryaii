@@ -92,6 +92,15 @@ export { EmbeddingClassifier } from './classifiers/embedding.js';
 // Embeddings
 export { BaseEmbeddingProvider } from './embeddings/base.js';
 export { LocalEmbeddingProvider } from './embeddings/local.js';
+export { OnnxEmbeddingProvider } from './embeddings/onnx.js';
+export { WordPieceTokenizer } from './embeddings/wordpiece.js';
+export {
+  DEFAULT_ONNX_MODEL,
+  ENV_MODEL_PATH,
+  MODELS as EMBEDDING_MODELS,
+  ModelUnavailableError,
+  resolveModelPath,
+} from './embeddings/modelStore.js';
 
 // Centroids
 export { CentroidGenerator } from './centroids/generator.js';

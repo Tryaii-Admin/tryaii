@@ -1,4 +1,4 @@
-# tryaii CLI login — contract v1.1
+# tryaii CLI login — contract v1.2
 
 This is the client-side specification of `tryaii login` / `logout` / `whoami`:
 the device sign-in flow, the tokens a client sees, the HTTP API as seen by a
@@ -107,6 +107,14 @@ What the user sees after opening the URL the CLI printed:
 - Approve -> the CLI's next poll receives the tokens; Deny -> `access_denied`.
 - Unknown, expired or already-used codes are reported on the page; nothing is
   sent to the CLI.
+- v1.2 (2026-10-18): the confirm view also shows the CLI and SDK Data Notice
+  summary (heading "What the tryaii tool sends", the text and a "Details" link to
+  `https://tryaii.com/privacy-policy#cli-sdk`) above the warning, and under the
+  buttons: "By approving, you agree to the Terms of Use and acknowledge the Privacy
+  Policy." with both links. Approve also records, on the signed-in user's own
+  `users` document, `notice = {version, at}` and `terms = {version, at}` (both
+  versions are publication dates, `YYYY-MM-DD`), and a `device` consent record on
+  the monitor API (monitor contract v1.3 section 7.2). Nothing changes for a client.
 
 ## 6. SDK / CLI
 

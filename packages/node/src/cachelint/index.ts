@@ -24,6 +24,7 @@
 
 export { analyze, analyzeFull } from './api.js';
 export { analyzeItem, buildCanonical } from './analyzer.js';
+export { predictPair } from './sequence.js';
 export type { AnalyzedItem, Section } from './analyzer.js';
 export { render as renderReport } from './report.js';
 export { resolve, normModel, PROVIDERS, META } from './providers.js';

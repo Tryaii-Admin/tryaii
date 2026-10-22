@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { estimateGenerationCost } from '../budget.js';
 import { halfEvenRound } from '../cachelint/util/halfEven.js';
 import type { ModelRegistry } from '../registry/models.js';
+import { cachedTokensFromUsage, type CacheBlock } from './cache.js';
 
 export const EVENT_SCHEMA = 'tryaii.monitor.event/1';
 export const VECTOR_SCHEMA = 'tryaii.monitor.vector/1';
@@ -52,7 +53,36 @@ export const COST_DECIMALS = 6;
 
 const TS_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?$/;
 
-export interface Usage {
+/** Cache lifetimes a write or a request policy can name (SPEC.md §3.1b). */
+export const CACHE_TTLS = ['5m', '1h', '30m', '24h', 'explicit'] as const;
+export type CacheTtl = (typeof CACHE_TTLS)[number];
+/** Provider API shapes `normalizeCacheUsage` knows (SPEC.md §3.1b). */
+export const CACHE_PROVIDERS = [
+  'openai',
+  'openai_responses',
+  'openrouter',
+  'azure',
+  'anthropic',
+  'bedrock',
+  'gemini',
+] as const;
+export type CacheProvider = (typeof CACHE_PROVIDERS)[number];
+/** The event's `usage` keys, in contract order (SPEC.md §3.1, §3.1b). */
+export const USAGE_TOKEN_KEYS = ['prompt_tokens', 'completion_tokens', 'total_tokens'] as const;
+export const USAGE_CACHE_KEYS = ['cached_tokens', 'cache_write_tokens', 'cache_writes'] as const;
+
+export interface CacheWrite {
+  tokens: number;
+  ttl: CacheTtl;
+}
+
+export interface CacheUsage {
+  cached_tokens: number | null;
+  cache_write_tokens: number | null;
+  cache_writes: CacheWrite[] | null;
+}
+
+export interface Usage extends CacheUsage {
   prompt_tokens: number | null;
   completion_tokens: number | null;
   total_tokens: number | null;
@@ -131,19 +161,149 @@ export function estimateCost(
   return roundCost(estimateGenerationCost(model, Math.trunc(prompt), Math.trunc(completion)));
 }
 
-/** Normalise a provider `usage` (object) to the event shape. */
-export function usageFromResponse(usage: unknown): Usage | null {
+/** `obj[key]` for an object (attributes and dict keys alike); undefined when absent. */
+function get(obj: unknown, key: string): unknown {
+  if (obj === null || obj === undefined || typeof obj !== 'object') return undefined;
+  return (obj as Record<string, unknown>)[key];
+}
+
+/**
+ * A token count: a non-negative number truncated to an integer; booleans,
+ * negatives, NaN and non-numbers count as absent (SPEC.md §3.1b rule 5).
+ */
+function count(value: unknown): number | null {
+  if (!isNumber(value) || !Number.isFinite(value) || value < 0) return null;
+  return Math.trunc(value);
+}
+
+/** A lifetime of CACHE_TTLS (lower-cased, trimmed), else null. */
+function ttlOf(value: unknown): CacheTtl | null {
+  if (typeof value !== 'string') return null;
+  const text = value.trim().toLowerCase();
+  return (CACHE_TTLS as readonly string[]).includes(text) ? (text as CacheTtl) : null;
+}
+
+/**
+ * `[{tokens, ttl}, ...]` from a breakdown list; entries with zero tokens, a
+ * bad count or an unknown ttl are dropped; null when `writes` is not a list
+ * (no breakdown).
+ */
+export function normalizeCacheWrites(writes: unknown): CacheWrite[] | null {
+  if (!Array.isArray(writes)) return null;
+  const out: CacheWrite[] = [];
+  for (const entry of writes) {
+    const tokens = count(get(entry, 'tokens'));
+    const ttl = ttlOf(get(entry, 'ttl'));
+    if (tokens && ttl) out.push({ tokens, ttl });
+  }
+  return out;
+}
+
+function cacheFields(read: unknown, write: unknown, writes: unknown): CacheUsage {
+  const cached = count(read);
+  let total = count(write);
+  const breakdown = normalizeCacheWrites(writes);
+  if (total === null && breakdown !== null) total = breakdown.reduce((acc, w) => acc + w.tokens, 0);
+  return { cached_tokens: cached, cache_write_tokens: total, cache_writes: breakdown };
+}
+
+function openaiCache(raw: unknown, detailsKey: string, topLevelRead = false): CacheUsage {
+  const details = get(raw, detailsKey);
+  let read = get(details, 'cached_tokens');
+  if ((read === null || read === undefined) && topLevelRead) read = get(raw, 'cached_tokens');
+  let write = get(details, 'cache_write_tokens');
+  if (write === null || write === undefined) write = get(raw, 'cache_write_tokens');
+  return cacheFields(read, write, null);
+}
+
+function anthropicCache(raw: unknown): CacheUsage {
+  const creation = get(raw, 'cache_creation');
+  let writes: unknown = null;
+  if (creation !== null && creation !== undefined) {
+    writes = [
+      { tokens: get(creation, 'ephemeral_5m_input_tokens'), ttl: '5m' },
+      { tokens: get(creation, 'ephemeral_1h_input_tokens'), ttl: '1h' },
+    ];
+  }
+  return cacheFields(get(raw, 'cache_read_input_tokens'), get(raw, 'cache_creation_input_tokens'), writes);
+}
+
+function bedrockCache(raw: unknown): CacheUsage {
+  const details = get(raw, 'cacheDetails');
+  let writes: unknown = null;
+  if (Array.isArray(details)) {
+    writes = details.map((d) => ({ tokens: get(d, 'inputTokens'), ttl: get(d, 'ttl') }));
+  }
+  return cacheFields(get(raw, 'cacheReadInputTokens'), get(raw, 'cacheWriteInputTokens'), writes);
+}
+
+function geminiCache(raw: unknown): CacheUsage {
+  let meta = get(raw, 'usageMetadata');
+  if (meta === null || meta === undefined) meta = get(raw, 'usage_metadata');
+  if (meta === null || meta === undefined) meta = raw;
+  let read = get(meta, 'cachedContentTokenCount');
+  if (read === null || read === undefined) read = get(meta, 'cached_content_token_count');
+  return cacheFields(read, null, null);
+}
+
+/**
+ * Map a provider's raw usage object to the event's cache columns (SPEC.md
+ * §3.1b): `{cached_tokens, cache_write_tokens, cache_writes}`, every
+ * key present, null for what the provider does not report. `provider` is
+ * the API shape (CACHE_PROVIDERS); an unknown shape or no usage answers all
+ * null. Pure: TS-229 calls it from the wrappers, the `cache_usage` fixtures
+ * freeze it. Mirrors events.normalize_cache_usage.
+ */
+export function normalizeCacheUsage(provider: unknown, rawUsage: unknown): CacheUsage {
+  const empty: CacheUsage = { cached_tokens: null, cache_write_tokens: null, cache_writes: null };
+  if (rawUsage === null || rawUsage === undefined || typeof provider !== 'string') return empty;
+  const shape = provider.trim().toLowerCase();
+  if (shape === 'openai' || shape === 'azure') return openaiCache(rawUsage, 'prompt_tokens_details');
+  if (shape === 'openrouter') return openaiCache(rawUsage, 'prompt_tokens_details', true);
+  if (shape === 'openai_responses') return openaiCache(rawUsage, 'input_tokens_details');
+  if (shape === 'anthropic') return anthropicCache(rawUsage);
+  if (shape === 'bedrock') return bedrockCache(rawUsage);
+  if (shape === 'gemini') return geminiCache(rawUsage);
+  return empty;
+}
+
+/**
+ * The event's `usage` in contract key order from an event-shaped object:
+ * the three token counts plus the §3.1b cache fields, each null when absent
+ * or malformed; null when nothing is numeric. Mirrors events.normalize_usage.
+ */
+export function normalizeUsage(usage: unknown): Usage | null {
   if (usage === null || usage === undefined) return null;
-  const get = (key: string): unknown =>
-    typeof usage === 'object' ? (usage as Record<string, unknown>)[key] : undefined;
-  const out: Usage = { prompt_tokens: null, completion_tokens: null, total_tokens: null };
-  for (const key of ['prompt_tokens', 'completion_tokens', 'total_tokens'] as const) {
-    const value = get(key);
-    out[key] = isNumber(value) ? Math.trunc(value) : null;
-  }
-  if (out.prompt_tokens === null && out.completion_tokens === null && out.total_tokens === null) {
-    return null;
-  }
+  const cache = cacheFields(get(usage, 'cached_tokens'), get(usage, 'cache_write_tokens'), get(usage, 'cache_writes'));
+  const out: Usage = {
+    prompt_tokens: count(get(usage, 'prompt_tokens')),
+    completion_tokens: count(get(usage, 'completion_tokens')),
+    total_tokens: count(get(usage, 'total_tokens')),
+    cached_tokens: cache.cached_tokens,
+    cache_write_tokens: cache.cache_write_tokens,
+    cache_writes: cache.cache_writes,
+  };
+  if (Object.values(out).every((v) => v === null)) return null;
+  return out;
+}
+
+/** `cache_ttl_policy`: one of CACHE_TTLS or null (SPEC.md §3.1b). */
+export function normalizeCacheTtlPolicy(value: unknown): CacheTtl | null {
+  return ttlOf(value);
+}
+
+/**
+ * Normalise a provider `usage` (object) to the event shape. `cached_tokens`
+ * is read from the raw usage (API.md v1.4: `prompt_tokens_details.cached_tokens`
+ * or `cache_read_input_tokens`) unless the input already carries it under its
+ * event name; the write columns pass through when the input carries them
+ * under their event names (TS-229 merges `normalizeCacheUsage` into the raw
+ * usage before calling this) and are null otherwise.
+ */
+export function usageFromResponse(usage: unknown): Usage | null {
+  const out = normalizeUsage(usage);
+  // API.md v1.4: the provider's cached prompt tokens (null = not reported).
+  if (out !== null && out.cached_tokens === null) out.cached_tokens = cachedTokensFromUsage(usage);
   return out;
 }
 
@@ -178,7 +338,8 @@ export interface EventFields {
   winner_reachable: boolean;
   route_status: string;
   classification: Classification | null;
-  usage: Usage | null;
+  /** Event-shaped usage; the §3.1b cache keys may be absent (they are emitted as null). */
+  usage: Partial<Usage> | null;
   est_cost_usd: number | null;
   est_cost_winner_usd: number | null;
   latency_ms: number | null;
@@ -191,6 +352,10 @@ export interface EventFields {
   taxonomy_version?: string | null;
   /** The usage priced at the anchor (equal to est_cost_usd when nothing was swapped). */
   est_cost_anchor_usd?: number | null;
+  /** API.md v1.4: the last key, present only when the call ran the runtime cache lint. */
+  cache?: CacheBlock | null;
+  /** The cache lifetime the request asked for (SPEC.md §3.1b); unknown values record as null. */
+  cache_ttl_policy?: string | null;
 }
 
 /** One event line in contract key order (SPEC.md §3.1). */
@@ -203,7 +368,7 @@ export function buildEvent(f: EventFields): Record<string, unknown> {
       function: f.call_site.function ?? null,
     };
   }
-  return {
+  const event: Record<string, unknown> = {
     schema: EVENT_SCHEMA,
     event_id: f.event_id || newEventId(),
     ts: f.ts,
@@ -220,7 +385,8 @@ export function buildEvent(f: EventFields): Record<string, unknown> {
     route_status: f.route_status,
     classification: f.classification,
     taxonomy_version: f.taxonomy_version ?? null,
-    usage: f.usage,
+    usage: normalizeUsage(f.usage),
+    cache_ttl_policy: normalizeCacheTtlPolicy(f.cache_ttl_policy),
     est_cost_usd: roundCost(f.est_cost_usd),
     est_cost_winner_usd: roundCost(f.est_cost_winner_usd),
     est_cost_anchor_usd: roundCost(f.est_cost_anchor_usd),
@@ -230,6 +396,8 @@ export function buildEvent(f: EventFields): Record<string, unknown> {
     prompt_hash: f.prompt_hash,
     vector: Boolean(f.vector),
   };
+  if (f.cache !== null && f.cache !== undefined) event.cache = f.cache;
+  return event;
 }
 
 /** One vectors line: the prompt's embedding, 4 dp (SPEC.md §1.3). */

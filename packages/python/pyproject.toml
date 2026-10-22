@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tryaii"
-version = "0.7.1"
+version = "0.8.0"
 description = "TryAii Diff Routing Engine -- Embedding-based AI model router. Understands your prompt semantically and routes to the best model based on benchmarks, cost, speed, and quality."
 readme = "README.md"
 license = "Apache-2.0"
@@ -34,11 +34,19 @@ dependencies = [
     "numpy>=1.24.0",
     "pydantic>=2.0.0",
     "python-dotenv>=1.0.0",
-    "sentence-transformers>=2.2.0",
+    # Local embeddings: all-MiniLM-L6-v2 as an int8 ONNX file (TS-252), no PyTorch.
+    "onnxruntime>=1.17.0",
+    "tokenizers>=0.15.0",
+    # The model file itself (22.8 MB), pinned to the sha256 in
+    # tryaii.embeddings.model_store; built from packages/python-model.
+    "tryaii-minilm-int8==1.0.0",
 ]
 
 [project.optional-dependencies]
 openai = ["openai>=1.0.0"]
+# sentence-transformers (and PyTorch): building fp32 centroids, and running any
+# embedding model other than the default ONNX build. Not needed to route.
+centroids = ["sentence-transformers>=2.2.0"]
 openrouter = ["httpx>=0.25.0"]
 # Exact token counts for the cachelint analyzer's OpenAI/xAI paths.
 cachelint = ["tiktoken>=0.5.0"]
@@ -74,6 +82,7 @@ Homepage = "https://github.com/Tryaii-Admin/tryaii"
 Documentation = "https://github.com/Tryaii-Admin/tryaii#readme"
 Repository = "https://github.com/Tryaii-Admin/tryaii"
 Issues = "https://github.com/Tryaii-Admin/tryaii/issues"
+Privacy = "https://tryaii.com/privacy-policy#cli-sdk"
 
 [tool.hatch.build.targets.wheel]
 packages = ["tryaii"]
@@ -115,6 +124,14 @@ ignore = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# `-m "not slow"` is the light suite the tryaii-dev pull-request CI runs; the
+# full CI (production repo, or dev with the `full-ci` label) runs everything.
+# Mark a test slow only when it takes seconds AND is covered on the full run:
+# black-box contract suites, end-to-end CLI flows, cross-CLI parity. Unmarked
+# tests (the default) run everywhere; keep the shared-fixture parity cases so.
+markers = [
+    "slow: slow test excluded from the light dev CI (pytest -m \"not slow\")",
+]
 
 [tool.mypy]
 python_version = "3.9"

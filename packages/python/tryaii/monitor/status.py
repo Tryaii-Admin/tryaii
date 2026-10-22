@@ -93,6 +93,7 @@ def aggregate(app: str, events, pins: Optional[dict], config: Optional[dict],
     total_swapped = 0
     total_anchor = total_realised = 0.0
     any_anchored = False
+    total_cache: dict = {"cached_tokens": None, "cache_write_tokens": None}
     for name in sorted(names):
         rows = by_process.get(name, [])
         mode = resolve_mode(name, env=env, remote=remote, config=config)
@@ -103,12 +104,17 @@ def aggregate(app: str, events, pins: Optional[dict], config: Optional[dict],
         calls = len(rows)
         errors = sum(1 for e in rows if e.get("error"))
         tokens = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        cache: dict = {"cached_tokens": None, "cache_write_tokens": None}
         for e in rows:
             usage = e.get("usage") or {}
             for key in tokens:
                 value = usage.get(key)
                 if isinstance(value, (int, float)):
                     tokens[key] += int(value)
+            for key in cache:
+                value = usage.get(key)
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    cache[key] = (cache[key] or 0) + int(value)
         cost = sum(e["est_cost_usd"] for e in rows if e.get("est_cost_usd") is not None)
         paired = [e for e in rows
                   if e.get("est_cost_usd") is not None and e.get("est_cost_winner_usd") is not None]
@@ -142,6 +148,8 @@ def aggregate(app: str, events, pins: Optional[dict], config: Optional[dict],
             "prompt_tokens": tokens["prompt_tokens"],
             "completion_tokens": tokens["completion_tokens"],
             "total_tokens": tokens["total_tokens"],
+            "cached_tokens": cache["cached_tokens"],
+            "cache_write_tokens": cache["cache_write_tokens"],
             "est_cost_usd": round_cost(cost),
             "est_cost_winner_usd": round_cost(cost_winner) if paired else None,
             "savings_usd": round_cost(cost_paired - cost_winner) if paired else None,
@@ -153,6 +161,9 @@ def aggregate(app: str, events, pins: Optional[dict], config: Optional[dict],
         })
         total_calls += calls
         total_errors += errors
+        for key in total_cache:
+            if cache[key] is not None:
+                total_cache[key] = (total_cache[key] or 0) + cache[key]
         total_cost += cost
         total_paired += cost_paired
         total_winner += cost_winner
@@ -172,6 +183,8 @@ def aggregate(app: str, events, pins: Optional[dict], config: Optional[dict],
         "totals": {
             "calls": total_calls,
             "errors": total_errors,
+            "cached_tokens": total_cache["cached_tokens"],
+            "cache_write_tokens": total_cache["cache_write_tokens"],
             "est_cost_usd": round_cost(total_cost),
             "est_cost_winner_usd": round_cost(total_winner) if any_paired else None,
             "savings_usd": round_cost(total_paired - total_winner) if any_paired else None,

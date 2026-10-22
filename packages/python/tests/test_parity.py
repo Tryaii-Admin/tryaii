@@ -28,6 +28,8 @@ STARTER_FILES = (
     "normalization_ranges.json",
     "centroids.json",
     "training_queries.json",
+    # Centroids of the int8 ONNX embedding build (catalog contract v1.3).
+    "centroids.all-MiniLM-L6-v2-onnx-int8.json",
 )
 NODE_PRESET = NODE_STARTER / "models.json"
 PY_PRESET = PY_STARTER / "models.json"
@@ -230,6 +232,7 @@ MONITOR_VERB_HELP_CONSTANTS = {
     "set": "HELP_MONITOR_SET",
     "apps": "HELP_MONITOR_APPS",
     "events": "HELP_MONITOR_EVENTS",
+    "upload": "HELP_MONITOR_UPLOAD",
 }
 
 # apps verb -> the constant that holds its help text in both CLIs.
@@ -641,3 +644,54 @@ def test_packaged_starter_is_a_starter_bundle():
     assert manifest["counts"]["models"] <= 60
     assert manifest["counts"]["benchmarks"] <= 16
     assert manifest["full_counts"]["models"] > manifest["counts"]["models"]
+
+
+# TS-253: both SDKs tokenize with the same tokenizer.json (master:
+# shared/embeddings/<model>/tokenizer.json, copied by scripts/sync-shared.py).
+_TOKENIZER = ("embeddings", "all-MiniLM-L6-v2-onnx-int8", "tokenizer.json")
+
+
+def test_tokenizer_identical_across_sdks():
+    master = SHARED.joinpath(*_TOKENIZER)
+    tail = _TOKENIZER[1:]
+    py_copy = REPO_ROOT.joinpath("packages", "python", "tryaii", "embeddings", "data", *tail)
+    node_copy = REPO_ROOT.joinpath("packages", "node", "src", "embeddings", "data", *tail)
+    if not master.exists():
+        pytest.skip("shared/ not present (packaged checkout)")
+    assert py_copy.read_bytes() == master.read_bytes(), "run python scripts/sync-shared.py"
+    if not node_copy.exists():
+        pytest.skip("Node package data not present (python-only checkout)")
+    assert node_copy.read_bytes() == master.read_bytes(), "run python scripts/sync-shared.py"
+
+
+def test_embedding_fixtures_match_the_python_sdk():
+    """shared/embeddings/*_parity.json (the Node SDK's targets) are what this
+    SDK produces today, on this machine: the tokenizer ids exactly and, with
+    the real model, the classifications (same category, similarities within
+    5e-5 -- fp32 arithmetic differs in the last bits between CPUs, so the
+    6-decimal file is not byte-reproducible everywhere)."""
+    import importlib.util
+    import json
+
+    script = REPO_ROOT / "scripts" / "gen-embedding-fixtures.py"
+    if not script.exists():
+        pytest.skip("scripts/ not present (packaged checkout)")
+    spec = importlib.util.spec_from_file_location("gen_embedding_fixtures", script)
+    gen = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen)
+    assert gen.build_tokenizer() == gen.OUT_TOKENIZER.read_text(encoding="utf-8"), (
+        "run python scripts/gen-embedding-fixtures.py")
+
+    from tryaii.embeddings import model_store
+
+    if model_store.resolve_model_path("all-MiniLM-L6-v2-onnx-int8") is None:
+        pytest.skip(f"int8 ONNX model not available ({model_store.last_error()})")
+    live = json.loads(gen.build_classification())
+    frozen = json.loads(gen.OUT_CLASSIFICATION.read_text(encoding="utf-8"))
+    assert live["starter_version"] == frozen["starter_version"], (
+        "run python scripts/gen-embedding-fixtures.py")
+    assert [c["text"] for c in live["cases"]] == [c["text"] for c in frozen["cases"]]
+    for got, want in zip(live["cases"], frozen["cases"]):
+        assert (got["category"], got["subcategory"]) == (want["category"], want["subcategory"])
+        for name, value in want["similarities"].items():
+            assert abs(got["similarities"][name] - value) < 5e-5, (want["text"], name)

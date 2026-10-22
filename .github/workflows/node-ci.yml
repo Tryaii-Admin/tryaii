@@ -1,20 +1,26 @@
 name: Node CI
 
-# Production (public release) repo: the FULL check (Node 18/20/22, full suite, publish-check) runs on every
-# pull request into main and on manual runs, and on nothing else: no push
-# runs on any branch (main only changes through reviewed PRs, and a release
-# tag is verified by release.yml itself). A newer push to the same PR
-# cancels the running check.
+# One file, two modes (same file in tryaii-dev and the public release repo;
+# the mode follows the repository the run is in):
 #
-# tryaii-dev carries a mode-aware copy of this file (light there, full here,
-# decided by github.repository), so a release that copies the dev tree
-# across keeps this repo on the full matrix.
+#   LIGHT  (Tryaii-Admin/tryaii-dev by default): Node 22 only, type check,
+#          build, `npm run test:light` (vitest.light.config.ts), no publish-check.
+#   FULL   (Tryaii-Admin/tryaii, the production repo, and anything else; or
+#          tryaii-dev on request): Node 18/20/22, the whole suite, publish-check.
+#
+# Run the full suite on tryaii-dev: add the `full-ci` label to the PR, or
+# Actions > Node CI > Run workflow > full: true.
+#
+# Triggers: pull requests into main and manual runs only (no push runs; see
+# python-ci.yml for why).
 
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, labeled]
     paths:
       - "packages/node/**"
+      - "packages/node-model/**"
       - "shared/**"
       - ".github/workflows/node-ci.yml"
       # Prose-only changes run nothing...
@@ -25,9 +31,14 @@ on:
       - "docs/auth/CONTRACT-*.md"
       - "docs/catalog/CONTRACT-*.md"
   workflow_dispatch:
+    inputs:
+      full:
+        description: "Full matrix and full suite (Node 18/20/22, slow tests, publish-check)"
+        type: boolean
+        default: false
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}${{ (github.event.action == 'labeled' && github.event.label.name != 'full-ci') && format('-ignored-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -35,10 +46,13 @@ permissions:
 
 jobs:
   test:
+    if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
     runs-on: ubuntu-latest
+    env:
+      CI_FULL: ${{ github.repository != 'Tryaii-Admin/tryaii-dev' || inputs.full == true || contains(github.event.pull_request.labels.*.name, 'full-ci') }}
     strategy:
       matrix:
-        node-version: [18, 20, 22]
+        node-version: ${{ fromJSON((github.repository != 'Tryaii-Admin/tryaii-dev' || inputs.full == true || contains(github.event.pull_request.labels.*.name, 'full-ci')) && '[18, 20, 22]' || '[22]') }}
 
     defaults:
       run:
@@ -51,6 +65,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: packages/node/package-lock.json
 
       - name: Install dependencies
         run: npm install
@@ -58,14 +74,25 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
-      # The CLI black-box suites (auth/catalog contract) spawn dist/cli.js.
+      # The CLI black-box suites (auth/catalog contract) and the fixture
+      # suites spawn dist/cli.js.
       - name: Build
         run: npm run build
 
-      - name: Run tests
+      - name: Run tests (full suite)
+        if: env.CI_FULL == 'true'
         run: npx vitest run
 
+      # Everything except SLOW_TEST_FILES in vitest.light.config.ts (black-box
+      # contract goldens and end-to-end CLI flows); fixture parity stays in.
+      - name: Run tests (light)
+        if: env.CI_FULL != 'true'
+        run: npm run test:light
+
   publish-check:
+    if: >-
+      (github.event.action != 'labeled' || github.event.label.name == 'full-ci') &&
+      (github.repository != 'Tryaii-Admin/tryaii-dev' || inputs.full == true || contains(github.event.pull_request.labels.*.name, 'full-ci'))
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -78,6 +105,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: packages/node/package-lock.json
 
       - name: Install dependencies
         run: npm install

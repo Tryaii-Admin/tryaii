@@ -16,6 +16,9 @@ import { AuthNetworkError } from './auth/transport.js';
 import { currentSession, ensureAccessToken } from './auth/flow.js';
 import { formatFixed } from './cachelint/util/halfEven.js';
 import * as api from './monitor/api.js';
+import { formatTs } from './monitor/events.js';
+import * as privacy from './monitor/privacy.js';
+import * as monitorStore from './monitor/store.js';
 
 export const VERBS = ['create', 'list', 'keys', 'check'] as const;
 const HELP_HINT = 'Run "tryaii help apps".';
@@ -213,6 +216,45 @@ async function verbCreate(ctx: Ctx, argv: string[]): Promise<void> {
     return;
   }
   ctx.printNewKey(keyResp.body.key);
+  await showNoticeAfterCreate(ctx);
+}
+
+/**
+ * POST /v1/monitor/consent for the signed-in user (API.md §7.2): call it only
+ * right after the Data Notice was printed to a terminal. Resolves to true when
+ * recorded; never rejects.
+ */
+async function recordConsentWith(ctx: Ctx, source: string): Promise<boolean> {
+  try {
+    const resp = await ctx.userCall('POST', '/v1/monitor/consent', {
+      notice_version: privacy.NOTICE_VERSION,
+      source,
+    });
+    return resp.status === 204;
+  } catch {
+    return false;
+  }
+}
+
+/** `recordConsentWith` for callers outside `tryaii apps` (the monitor CLI). */
+export function recordConsent(source: string): Promise<boolean> {
+  const silent = (): void => undefined;
+  return recordConsentWith(new Ctx({ out: silent, err: silent, version: api.sdkVersion() }), source);
+}
+
+/**
+ * `apps create` starts uploads: show the Data Notice to the person (a
+ * terminal only) and record that it was shown.
+ */
+async function showNoticeAfterCreate(ctx: Ctx): Promise<void> {
+  if (!privacy.canShowNotice(process.stderr, ctx.env)) return;
+  ctx.io.err('\n' + privacy.NOTICE_TEXT);
+  try {
+    privacy.markNoticeShown(monitorStore.monitorRoot(monitorStore.dataDirFromEnv(ctx.env)), formatTs(Date.now()));
+  } catch {
+    // best effort
+  }
+  await recordConsentWith(ctx, 'cli');
 }
 
 /** Python's str() for the JSON values an API body holds. */

@@ -23,6 +23,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   BUNDLE_DATA_FILES,
+  listedDataFiles,
   BundleIntegrityError,
   CatalogBundle,
   STARTER_BUNDLE_DIR,
@@ -220,7 +221,7 @@ describe('ModelPolicy', () => {
 function starterFiles(): { manifest: Record<string, any>; files: Record<string, string> } {
   const manifest = JSON.parse(readFileSync(join(STARTER_BUNDLE_DIR, 'manifest.json'), 'utf-8'));
   const files: Record<string, string> = {};
-  for (const name of BUNDLE_DATA_FILES) {
+  for (const name of listedDataFiles(manifest)) {
     files[name] = readFileSync(join(STARTER_BUNDLE_DIR, name), 'utf-8');
   }
   return { manifest, files };

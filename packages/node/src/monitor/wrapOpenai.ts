@@ -45,6 +45,7 @@ import {
   type Usage,
 } from './events.js';
 import { routingText } from './extract.js';
+import { CacheTracker, type CacheBlock } from './cache.js';
 import { evaluatePin, pinFromFirstCall, pinValid, setPin, type Pin, type PinsDoc } from './pins.js';
 import * as store from './store.js';
 import {
@@ -188,6 +189,14 @@ export interface CallPlan {
   routeAllowed: string[] | null;
   shadowAllowed: string[] | null;
   lintKey: string | null;
+  /**
+   * The linted request (model and a snapshot of its messages), kept for the
+   * event's `cache` block (API.md v1.4 §3.2.1); null when cachelint is off.
+   */
+  lintModel?: string | null;
+  lintMessages?: unknown[] | null;
+  /** Tool schemas of the linted request (`tools` then legacy `functions`). */
+  lintTools?: unknown[] | null;
 }
 
 function sameList(a: readonly string[] | null, b: readonly string[] | null): boolean {
@@ -228,6 +237,9 @@ export class Monitor {
   private readonly pinsDoc: CachedDoc<PinsDoc & Record<string, unknown>>;
   private readonly vectors: boolean;
   private hook: CacheLintLike | null = null;
+  private readonly cachelint: boolean;
+  private cacheEngine: Promise<CacheTracker | null> | null = null;
+  private cacheTracker: CacheTracker | null = null;
 
   constructor(provider: Provider, opts: MonitorOptions = {}) {
     this.provider = provider;
@@ -253,6 +265,7 @@ export class Monitor {
     }
     this.vectors = opts.vectors === null || opts.vectors === undefined ? vectorsEnabled() : Boolean(opts.vectors);
     if (opts.cachelint) this.hook = loadCacheLintHook();
+    this.cachelint = Boolean(opts.cachelint);
   }
 
   get transport(): Transport {
@@ -314,6 +327,9 @@ export class Monitor {
         routeAllowed: routeAllowed(this.provider, ids, anchor, policy),
         shadowAllowed: shadowAllowed(ids, policy),
         lintKey: null,
+        lintModel: null,
+        lintMessages: null,
+        lintTools: null,
       };
     } catch (err) {
       debug('before() failed', err);
@@ -431,6 +447,18 @@ export class Monitor {
         const messages = Array.isArray(params.messages) ? params.messages : [];
         plan.lintKey = this.hook.preflight(typeof params.model === 'string' ? params.model : '', messages);
       }
+      if (this.cachelint && Array.isArray(params.messages)) {
+        // Snapshot: the caller may push to its array before the event is
+        // recorded. The engine loads in the background (multi-MB ranks).
+        plan.lintModel = typeof params.model === 'string' ? params.model : '';
+        plan.lintMessages = params.messages.map((m) => (isObject(m) ? { ...m } : m));
+        const schemas = [
+          ...(Array.isArray(params.tools) ? params.tools : []),
+          ...(Array.isArray(params.functions) ? params.functions : []),
+        ];
+        plan.lintTools = schemas.length > 0 ? schemas : null;
+        void this.loadCacheEngine();
+      }
     } catch (err) {
       debug('apply() failed', err);
     }
@@ -466,6 +494,7 @@ export class Monitor {
             o = makeOutcome(STATUS_SKIPPED);
           }
         }
+        if (plan.lintMessages) await this.loadCacheEngine();
         this.write(plan, o, usage, args.latencyMs, error);
       };
       if (!this.transportRef.submit(job)) {
@@ -531,15 +560,49 @@ export class Monitor {
       prompt_hash: plan.promptHash,
       vector: vectorWritten,
       taxonomy_version: this.transportRef.taxonomyVersion(),
+      cache: this.cacheBlock(plan),
     });
     store.appendEvent(this.dir, event);
+  }
+
+  /** Load the cachelint engine once; resolves to null when it cannot load. */
+  private loadCacheEngine(): Promise<CacheTracker | null> {
+    this.cacheEngine ??= import('../cachelint/index.js').then(
+      (engine) => (this.cacheTracker = new CacheTracker(engine)),
+      (err) => {
+        debug('cachelint engine failed to load', err);
+        return null;
+      },
+    );
+    return this.cacheEngine;
+  }
+
+  /**
+   * `{outcome, report}` when this call was linted, else null. A call written
+   * before the engine finished loading (an error recorded right away, a full
+   * queue) has no block.
+   */
+  private cacheBlock(plan: CallPlan): CacheBlock | null {
+    const messages = plan.lintMessages;
+    if (!messages || this.cacheTracker === null) return null;
+    const tools = plan.lintTools ?? undefined;
+    plan.lintMessages = null;
+    plan.lintTools = null;
+    try {
+      return this.cacheTracker.observe(plan.process, plan.lintModel ?? '', messages, tools);
+    } catch (err) {
+      debug('cache block failed', err); // fail-open: the event is still written
+      return null;
+    }
   }
 }
 
 function loadCacheLintHook(): CacheLintLike | null {
   // The Node cachelint hook's preflight() is async (it loads the tokenizer
-  // ranks lazily), which does not fit the synchronous apply() step; the
-  // option is accepted for parity with Python and reserved for a later slice.
+  // ranks lazily), which does not fit the synchronous apply() step: the
+  // stderr warnings and VERIFY_MISS stay Python-only for now. The event's
+  // `cache` block (API.md v1.4) is computed off the hot path instead, by
+  // Monitor.cacheBlock() once the engine has loaded.
   return null;
 }
 

@@ -591,6 +591,8 @@ def test_end_to_end_denied_with_fake_server(monkeypatch, capsys, fake_server):
     assert (code, err) == (1, "Login denied in the browser.\n")
 
 
+# Spawns the CLI under several console encodings (~12 s): full CI only.
+@pytest.mark.slow
 def test_auth_commands_write_utf8_whatever_the_console_encoding(tmp_path, fake_server):
     # v1.1 item 20: a non-cp1252 email used to crash login AFTER the
     # credentials were saved. Force a cp1252 stdout on every platform.

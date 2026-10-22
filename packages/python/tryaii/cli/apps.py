@@ -119,6 +119,41 @@ def _user_call(method: str, path: str, body=None):
     return resp
 
 
+def record_consent(source: str) -> bool:
+    """POST /v1/monitor/consent for the signed-in user (API.md §7.2): call it
+    only right after the Data Notice was printed to a terminal. True when
+    recorded; never raises."""
+    from tryaii.monitor.privacy import NOTICE_VERSION
+
+    try:
+        resp = _user_call("POST", "/v1/monitor/consent",
+                          {"notice_version": NOTICE_VERSION, "source": source})
+    except Exception:  # noqa: BLE001 -- best effort
+        return False
+    return resp.status == 204
+
+
+def _show_notice_after_create() -> None:
+    """`apps create` starts uploads: show the Data Notice to the person (a
+    terminal only) and record that it was shown."""
+    from tryaii.monitor import privacy, store
+
+    if not privacy.can_show_notice(sys.stderr):
+        return
+    sys.stderr.write("\n" + privacy.NOTICE_TEXT)
+    try:
+        from datetime import datetime, timezone
+
+        from tryaii.config import TryaiiDreConfig
+        from tryaii.monitor.events import format_ts
+
+        privacy.mark_notice_shown(store.monitor_root(TryaiiDreConfig().data_dir),
+                                  format_ts(datetime.now(timezone.utc)))
+    except Exception:  # noqa: BLE001 -- best effort
+        pass
+    record_consent("cli")
+
+
 # --- rendering -----------------------------------------------------------------
 
 def _table(headers: tuple, rows: list, right: set) -> list:
@@ -194,6 +229,7 @@ def _verb_create(argv: list) -> None:
         print(KEY_WARNING, file=sys.stderr)
         return
     _print_new_key(key_resp.body["key"])
+    _show_notice_after_create()
 
 
 APP_COLUMNS = ("app id", "name", "keys", "calls 24h", "cost 24h", "last event")

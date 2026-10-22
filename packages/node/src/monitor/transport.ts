@@ -1,6 +1,16 @@
 /**
- * Routing transport for the monitor wrapper: the warm daemon, off the hot
- * path. Mirrors monitor/transport.py.
+ * Routing transport for the monitor wrapper. Mirrors monitor/transport.py.
+ *
+ * TS-253: the warm-up first builds the in-process engine (`./engine.js`: the
+ * int8 ONNX embedding model on onnxruntime-node, the same model file,
+ * tokenizer and centroids as the Python SDK). With it, routes run in this
+ * process and need no Python and no daemon. When onnxruntime-node or the
+ * model file (`tryaii-minilm-int8`, or TRYAII_EMBEDDING_MODEL_PATH) is
+ * missing, the daemon below is the fallback for one release; when neither
+ * works the calls are recorded metadata-only (`unavailable`) and the reason
+ * is reported at most once per machine per day (SPEC.md §3.1a).
+ *
+ * The daemon path (fallback), off the hot path:
  *
  * One Transport per process tracks un-awaited background jobs in a bounded
  * pending set (Node has no worker thread to spare; the jobs are I/O-bound).
@@ -43,6 +53,13 @@
  */
 
 import { createDefaultConfig, type TryaiiDreConfig } from '../config.js';
+import {
+  DEFAULT_ONNX_MODEL,
+  MODELS,
+  ENV_MODEL_PATH,
+  clearUnavailable,
+  reportUnavailable,
+} from '../embeddings/modelStore.js';
 import { starterBundle, type CatalogBundle } from '../catalog/bundle.js';
 import {
   FEATURE_ALLOWED_MODELS,
@@ -61,6 +78,7 @@ import { PolicyError, resolvePolicy, type ModelPolicy, type PolicyLike } from '.
 import { ModelRegistry } from '../registry/models.js';
 import { DEFAULT_PRIORITIES } from '../scoring/priorities.js';
 import { apiKey, apiUrl } from './api.js';
+import { InProcessEngine } from './engine.js';
 import { taxonomyVersion, type RouteStatus } from './events.js';
 import { RemotePoller, remoteEnabled } from './remote.js';
 import { dataDirFromEnv } from './store.js';
@@ -163,6 +181,8 @@ export class Transport {
   private registryCache: ModelRegistry | null = null;
   private state: DaemonState | null = null;
   private stateCheckedAt = -Infinity;
+  /** The in-process engine (TS-253), set by the warm-up when available. */
+  private engine: InProcessEngine | null = null;
   private started = false;
   /**
    * The warm-up (catalog selection + daemon), created once by `start()`;
@@ -369,6 +389,13 @@ export class Transport {
     if (bundle === null) bundle = starterBundle();
     this.setBundle(bundle);
     if (isDisabled()) return;
+    const built = await InProcessEngine.create(this.config, bundle, TOP_K);
+    if (built.engine !== null) {
+      this.engine = built.engine;
+      clearUnavailable(this.dataDir);
+      return;
+    }
+    debug(`in-process engine unavailable (${built.reason}); trying the daemon`);
     try {
       this.state = await ensureDaemon(this.config, { bundle });
     } catch (err) {
@@ -376,6 +403,26 @@ export class Transport {
       this.state = null;
     }
     this.stateCheckedAt = Date.now();
+    if (this.state === null) this.reportNoEngine(built.reason ?? 'not found');
+  }
+
+  /** Neither the in-process engine nor a daemon: say so, at most once a day. */
+  private reportNoEngine(reason: string): void {
+    const model = DEFAULT_ONNX_MODEL;
+    try {
+      reportUnavailable(model, reason, {
+        dataDir: this.dataDir,
+        warn: (msg) => process.stderr.write(`${msg}\n`),
+        debug: (msg) => debug(msg),
+        message:
+          `tryaii monitor: embedding model ${model} is not available (${reason}); recording ` +
+          `metadata only and sending the model in your code. Fix: npm install onnxruntime-node ` +
+          `${MODELS[model].distribution}, or set ${ENV_MODEL_PATH} to a copy of the model file. ` +
+          'Shown at most once a day; see: tryaii monitor status',
+      });
+    } catch (err) {
+      debug('could not record the embedding model state', err);
+    }
   }
 
   // -- routing ---------------------------------------------------------
@@ -424,6 +471,7 @@ export class Transport {
     // worker); an in-path route never does.
     if (!opts.inPath && this.warmUp !== null) await Promise.race([this.warmUp, this.closed]);
     if (this.closing) return outcome(STATUS_UNAVAILABLE);
+    if (this.engine !== null) return this.routeInProcess(this.engine, text, opts);
     const state = await this.daemonState(!opts.inPath);
     if (state === null) return outcome(STATUS_UNAVAILABLE);
     const payload: Record<string, unknown> = {
@@ -469,6 +517,34 @@ export class Transport {
     }
     const embedding = isObject(data) ? data.embedding : null;
     return outcome(STATUS_OK, scores, classification, isObject(embedding) ? (embedding as unknown as DaemonEmbedding) : null);
+  }
+
+  /** TS-253: route in this process, with the daemon's wire shape. */
+  private async routeInProcess(engine: InProcessEngine, text: string, opts: RouteOptions): Promise<RouteOutcome> {
+    let data: Record<string, unknown>;
+    try {
+      ({ data } = await engine.route(text, opts.includeEmbedding, opts.allowedModels ?? null));
+    } catch (err) {
+      debug('in-process route failed', err);
+      return outcome(STATUS_UNAVAILABLE);
+    }
+    try {
+      const result = deserializeRouteResult(data as Parameters<typeof deserializeRouteResult>[0]);
+      const embedding = data.embedding;
+      return outcome(
+        STATUS_OK,
+        result.scores as unknown as ScoreLike[],
+        result.classification,
+        isObject(embedding) ? (embedding as unknown as DaemonEmbedding) : null,
+      );
+    } catch {
+      return outcome(STATUS_UNAVAILABLE);
+    }
+  }
+
+  /** Whether routes run in this process (TS-253). */
+  get inProcess(): boolean {
+    return this.engine !== null;
   }
 
   private async routeInjected(text: string): Promise<RouteOutcome> {

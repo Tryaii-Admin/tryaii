@@ -91,6 +91,17 @@ TARGETS = [
             _NODE_DP_DATA / "questions.json",
         ],
     ),
+    # The tokenizer of the int8 ONNX embedding model (TS-252 / TS-253): both
+    # SDKs must tokenize identically, so both ship this exact file.
+    (
+        SHARED / "embeddings" / "all-MiniLM-L6-v2-onnx-int8" / "tokenizer.json",
+        [
+            ROOT / "packages" / "python" / "tryaii" / "embeddings" / "data"
+            / "all-MiniLM-L6-v2-onnx-int8" / "tokenizer.json",
+            ROOT / "packages" / "node" / "src" / "embeddings" / "data"
+            / "all-MiniLM-L6-v2-onnx-int8" / "tokenizer.json",
+        ],
+    ),
     # Trusted public keys for catalog signatures (catalog contract section 6).
     # Released packages must list production keys only:
     # scripts/check-release-keys.py.

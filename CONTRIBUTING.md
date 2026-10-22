@@ -61,6 +61,20 @@ cd packages/node
 npm test
 ```
 
+A faster subset skips the slow suites (black-box contract suites, end-to-end
+CLI flows, cross-CLI parity) and keeps the shared-fixture parity cases:
+
+```bash
+pytest tests/ -m "not slow"   # Python: tests marked @pytest.mark.slow are skipped
+npm run test:light            # Node: SLOW_TEST_FILES in vitest.light.config.ts are skipped
+```
+
+CI runs on pull requests into `main` (and by hand from the Actions tab), only
+when the package's files change. The development repository runs this light
+subset on one Python and one Node version; add the `full-ci` label to the pull
+request, or run the workflow by hand with `full: true`, for the full matrix.
+The public repository always runs the full matrix and the publish checks.
+
 ## Pull Requests
 
 - One PR per feature/fix

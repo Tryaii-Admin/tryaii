@@ -22,7 +22,11 @@ print(response.content)
 pip install tryaii
 ```
 
-The base install includes local embeddings via `sentence-transformers` - no API keys needed.
+The base install includes local embeddings - all-MiniLM-L6-v2 as an int8 ONNX file on
+`onnxruntime` (no PyTorch; the 23 MB model file comes in the `tryaii-minilm-int8`
+dependency, or set `TRYAII_EMBEDDING_MODEL_PATH` to a copy) - no API keys needed.
+`pip install "tryaii[centroids]"` adds `sentence-transformers` for building fp32
+centroids or running another sentence-transformers model.
 
 Optional extras for provider integrations:
 
@@ -91,7 +95,7 @@ tryaii route "Write a Python function to merge sorted arrays" --quality=5 --cost
 tryaii eval prompts.json --output results/my-run --quality=5 --cost=1 --speed=1
 tryaii models --provider anthropic        # add --json for machine-readable output
 tryaii benchmarks --json
-tryaii setup                               # download the embedding model + warm centroids
+tryaii setup                               # load the embedding model + warm centroids
 tryaii cachelint request.json              # pre-flight prompt-cache analysis (warn-only)
 tryaii login                               # free: unlock the full model catalog
 ```
@@ -167,6 +171,25 @@ Install the OpenAI client first:
 ```bash
 pip install tryaii[openai]
 ```
+
+## Data and privacy
+
+Without an app key, nothing leaves your machine: the monitor writes its
+records under `~/.tryaii/monitor/` and that is all. With `TRYAII_API_KEY`
+set, it sends **metadata about each LLM call** to your tryaii.com account:
+model names, token counts, estimated costs, timings, the file (relative to
+your project) and function that made the call, and a task profile (how
+similar the prompt is to public benchmark categories). It **never** sends
+prompt or response text, embeddings, provider API keys or file contents.
+The prompt hash it sends is keyed with a secret that stays on your machine.
+
+- See what is sent and switch it off: `tryaii monitor upload` /
+  `tryaii monitor upload off`, or set `TRYAII_TELEMETRY=0` or `DO_NOT_TRACK=1`.
+- Call records are deleted after 90 days; a deleted app is restorable for
+  30 days, then removed for good.
+- Full text: [privacy policy, "Command-line tool and SDK"](https://tryaii.com/privacy-policy#cli-sdk)
+  and [PRIVACY.md](https://github.com/Tryaii-Admin/tryaii/blob/main/PRIVACY.md).
+  Questions or deletion requests: support@tryaii.com.
 
 ## License
 

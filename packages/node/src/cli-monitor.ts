@@ -12,11 +12,13 @@
 import { formatFixed } from './cachelint/util/halfEven.js';
 import { ENV_APP, envFromOs, MSG_BAD_MODE, MSG_MANAGED_NEEDS_MODEL, setProcessMode } from './monitor/config.js';
 import { formatTs, parseTs } from './monitor/events.js';
+import * as privacy from './monitor/privacy.js';
 import { aggregate, windowSeconds } from './monitor/status.js';
 import * as store from './monitor/store.js';
 import { MODES } from './monitor/winner.js';
+import { readState as readModelState } from './embeddings/modelStore.js';
 
-export const VERBS = ['status', 'set', 'apps', 'events'] as const;
+export const VERBS = ['status', 'set', 'apps', 'events', 'upload'] as const;
 const WINDOWS = ['24h', '7d', '30d'];
 const DEFAULT_EVENTS = 20;
 const HELP_HINT = 'Run "tryaii help monitor".';
@@ -215,7 +217,8 @@ function sourceLine(source: Record<string, unknown>): string {
   return 'source: local';
 }
 
-function uploadLine(upload: Record<string, unknown>): string {
+function uploadLine(upload: Record<string, unknown>, offReason: string | null = null): string {
+  if (offReason) return `upload: off (${offReason})`;
   const state = upload.state;
   if (state === 'error') return `upload: error ${pyStr(upload.last_error)}`;
   if (state === 'ok') return `upload: ok ${String(upload.events ?? 0)} events at ${or(upload.last_ok, '-')}`;
@@ -227,7 +230,18 @@ function pyStr(value: unknown): string {
   return value === null || value === undefined ? 'None' : String(value);
 }
 
-export function renderStatus(doc: Record<string, unknown>): string {
+/**
+ * `classification: off since <since> (<reason>)` while the monitor last found
+ * the embedding model unavailable on this machine (SPEC.md §3.1a, TS-253),
+ * else null. Machine-wide, so printed once after every app block.
+ */
+export function classificationLine(dataDir: string): string | null {
+  const state = readModelState(dataDir);
+  if (state === null) return null;
+  return `classification: off since ${state.since || '-'} (${state.reason || 'embedding model not available'})`;
+}
+
+export function renderStatus(doc: Record<string, unknown>, offReason: string | null = null): string {
   const lines = [`tryaii monitor -- app: ${String(doc.app)} (last ${String(doc.since)})`, ''];
   const processes = doc.processes as StatusProcess[];
   if (processes.length === 0) {
@@ -249,7 +263,7 @@ export function renderStatus(doc: Record<string, unknown>): string {
     lines.push(`realised: ${String(t.swapped_calls)} swapped calls, saved ${money(t.realised_savings_usd)}`);
   }
   lines.push(sourceLine(doc.source as Record<string, unknown>));
-  lines.push(uploadLine(doc.upload as Record<string, unknown>));
+  lines.push(uploadLine(doc.upload as Record<string, unknown>, offReason));
   return lines.join('\n') + '\n';
 }
 
@@ -266,9 +280,13 @@ export function renderEvent(event: Record<string, unknown>): string {
     or(event.mode, '-'),
     `winner ${or(event.winner, '-')}`,
     `${int(usage.total_tokens)} tok`,
-    money(event.est_cost_usd),
-    or(event.route_status, '-'),
   ];
+  // v2.2 (SPEC.md §5.5): the cache segments only when the field is a number.
+  for (const [key, label] of [['cached_tokens', 'cached'], ['cache_write_tokens', 'cache write']] as const) {
+    const value = usage[key];
+    if (typeof value === 'number') parts.push(`${label} ${int(value)}`);
+  }
+  parts.push(money(event.est_cost_usd), or(event.route_status, '-'));
   if (error) {
     const label = or(error.class, '') || or(error.status, '') || 'error';
     parts.push(`error ${label}`);
@@ -319,7 +337,10 @@ function verbStatus(argv: string[], env: Env, write: Write): void {
     write(noRecords(store.monitorRoot(dataDir)) + '\n');
     return;
   }
-  write(docs.map(renderStatus).join('\n'));
+  const [, offReason] = privacy.uploadDecision(env, store.monitorRoot(dataDir));
+  write(docs.map((doc) => renderStatus(doc, offReason)).join('\n'));
+  const classification = classificationLine(dataDir);
+  if (classification !== null) write(`${classification}\n`);
 }
 
 function verbSet(argv: string[], env: Env, write: Write): void {
@@ -389,18 +410,56 @@ function verbEvents(argv: string[], env: Env, write: Write): void {
   write(events.map(renderEvent).join('\n') + '\n');
 }
 
-const VERB_HANDLERS: Record<string, (argv: string[], env: Env, write: Write) => void> = {
+const UPLOAD_ACTIONS = ['status', 'on', 'off'];
+
+/**
+ * The person just saw the notice in a terminal: remember it locally and,
+ * when signed in, record it on the account (API.md §7.2). Best effort.
+ */
+async function recordCliNotice(root: string): Promise<void> {
+  if (!privacy.canShowNotice(process.stdout)) return;
+  privacy.markNoticeShown(root, nowArg(undefined));
+  try {
+    const { recordConsent } = await import('./cli-apps.js');
+    await recordConsent('cli');
+  } catch {
+    // never fails the command
+  }
+}
+
+/** `tryaii monitor upload [status|on|off]` (SPEC.md §9.3). */
+async function verbUpload(argv: string[], env: Env, write: Write): Promise<void> {
+  const [positionals, opts] = parse(argv);
+  onlySetTakesModel(opts);
+  if (positionals.length > 1 || (positionals.length && !UPLOAD_ACTIONS.includes(positionals[0]))) {
+    throw new MonitorUsageError(`usage: tryaii monitor upload [on|off]. ${HELP_HINT}`);
+  }
+  const action = positionals.length ? positionals[0] : 'status';
+  const root = store.monitorRoot(store.dataDirFromEnv());
+  if (action === 'on' || action === 'off') privacy.writeLocalUpload(root, action === 'on');
+  const [enabled, reason] = privacy.uploadDecision(env, root);
+  if (opts.json) {
+    write(JSON.stringify({ upload: enabled, reason, notice_version: privacy.NOTICE_VERSION }, null, 2) + '\n');
+    return;
+  }
+  if (action !== 'off') write(privacy.NOTICE_TEXT + '\n');
+  write((enabled ? 'upload: on' : `upload: off (${String(reason)})`) + '\n');
+  if (action !== 'off') await recordCliNotice(root);
+}
+
+const VERB_HANDLERS: Record<string, (argv: string[], env: Env, write: Write) => void | Promise<void>> = {
   status: verbStatus,
   set: verbSet,
   apps: verbApps,
   events: verbEvents,
+  upload: verbUpload,
 };
 
 /** Verb dispatcher for `tryaii monitor` (mirrors cmd_monitor in monitor.py). */
-export function monitorMain(argv: string[], write: Write): void {
+export function monitorMain(argv: string[], write: Write): void | Promise<void> {
   const verb = argv[0];
   if (verb === undefined) throw new MonitorUsageError(`missing monitor verb. ${HELP_HINT}`);
   const handler = VERB_HANDLERS[verb];
   if (!handler) throw new MonitorUsageError(`unknown monitor verb: ${verb}. ${HELP_HINT}`);
-  handler(argv.slice(1), envFromOs(), write);
+  return handler(argv.slice(1), envFromOs(), write);
 }

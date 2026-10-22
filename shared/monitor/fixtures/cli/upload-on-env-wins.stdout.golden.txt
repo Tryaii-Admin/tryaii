@@ -1,0 +1,6 @@
+[tryaii] monitor records sync to your TryAii account.
+Sent: model names, token counts, costs, timings, file paths, a task profile.
+Never sent: your prompts, responses or API keys.
+Turn off: tryaii monitor upload off   Details: https://tryaii.com/privacy-policy#cli-sdk
+
+upload: off (DO_NOT_TRACK=1)

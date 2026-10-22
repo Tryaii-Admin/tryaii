@@ -1,10 +1,12 @@
 """Tests for the main Router class.
 
-The router is embedding-only. Tests use a deterministic FakeSentenceTransformer
-so they run instantly in CI without downloading model weights.
+The router is embedding-only. Tests use deterministic fake encoders (for the
+default ONNX build and for sentence-transformers) so they run instantly in CI
+without model weights, onnxruntime sessions or PyTorch.
 """
 
 import hashlib
+import types
 
 import numpy as np
 import pytest
@@ -45,17 +47,18 @@ class FakeSentenceTransformer:
         return np.stack(vectors)
 
 
+def _fake_onnx_encode(self, texts):
+    """Stand-in for OnnxEmbeddingProvider._encode: the same hashed vectors."""
+    return FakeSentenceTransformer("onnx").encode(list(texts), normalize_embeddings=True)
+
+
 @pytest.fixture
 def router(monkeypatch):
-    """A Router whose embedding provider is backed by FakeSentenceTransformer."""
-    import sentence_transformers
+    """A Router on the default (ONNX) embedding model, with a fake encoder."""
+    from tryaii.embeddings.onnx_provider import OnnxEmbeddingProvider
 
-    monkeypatch.setattr(
-        sentence_transformers,
-        "SentenceTransformer",
-        FakeSentenceTransformer,
-    )
-    return Router()
+    monkeypatch.setattr(OnnxEmbeddingProvider, "_encode", _fake_onnx_encode)
+    return Router(catalog="starter")
 
 
 class TestRouter:
@@ -156,16 +159,21 @@ class TestRouterCustomRegistry:
 
 class TestRouterConfigOverrides:
     def test_custom_config_is_honored(self, monkeypatch):
-        import sentence_transformers
-
-        monkeypatch.setattr(
-            sentence_transformers,
-            "SentenceTransformer",
-            FakeSentenceTransformer,
+        # A non-ONNX model name runs on sentence-transformers (the optional
+        # ``centroids`` extra); a fake module stands in for it.
+        monkeypatch.setitem(
+            __import__("sys").modules, "sentence_transformers",
+            types.SimpleNamespace(SentenceTransformer=FakeSentenceTransformer),
         )
 
         config = TryaiiDreConfig(embedding_model="all-MiniLM-L6-v2")
-        router = Router(config=config)
+        router = Router(config=config, catalog="starter")
         result = router.route("Write a sorting algorithm")
         assert result.best_model != ""
         assert router.config.embedding_model == "all-MiniLM-L6-v2"
+        assert router._embedding_provider.model_name == "all-MiniLM-L6-v2"
+
+    def test_default_model_is_the_onnx_build(self, router):
+        router.route("Write a sorting algorithm")
+        assert router.config.embedding_model == "all-MiniLM-L6-v2-onnx-int8"
+        assert router._embedding_provider.model_name == "all-MiniLM-L6-v2-onnx-int8"

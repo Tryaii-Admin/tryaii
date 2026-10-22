@@ -1514,7 +1514,7 @@ async function diagnoseReport(argv: string[]): Promise<void> {
  */
 async function cmdMonitor(subArgs: string[]): Promise<void> {
   try {
-    monitorMain(subArgs, (text) => out.write(text));
+    await monitorMain(subArgs, (text) => out.write(text));
   } catch (error) {
     if (error instanceof MonitorUsageError) throw new CliUsageError(error.message);
     throw error;
@@ -2295,6 +2295,8 @@ Verbs:
                         managed --model <id> (always that model)
   apps                  List the apps with monitor records
   events                Print the most recent events (--json emits JSONL)
+  upload [on|off]       Show the data notice and whether records sync to tryaii.com,
+                        or switch syncing on or off for this machine
 
 Options:
   --app <id>            App to inspect (default: every app for status, the only app otherwise)
@@ -2306,7 +2308,9 @@ Options:
 
 With TRYAII_API_KEY set, the wrapper also uploads these records (metadata
 only) to your tryaii.com dashboard and follows the modes set there; see
-'tryaii help apps'.
+'tryaii help apps'. Turn uploads off with 'tryaii monitor upload off',
+TRYAII_TELEMETRY=0 or DO_NOT_TRACK=1. Details:
+https://tryaii.com/privacy-policy#cli-sdk
 
 Examples:
   tryaii monitor status
@@ -2334,8 +2338,8 @@ as "managed (<model>)".
 
 Two lines close each block: "source: local" or "source: remote etag <etag>
 fetched <time>" (the dashboard config the wrapper follows), and the upload
-state: "upload: off", "upload: ok <n> events at <time>" or
-"upload: error <reason>".
+state: "upload: off", "upload: off (<what turned it off>)",
+"upload: ok <n> events at <time>" or "upload: error <reason>".
 
 With --json: the status document (one object with --app, else a list).
 With no records at all: "no monitor records under <data dir>/monitor".
@@ -2376,6 +2380,24 @@ Usage:
 The newest <count> events (default 20), oldest first. Human lines show
 timestamp, process, model used, mode, winner, tokens, est. cost, route
 status and any error class; --json prints the raw event lines (JSONL).
+`;
+
+const HELP_MONITOR_UPLOAD = `tryaii monitor upload -- Data notice and the upload switch
+
+Usage:
+  tryaii monitor upload [on|off] [--json]
+
+Without an argument: prints the data notice (what the monitor sends to
+your tryaii.com account and what it never sends) and the current state,
+"upload: on" or "upload: off (<what turned it off>)".
+
+  on                    Sync this machine's records again (prints the notice)
+  off                   Stop syncing; records stay on this machine only
+
+Writes <data dir>/monitor/settings.json. TRYAII_MONITOR_UPLOAD=0,
+TRYAII_TELEMETRY=0 and DO_NOT_TRACK=1 turn uploads off regardless, and so
+does switching uploads off for your account on tryaii.com.
+Details: https://tryaii.com/privacy-policy#cli-sdk
 `;
 
 const HELP_APPS = `tryaii apps -- tryaii.com apps and app keys for monitor upload
@@ -2666,6 +2688,7 @@ const MONITOR_VERB_HELP: Record<string, string> = {
   set: HELP_MONITOR_SET,
   apps: HELP_MONITOR_APPS,
   events: HELP_MONITOR_EVENTS,
+  upload: HELP_MONITOR_UPLOAD,
 };
 
 /**
