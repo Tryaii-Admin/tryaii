@@ -7,6 +7,8 @@ pinned through ``wrapper_openai._utcnow``.
 
 from __future__ import annotations
 
+import asyncio
+import functools
 import json
 import sys
 import threading
@@ -129,6 +131,25 @@ class FakeAsyncCompletions(FakeCompletions):
         return FakeResponse(kwargs.get("model"), FakeUsage())
 
 
+def required_args(fn):
+    """A sync decorator around an ``async def``, like ``openai._utils.required_args``
+    on the real ``AsyncCompletions.create``: not a coroutine function itself."""
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+class FakeDecoratedAsyncCompletions(FakeCompletions):
+    @required_args
+    async def create(self, **kwargs):  # type: ignore[override]
+        self.calls.append(dict(kwargs))
+        await asyncio.sleep(0.01)
+        if kwargs.get("stream"):
+            return FakeAsyncStream([FakeChunk("a"), FakeChunk("", FakeUsage())])
+        return FakeResponse(kwargs.get("model"), FakeUsage())
+
+
 class FakeChat:
     def __init__(self, completions):
         self.completions = completions
@@ -183,9 +204,11 @@ def test_off_records_event_and_vector_without_touching_the_call():
         "schema", "event_id", "ts", "app", "process", "call_site", "provider",
         "model_requested", "model_resolved", "model_used", "mode", "winner",
         "winner_reachable", "route_status", "classification", "taxonomy_version", "usage",
+        "cache_ttl_policy",
         "est_cost_usd", "est_cost_winner_usd", "est_cost_anchor_usd", "latency_ms",
         "stream", "error",
         "prompt_hash", "vector"]
+    assert event["cache_ttl_policy"] is None   # TS-229 fills it from the request
     assert str(uuid.UUID(event["event_id"])) == event["event_id"]
     assert event["taxonomy_version"] is None   # no bundle carries one yet
     assert event["ts"] == "2026-10-11T12:00:00.123Z"
@@ -202,7 +225,9 @@ def test_off_records_event_and_vector_without_touching_the_call():
     assert event["route_status"] == "ok"
     assert event["classification"] == {"category": "coding", "subcategory": "debugging",
                                        "confidence": 0.8123}
-    assert event["usage"] == {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
+    assert event["usage"] == {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150,
+                              "cached_tokens": None, "cache_write_tokens": None,
+                              "cache_writes": None}
     assert event["est_cost_usd"] == 0.002   # 100*0.005/1k + 50*0.03/1k
     assert event["est_cost_winner_usd"] == 0.000125
     assert event["est_cost_anchor_usd"] == 0.002   # no swap: equals est_cost_usd
@@ -446,7 +471,9 @@ def test_stream_is_forwarded_and_recorded_at_the_end():
     assert texts == ["a", "b", ""]
     [event] = events_of(monitor)
     assert event["stream"] is True
-    assert event["usage"] == {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
+    assert event["usage"] == {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150,
+                              "cached_tokens": None, "cache_write_tokens": None,
+                              "cache_writes": None}
 
 
 def test_stream_closed_early_is_still_recorded():
@@ -480,6 +507,110 @@ async def test_async_client_sync_capture_and_await():
     assert texts == ["a", ""]
     events = events_of(monitor)
     assert events[-1]["stream"] is True and events[-1]["usage"]["total_tokens"] == 150
+
+
+async def test_async_create_behind_a_sync_decorator_is_detected():
+    # The real AsyncCompletions.create is a sync def (required_args) around
+    # an async def: it must still be awaited, not recorded as a sync call.
+    client = FakeClient(completions=FakeDecoratedAsyncCompletions())
+    monitor = wrap(client, app="shop", route_fn=make_route_fn(SCORES_MINI_WINS))
+    resp = await client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    assert resp.model == "gpt-5.5"
+    [event] = events_of(monitor)
+    assert event["usage"] == {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150,
+                              "cached_tokens": None, "cache_write_tokens": None,
+                              "cache_writes": None}
+    assert event["latency_ms"] > 0
+
+    stream = await client.chat.completions.create(model="gpt-5.5", messages=MESSAGES, stream=True)
+    assert len(events_of(monitor)) == 1
+    texts = [c.text async for c in stream]
+    assert texts == ["a", ""]
+    event = events_of(monitor)[-1]
+    assert event["stream"] is True and event["usage"]["total_tokens"] == 150
+    assert event["latency_ms"] > 0
+
+
+def test_is_coroutine_function_survives_a_broken_wrapped_chain():
+    def loop():
+        pass
+
+    loop.__wrapped__ = loop  # inspect.unwrap raises ValueError on a cycle
+    assert wo._is_coroutine_function(loop) is False
+
+
+# --- wrapper order -------------------------------------------------------------
+
+def _counting(original, counter):
+    """A late class-level patch (like ``import langfuse.openai``): a plain
+    ``def`` that calls through."""
+    def create(self, **kwargs):
+        counter.append(kwargs.get("model"))
+        return original(self, **kwargs)
+    return create
+
+
+def test_class_patch_after_wrap_is_still_called(monkeypatch):
+    counter = []
+    client = FakeClient()
+    monitor = wrap(client, app="shop", route_fn=make_route_fn(SCORES_MINI_WINS))
+    monkeypatch.setattr(FakeCompletions, "create",
+                        _counting(FakeCompletions.__dict__["create"], counter))
+    resp = client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    assert resp.model == "gpt-5.5"
+    assert counter == ["gpt-5.5"]
+    assert len(client.chat.completions.calls) == 1      # sent once
+    [event] = events_of(monitor)
+    assert event["usage"]["total_tokens"] == 150
+
+
+def test_rewrap_still_follows_a_later_class_patch(monkeypatch):
+    counter = []
+    client = FakeClient()
+    wrap(client, app="one", route_fn=make_route_fn(SCORES_MINI_WINS))
+    monitor = wrap(client, app="two", route_fn=make_route_fn(SCORES_MINI_WINS))
+    monkeypatch.setattr(FakeCompletions, "create",
+                        _counting(FakeCompletions.__dict__["create"], counter))
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    assert counter == ["gpt-5.5"]
+    assert len(client.chat.completions.calls) == 1
+    assert [e["app"] for e in events_of(monitor)] == ["two"]
+
+
+async def test_async_class_patch_after_wrap_is_still_called(monkeypatch):
+    counter = []
+    client = FakeClient(completions=FakeDecoratedAsyncCompletions())
+    monitor = wrap(client, app="shop", route_fn=make_route_fn(SCORES_MINI_WINS))
+    monkeypatch.setattr(FakeDecoratedAsyncCompletions, "create",
+                        _counting(FakeDecoratedAsyncCompletions.__dict__["create"], counter))
+    resp = await client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    assert resp.model == "gpt-5.5"
+    stream = await client.chat.completions.create(model="gpt-5.5", messages=MESSAGES, stream=True)
+    assert [c.text async for c in stream] == ["a", ""]
+    assert counter == ["gpt-5.5", "gpt-5.5"]
+    assert len(client.chat.completions.calls) == 2
+    events = events_of(monitor)
+    assert [e["usage"]["total_tokens"] for e in events] == [150, 150]
+    assert all(e["latency_ms"] > 0 for e in events)
+
+
+def test_create_set_on_the_instance_before_wrap_is_kept(monkeypatch):
+    seen, counter = [], []
+    client = FakeClient()
+    inner = client.chat.completions.create
+
+    def instance_create(**kwargs):
+        seen.append(kwargs.get("model"))
+        return inner(**kwargs)
+
+    client.chat.completions.create = instance_create
+    monitor = wrap(client, app="shop", route_fn=make_route_fn(SCORES_MINI_WINS))
+    monkeypatch.setattr(FakeCompletions, "create",
+                        _counting(FakeCompletions.__dict__["create"], counter))
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    assert seen == ["gpt-5.5"] and counter == []
+    assert len(client.chat.completions.calls) == 1
+    assert len(events_of(monitor)) == 1
 
 
 # --- identity ---------------------------------------------------------------
@@ -778,6 +909,7 @@ def test_exit_records_calls_still_waiting_for_the_warm_up(monkeypatch):
     monkeypatch.setattr(daemon_mod, "is_disabled", lambda: False)
     monkeypatch.setattr(daemon_mod, "ensure_daemon", lambda *a, **k: gate.wait(5))
     monkeypatch.setattr(catalog_client, "select_catalog", offline)
+    monkeypatch.setattr(Transport, "_embedding_model_ready", lambda self: True)
     transport = Transport(TryaiiDreConfig())
     transport.start()                     # worker + the warm-up job, stuck on the gate
     client = FakeClient()
@@ -794,3 +926,101 @@ def test_exit_records_calls_still_waiting_for_the_warm_up(monkeypatch):
     assert event["model_used"] == "gpt-5.5" and event["vector"] is False
     assert event["usage"]["total_tokens"] == 150
     gate.set()
+
+
+def _no_model_package(monkeypatch):
+    from tryaii.embeddings import model_store
+
+    monkeypatch.delenv(model_store.ENV_MODEL_PATH, raising=False)
+    monkeypatch.setitem(sys.modules,
+                        model_store.MODELS[model_store.DEFAULT_ONNX_MODEL].package, None)
+    model_store.reset_cache()
+
+
+def _offline_daemon(monkeypatch, started):
+    from tryaii import daemon as daemon_mod
+    from tryaii.catalog import client as catalog_client
+
+    monkeypatch.setattr(daemon_mod, "is_disabled", lambda: False)
+    monkeypatch.setattr(daemon_mod, "ensure_daemon",
+                        lambda *a, **k: started.append(1) or None)
+    monkeypatch.setattr(catalog_client, "select_catalog",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("offline")))
+
+
+@pytest.mark.parametrize("mode", ["off", "dynamic"])
+def test_missing_embedding_model_fails_open_without_a_daemon(monkeypatch, tmp_path, caplog,
+                                                             mode):
+    """TS-252: no model file (package missing, nothing placed) behaves
+    exactly like no daemon: no daemon is started, every call is recorded
+    metadata-only, the model in the code is sent, and one line is logged."""
+    import logging
+
+    started = []
+    _no_model_package(monkeypatch)
+    _offline_daemon(monkeypatch, started)
+    caplog.set_level(logging.DEBUG, logger="tryaii.monitor")
+
+    transport = Transport(TryaiiDreConfig(data_dir=tmp_path))
+    transport.start()
+    client = FakeClient()
+    monitor = wo.Monitor("openai", app="shop", process="p", mode=mode, transport=transport)
+    original = client.chat.completions.create
+    client.chat.completions.create = wo._make_create(monitor, original, False)
+    transport.drain(5)                    # the warm-up has run
+    for _ in range(2):
+        client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    transport.drain(5)
+
+    assert started == []
+    assert [c["model"] for c in client.chat.completions.calls] == ["gpt-5.5", "gpt-5.5"]
+    events = events_of(monitor)
+    assert len(events) == 2
+    for event in events:
+        assert event["route_status"] == "unavailable" and event["winner"] is None
+        assert event["classification"] is None and event["vector"] is False
+        assert event["model_used"] == "gpt-5.5" and event["mode"] == mode
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(warnings) == 1
+    text = warnings[0].getMessage()
+    assert "all-MiniLM-L6-v2-onnx-int8 is not available" in text
+    assert "package tryaii-minilm-int8 is not installed" in text
+    assert "pip install --force-reinstall tryaii-minilm-int8" in text
+
+
+def test_missing_model_warning_is_not_repeated_by_every_process(monkeypatch, tmp_path, caplog):
+    """A fleet restarting all day logs the warning once a day per machine;
+    `tryaii monitor status` shows the state; a fixed install clears it."""
+    import logging
+
+    from tryaii.cli.monitor import _classification_line
+    from tryaii.embeddings import model_store
+
+    started = []
+    _no_model_package(monkeypatch)
+    _offline_daemon(monkeypatch, started)
+    caplog.set_level(logging.DEBUG, logger="tryaii.monitor")
+    for _ in range(3):                    # three process starts
+        model_store.reset_cache()
+        Transport(TryaiiDreConfig(data_dir=tmp_path))._warm_up()
+    assert len([r for r in caplog.records if r.levelno >= logging.WARNING]) == 1
+    line = _classification_line(tmp_path)
+    assert line.startswith("classification: off since ")
+    assert line.endswith("(package tryaii-minilm-int8 is not installed)")
+
+    monkeypatch.setattr(model_store, "resolve_model_path",
+                        lambda *a, **k: tmp_path / "model.onnx")
+    Transport(TryaiiDreConfig(data_dir=tmp_path))._warm_up()
+    assert _classification_line(tmp_path) is None
+    assert started == [1]
+
+
+def test_embedding_model_present_lets_the_daemon_start(monkeypatch, tmp_path):
+    from tryaii.embeddings import model_store
+
+    started = []
+    _offline_daemon(monkeypatch, started)
+    monkeypatch.setattr(model_store, "resolve_model_path",
+                        lambda *a, **k: tmp_path / "model.onnx")
+    Transport(TryaiiDreConfig(data_dir=tmp_path))._warm_up()
+    assert started == [1]

@@ -20,7 +20,7 @@ import pytest
 
 from tryaii import policy as pol
 from tryaii.catalog import BundleIntegrityError, bundle_from_texts, canonical_json, sha256_hex
-from tryaii.catalog.bundle import BUNDLE_DATA_FILES, STARTER_BUNDLE_DIR, starter_bundle
+from tryaii.catalog.bundle import STARTER_BUNDLE_DIR, listed_data_files, starter_bundle
 from tryaii.classifiers.base import ClassificationResult
 from tryaii.policy import ModelPolicy, PolicyCatalogError, PolicyError, evaluate
 
@@ -104,7 +104,7 @@ def test_host_only_policy_does_not_constrain_models():
 def _starter_files() -> tuple[dict, dict]:
     manifest = json.loads((STARTER_BUNDLE_DIR / "manifest.json").read_text(encoding="utf-8"))
     files = {name: (STARTER_BUNDLE_DIR / name).read_text(encoding="utf-8")
-             for name in BUNDLE_DATA_FILES}
+             for name in listed_data_files(manifest)}
     return manifest, files
 
 
@@ -162,8 +162,9 @@ def test_unlisted_origins_json_is_ignored():
 
 def test_load_bundle_reads_listed_origins(tmp_path):
     bundle, _ = _bundle_with_origins()
-    for name in BUNDLE_DATA_FILES:
-        (tmp_path / name).write_bytes((STARTER_BUNDLE_DIR / name).read_bytes())
+    for name in listed_data_files(bundle.manifest):
+        if name != "origins.json":
+            (tmp_path / name).write_bytes((STARTER_BUNDLE_DIR / name).read_bytes())
     (tmp_path / "origins.json").write_bytes(canonical_json(bundle.origins).encode("utf-8"))
     (tmp_path / "manifest.json").write_text(json.dumps(bundle.manifest), encoding="utf-8")
     from tryaii.catalog import load_bundle

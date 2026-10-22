@@ -65,6 +65,28 @@ export const OPTIONAL_DATA_FILES = ['origins.json'] as const;
 
 export type OptionalDataFile = (typeof OPTIONAL_DATA_FILES)[number];
 
+/**
+ * Centroids for a further embedding model (contract v1.3, TS-252/TS-253):
+ * `centroids.<model id>.json`, verified and parsed when the manifest lists it.
+ */
+const MODEL_CENTROIDS_RE = /^centroids\.([A-Za-z0-9][A-Za-z0-9._-]{0,127})\.json$/;
+
+/** The bundle file name of `modelId`'s centroids (contract v1.3). */
+export function modelCentroidsFile(modelId: string): string {
+  const name = `centroids.${modelId}.json`;
+  if (!MODEL_CENTROIDS_RE.test(name)) {
+    throw new Error(`invalid embedding model id for a bundle file: ${JSON.stringify(modelId)}`);
+  }
+  return name;
+}
+
+/** The `centroids.<model id>.json` names a files map lists, sorted (code-point order, like Python). */
+export function modelCentroidFiles(files: Record<string, unknown> | null | undefined): string[] {
+  return Object.keys(files ?? {})
+    .filter((name) => MODEL_CENTROIDS_RE.test(name))
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
 /** `origins.json` (shared/datasave/SPEC.md section 1). */
 export interface OriginsJson {
   schema?: number;
@@ -238,6 +260,8 @@ export class CatalogBundle {
   readonly directory: string | null;
   /** `origins.json` when the bundle carries it (contract v1.2), else null. */
   readonly origins: OriginsJson | null;
+  /** `{model id: centroids}` of the `centroids.<model id>.json` files (contract v1.3). */
+  readonly modelCentroids: Record<string, CentroidsJson> | null;
 
   constructor(parts: {
     manifest: BundleManifest;
@@ -248,6 +272,7 @@ export class CatalogBundle {
     trainingQueries: TrainingQueriesJson;
     directory?: string | null;
     origins?: OriginsJson | null;
+    modelCentroids?: Record<string, CentroidsJson> | null;
   }) {
     this.manifest = parts.manifest;
     this.models = parts.models;
@@ -257,6 +282,22 @@ export class CatalogBundle {
     this.trainingQueries = parts.trainingQueries;
     this.directory = parts.directory ?? null;
     this.origins = parts.origins ?? null;
+    this.modelCentroids = parts.modelCentroids ?? null;
+  }
+
+  /** Every embedding model this bundle has centroids for, primary first. */
+  get embeddingModels(): string[] {
+    return [this.embeddingModel, ...Object.keys(this.modelCentroids ?? {}).sort()];
+  }
+
+  /**
+   * The centroids built for `modelId` (`centroids.json` for the manifest's
+   * model, else its `centroids.<model id>.json`), or null. A vector is only
+   * ever scored with its own model's centroids.
+   */
+  centroidsFor(modelId: string): CentroidsJson | null {
+    if (modelId === this.embeddingModel) return this.centroids;
+    return this.modelCentroids?.[modelId] ?? null;
   }
 
   get schema(): number {
@@ -369,7 +410,9 @@ function parseManifest(manifest: unknown): BundleManifest {
   if (missing.length > 0) {
     throw new BundleError(`manifest.json 'files' is missing: ${missing.join(', ')}`);
   }
-  const bad = OPTIONAL_DATA_FILES.filter((name) => name in files && typeof files[name] !== 'string');
+  const bad = [...OPTIONAL_DATA_FILES, ...modelCentroidFiles(files)].filter(
+    (name) => name in files && typeof files[name] !== 'string',
+  );
   if (bad.length > 0) {
     throw new BundleError(`manifest.json 'files' has a non-string hash for: ${bad.join(', ')}`);
   }
@@ -382,7 +425,11 @@ function parseManifest(manifest: unknown): BundleManifest {
  */
 export function listedDataFiles(manifest: { files?: Record<string, unknown> | null }): string[] {
   const files = manifest.files ?? {};
-  return [...BUNDLE_DATA_FILES, ...OPTIONAL_DATA_FILES.filter((name) => name in files)];
+  return [
+    ...BUNDLE_DATA_FILES,
+    ...OPTIONAL_DATA_FILES.filter((name) => name in files),
+    ...modelCentroidFiles(files),
+  ];
 }
 
 function sortedDiff(a: Set<string>, b: Set<string>): string[] {
@@ -416,6 +463,22 @@ function checkConsistency(bundle: CatalogBundle): void {
       `centroids.json was built for ${JSON.stringify(model)}, manifest says ` +
         `${JSON.stringify(bundle.embeddingModel)}`,
     );
+  }
+  for (const [modelId, doc] of Object.entries(bundle.modelCentroids ?? {})) {
+    const label = modelCentroidsFile(modelId);
+    if (modelId === bundle.embeddingModel) throw new BundleError(`${label} duplicates centroids.json`);
+    const got = new Set(Object.keys(doc.centroids ?? {}));
+    const extra = sortedDiff(got, expected);
+    const lacking = sortedDiff(expected, got);
+    if (extra.length > 0 || lacking.length > 0) {
+      throw new BundleError(
+        `${label} benchmark set does not match benchmarks.json ` +
+          `(only in ${label}: ${JSON.stringify(extra)}, missing: ${JSON.stringify(lacking)})`,
+      );
+    }
+    if (doc.metadata?.model !== modelId) {
+      throw new BundleError(`${label} was built for ${JSON.stringify(doc.metadata?.model)}`);
+    }
   }
   if (!Array.isArray(bundle.models.models)) {
     throw new BundleError("models.json has no 'models' array");
@@ -475,6 +538,7 @@ export function bundleFromTexts(
     trainingQueries: parsed['training_queries.json'] as TrainingQueriesJson,
     directory,
     origins: (parsed['origins.json'] as OriginsJson | undefined) ?? null,
+    modelCentroids: modelCentroidMap(parsedManifest, parsed),
   });
   try {
     checkConsistency(bundle);
@@ -485,6 +549,19 @@ export function bundleFromTexts(
     throw new BundleError(`catalog bundle is malformed: ${String(err)}`);
   }
   return bundle;
+}
+
+function modelCentroidMap(
+  manifest: BundleManifest,
+  parsed: Record<string, unknown>,
+): Record<string, CentroidsJson> | null {
+  const names = modelCentroidFiles(manifest.files as Record<string, unknown>);
+  if (names.length === 0) return null;
+  const out: Record<string, CentroidsJson> = {};
+  for (const name of names) {
+    out[name.slice('centroids.'.length, -'.json'.length)] = parsed[name] as CentroidsJson;
+  }
+  return out;
 }
 
 function isFile(path: string): boolean {

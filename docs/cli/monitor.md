@@ -81,12 +81,27 @@ Everything lives under `~/.tryaii/monitor/<app>/` (or `$TRYAII_DRE_DATA_DIR/moni
 
 | File | Content |
 |---|---|
-| `events-YYYY-MM-DD.jsonl` | One line per call: app, sub-process, call site (file relative to the working directory, line, function), provider class, model requested / resolved / used, mode, the shadow-routing winner and whether this client could have sent it, route status, classification, token usage, estimated cost at the model used and at the winner, latency, stream flag, error class, and a hash of the routing text. **No prompt or response text.** |
+| `events-YYYY-MM-DD.jsonl` | One line per call: app, sub-process, call site (file relative to the working directory, line, function), provider class, model requested / resolved / used, mode, the shadow-routing winner and whether this client could have sent it, route status, classification, token usage (including what the provider's prompt cache read and wrote, and for how long it is kept — see below), estimated cost at the model used and at the winner, latency, stream flag, error class, a hash of the routing text and, when the wrapper runs with `cachelint`, a `cache` block (the predicted cache outcome and, now and then, the lint report — [details](../sdk/monitor.md#cache-fields)). **No prompt or response text.** |
 | `vectors-YYYY-MM-DD.jsonl` | The prompt's embedding vector (the one the router computed), keyed by the same hash, one line per distinct prompt per day. `TRYAII_MONITOR_VECTORS=0` turns this off. |
 | `pins.json` | The pinned model per sub-process in `stable` mode, with its expiry and the counts it was chosen from. |
 | `config.json` | The mode per sub-process (and the model of a `managed` one), written by `tryaii monitor set`. |
 | `remote.json` | The modes set on the tryaii.com dashboard, kept current by the wrapper while `TRYAII_API_KEY` is set. |
 | `upload.json` | How many bytes of each events file were uploaded, the last success and the last error. |
+
+Next to the app directories, in `<data dir>/monitor/`:
+
+| File | Content |
+|---|---|
+| `settings.json` | `tryaii monitor upload on/off`: whether this machine uploads. |
+| `notice.json` | Which version of the data notice this machine has shown, and when. |
+| `upload-hash.key` | The secret that keys the uploaded prompt hash. Never uploaded; delete it to start a new hash series. |
+
+The lint report in the `cache` block never quotes the prompt: each finding
+keeps only a mask of the matched text, written that way to the file —
+ASCII digits become `0`, whitespace a space, ASCII punctuation stays, and
+every other character (any letter, a non-ASCII digit, an accent, an emoji)
+becomes `x`; at most 40 characters (`2026-10-18 14:02` →
+`0000-00-00 00:00`, `{{sku}}` → `{{xxx}}`).
 
 Without `TRYAII_API_KEY` nothing is uploaded: no event, no vector, no prompt
 leaves the machine. With a key, the event lines (metadata only) are uploaded
@@ -269,9 +284,45 @@ The newest `-n` events (default 20) of one app, oldest first:
 ```
 
 Timestamp, sub-process, model used, mode, winner, tokens, estimated cost,
-route status, and the error class when the call failed. `--json` prints the
-stored event lines unchanged (JSONL), one object per line — see
-`shared/monitor/SPEC.md` §3.1 for the fields.
+route status, and the error class when the call failed. When the provider
+reported prompt-cache usage the line also shows it after the token count:
+`cached <n>` (input tokens read from the provider's cache) and
+`cache write <n>` (tokens written to it on this call):
+
+```
+2026-10-13T08:00:00.000Z  assist | gpt-5.6 | off | winner openai/gpt-5-mini | 3380 tok | cached 1024 | cache write 2048 | 0.0071 | ok
+```
+
+`--json` prints the stored event lines unchanged (JSONL), one object per
+line — see `shared/monitor/SPEC.md` §3.1 for the fields. Since contract
+v1.5 (TS-228) the `usage` object carries `cached_tokens`,
+`cache_write_tokens` and `cache_writes` (`[{"tokens", "ttl"}]`, the write
+broken down by lifetime: `5m`, `1h`, `30m`, `24h` or `explicit`), and the
+event carries `cache_ttl_policy`, the lifetime the request asked for. A
+field the provider does not report is `null`; `0` means the provider
+reported zero (for example a prompt below its minimum cacheable size).
+Older lines simply lack the keys. `status --json` sums
+`cached_tokens` and `cache_write_tokens` per process and in `totals`
+(`null` when no event in the window reported them); the human table is
+unchanged.
+
+### `upload [on|off]`
+
+```
+$ tryaii monitor upload
+[tryaii] monitor records sync to your TryAii account.
+Sent: model names, token counts, costs, timings, file paths, a task profile.
+Never sent: your prompts, responses or API keys.
+Turn off: tryaii monitor upload off   Details: https://tryaii.com/privacy-policy#cli-sdk
+
+upload: on
+```
+
+Without an argument: the data notice and the state. `off` stops uploads from
+this machine (`upload: off (tryaii monitor upload off)`), `on` starts them
+again. `TRYAII_MONITOR_UPLOAD=0`, `TRYAII_TELEMETRY=0`, `DO_NOT_TRACK=1` and the
+account switch on tryaii.com win over `on`; the line then names which one is
+in force. `--json` prints `{"upload", "reason", "notice_version"}`.
 
 ## Environment variables
 
@@ -282,6 +333,8 @@ stored event lines unchanged (JSONL), one object per line — see
 | `TRYAII_API_KEY` | An app key (`tryaii apps create`): turns on upload and the dashboard config ([details](../sdk/monitor.md#upload-and-the-dashboard)) |
 | `TRYAII_API_URL` | API base for upload and the dashboard config (default `https://api.tryaii.com`) |
 | `TRYAII_MONITOR_UPLOAD` | `0` stops uploading (the dashboard config still applies) |
+| `TRYAII_TELEMETRY` | `0` stops uploading, like `TRYAII_MONITOR_UPLOAD=0` |
+| `DO_NOT_TRACK` | `1` stops uploading |
 | `TRYAII_MONITOR_REMOTE` | `0` stops following the dashboard config (upload continues) |
 | `TRYAII_MONITOR_VECTORS` | `0` stops writing `vectors-*.jsonl` (default: on) |
 | `TRYAII_MONITOR_ROUTE_TIMEOUT_MS` | Budget for in-path routing (`dynamic`, first `stable` call); default `1500` |

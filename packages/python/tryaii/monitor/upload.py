@@ -1,14 +1,22 @@
 """Background upload of monitor events (shared/monitor/API.md §3.2, SPEC.md §3.4).
 
 The :class:`Uploader` runs on its own daemon thread, started by the
-transport only when ``TRYAII_API_KEY`` is set and ``TRYAII_MONITOR_UPLOAD``
-is not ``"0"``. It reads the UNREAD bytes of every ``events-*.jsonl`` of
+transport only when ``TRYAII_API_KEY`` is set and no opt-out is set
+(``TRYAII_MONITOR_UPLOAD=0``, ``TRYAII_TELEMETRY=0``, ``DO_NOT_TRACK=1``;
+SPEC.md §9). It reads the UNREAD bytes of every ``events-*.jsonl`` of
 the app directories this process records to, batches whole lines (at most
 500 events and a 1 MiB body, one file per batch), and POSTs them to
 ``/v1/monitor/events`` -- at most one batch every 5 s, with exponential
 backoff (5 s -> 5 min) on 429/5xx/network. ``upload.json`` (the cursor)
 says how many bytes of each file were uploaded. Local files are never
 deleted or rewritten.
+
+Privacy (SPEC.md §9): a pass pauses an app directory while the local
+setting (``tryaii monitor upload off``) or the account switch (remote.json
+``"upload": false``, or a 403 ``upload_disabled``) says off; every sent line
+carries the keyed ``prompt_hash`` (HMAC with the per-installation secret),
+never the plain one; the first upload of a machine prints the Data Notice
+once to a terminal.
 
 Hard rules: prompt text never leaves the machine (a line carrying a field
 named ``prompt``, ``messages``, ``response``, ``content``, ``text`` or
@@ -23,6 +31,7 @@ import json
 import logging
 import os
 import re
+import sys
 import threading
 import time
 import uuid
@@ -30,14 +39,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
-from tryaii.monitor import api, store
+from tryaii.monitor import api, privacy, store
 from tryaii.monitor.callsite import is_absolute_file
 from tryaii.monitor.events import EVENT_SCHEMA, format_ts
 
 logger = logging.getLogger("tryaii.monitor")
 
 UPLOAD_SCHEMA = "tryaii.monitor.upload/1"
-ENV_UPLOAD = "TRYAII_MONITOR_UPLOAD"
+ENV_UPLOAD = privacy.ENV_UPLOAD
 MAX_EVENTS = 500
 MAX_BYTES = 1024 * 1024
 INTERVAL_S = 5.0
@@ -51,9 +60,8 @@ _rejected_logged = threading.Event()
 
 
 def upload_enabled(env=None) -> bool:
-    """False when ``TRYAII_MONITOR_UPLOAD`` is ``"0"``."""
-    env = os.environ if env is None else env
-    return (env.get(ENV_UPLOAD) or "1").strip() != "0"
+    """False when an environment opt-out is set (SPEC.md §9)."""
+    return privacy.upload_decision(env)[0]
 
 
 def log_key_rejected() -> None:
@@ -86,10 +94,24 @@ def strip_machine_path(obj: dict, raw: bytes) -> bytes:
     """An absolute ``call_site.file`` never leaves the machine (TS-226): the
     line is re-serialised with the base name only. Any other line is sent
     verbatim (``raw``)."""
+    return outgoing_line(obj, raw, None)
+
+
+def outgoing_line(obj: dict, raw: bytes, hash_key: Optional[bytes]) -> bytes:
+    """The line as uploaded: an absolute ``call_site.file`` reduced to its
+    base name (TS-226) and, with ``hash_key``, ``prompt_hash`` replaced by
+    its keyed form (SPEC.md §9). Re-serialised only when something changed;
+    otherwise ``raw`` verbatim."""
+    changed = False
     site = obj.get("call_site")
-    if not isinstance(site, dict) or not is_absolute_file(site.get("file")):
+    if isinstance(site, dict) and is_absolute_file(site.get("file")):
+        site["file"] = re.split(r"[\\/]", str(site["file"]))[-1]
+        changed = True
+    if hash_key is not None and isinstance(obj.get("prompt_hash"), str):
+        obj["prompt_hash"] = privacy.keyed_hash(hash_key, obj["prompt_hash"])
+        changed = True
+    if not changed:
         return raw
-    site["file"] = re.split(r"[\\/]", str(site["file"]))[-1]
     return store.dumps_line(obj).rstrip("\n").encode("utf-8")
 
 
@@ -116,8 +138,8 @@ def envelope_head(batch_id: str, version: str) -> bytes:
 
 
 def build_body(batch_id: str, version: str, lines: list) -> bytes:
-    """The exact request body: the envelope with the stored event lines
-    spliced in verbatim (no re-serialisation)."""
+    """The exact request body: the envelope with the outgoing event lines
+    (:func:`outgoing_line`) spliced in."""
     return envelope_head(batch_id, version) + b",".join(lines) + b"]}"
 
 
@@ -138,7 +160,8 @@ class Batch:
 
 
 def next_batch(directory, cursor: dict, *, max_events: int = MAX_EVENTS,
-               max_bytes: int = MAX_BYTES, head_bytes: int = 0) -> Optional[Batch]:
+               max_bytes: int = MAX_BYTES, head_bytes: int = 0,
+               hash_key: Optional[bytes] = None) -> Optional[Batch]:
     """The next batch of unread lines (oldest file first), or None when
     every file is fully uploaded. A batch may hold no lines (only skipped
     ones): the caller then just advances the cursor.
@@ -188,7 +211,7 @@ def next_batch(directory, cursor: dict, *, max_events: int = MAX_EVENTS,
                     batch.forbidden = batch.forbidden or bad
                 else:
                     keep = True
-                    raw = strip_machine_path(obj, raw)
+                    raw = outgoing_line(obj, raw, hash_key)
             if keep:
                 cost = len(raw) + (1 if batch.lines else 0)
                 if batch.lines and (len(batch.lines) >= max_events or used + cost > budget):
@@ -370,15 +393,46 @@ class Uploader:
                 return outcome
         return "idle"
 
+    def _paused(self, directory: Path, cursor: dict) -> bool:
+        """True (and ``last_error`` set) while the local setting or the
+        account switch in remote.json says off."""
+        enabled, _reason = privacy.upload_decision({}, directory.parent)
+        remote = store.read_remote(directory)
+        reason = None
+        if not enabled:
+            reason = "upload_off"
+        elif isinstance(remote, dict) and remote.get("upload") is False:
+            reason = "upload_disabled"
+        if reason is None:
+            return False
+        if cursor.get("last_error") != reason:
+            cursor["last_error"] = reason
+            store.write_upload_cursor(directory, cursor)
+        return True
+
+    def _first_upload_notice(self, root: Path) -> None:
+        """The Data Notice, once per machine and version, to a terminal only."""
+        try:
+            if privacy.notice_shown(root) or not privacy.can_show_notice(sys.stderr):
+                return
+            sys.stderr.write(privacy.NOTICE_TEXT)
+            sys.stderr.flush()
+            privacy.mark_notice_shown(root, self._now_ts())
+        except Exception:  # noqa: BLE001 - fail-open
+            logger.debug("monitor: notice failed", exc_info=True)
+
     def _upload_dir(self, directory: Path, now: float) -> str:
         lock = _DirLock(directory)
         if not directory.is_dir() or not lock.acquire():
             return "idle"
         try:
             cursor = store.read_upload_cursor(directory) or store.empty_upload_cursor()
+            if self._paused(directory, cursor):
+                return "idle"
             batch_id = str(uuid.uuid4())
             head = envelope_head(batch_id, self._version)
-            batch = next_batch(directory, cursor, head_bytes=len(head))
+            batch = next_batch(directory, cursor, head_bytes=len(head),
+                               hash_key=privacy.hash_key(directory.parent))
             if batch is None:
                 return "idle"
             if batch.forbidden:
@@ -388,6 +442,7 @@ class Uploader:
                 store.write_upload_cursor(directory, cursor)
                 return "skipped"
             body = head + b",".join(batch.lines) + b"]}"
+            self._first_upload_notice(directory.parent)
             try:
                 resp = api.request("POST", f"{self.base_url}/v1/monitor/events",
                                    bearer=self.key, opener=self._opener, raw_body=body)
@@ -421,6 +476,12 @@ class Uploader:
             store.write_upload_cursor(directory, cursor)
             self.next_at = now + INTERVAL_S
             return "skipped"
+        if status == 403 and resp.error == "upload_disabled":
+            # The account switch is off: retry rarely; remote.json says when it is on.
+            cursor["last_error"] = "upload_disabled"
+            store.write_upload_cursor(directory, cursor)
+            self.next_at = now + BACKOFF_MAX_S
+            return "backoff"
         if status == 401:
             cursor["last_error"] = "invalid_key"
             store.write_upload_cursor(directory, cursor)

@@ -169,5 +169,7 @@ def set_process_mode(config: Optional[dict], process: str, mode: str,
 
 
 def env_from_os() -> dict:
-    """The monitor-relevant environment, for callers that are not pure."""
-    return {k: v for k, v in os.environ.items() if k in (ENV_MODE, ENV_APP)}
+    """The monitor-relevant environment, for callers that are not pure: the
+    mode and app overrides plus the upload opt-outs (SPEC.md §9)."""
+    keys = (ENV_MODE, ENV_APP, "TRYAII_MONITOR_UPLOAD", "TRYAII_TELEMETRY", "DO_NOT_TRACK")
+    return {k: v for k, v in os.environ.items() if k in keys}

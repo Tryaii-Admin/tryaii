@@ -21,16 +21,25 @@ from tryaii.monitor.config import (
 )
 from tryaii.monitor.context import current_process, process
 from tryaii.monitor.events import (
+    CACHE_PROVIDERS,
+    CACHE_TTLS,
     EVENT_SCHEMA,
     VECTOR_SCHEMA,
     build_event,
     build_vector,
     estimate_cost,
     format_ts,
+    normalize_cache_usage,
+    normalize_usage,
     parse_ts,
 )
 from tryaii.monitor.extract import routing_text
 from tryaii.monitor.pins import PINS_SCHEMA, evaluate_pin, pin_from_first_call, set_pin
+
+#: Version of the CLI and SDK Data Notice built into this SDK: its publication
+#: date (API.md §7.1). Sent as ``notice_version`` with every upload batch; it
+#: names the text, it is not a record that anyone read it.
+from tryaii.monitor.privacy import NOTICE_VERSION
 from tryaii.monitor.status import STATUS_SCHEMA, aggregate
 from tryaii.monitor.winner import (
     MODES,
@@ -49,15 +58,11 @@ from tryaii.monitor.winner import (
     shadow_allowed,
 )
 
-#: Version of the data notice the developer accepted by setting
-#: ``TRYAII_API_KEY`` (sent as ``notice_version`` with every upload batch;
-#: docs/sdk/monitor.md "What is uploaded").
-NOTICE_VERSION = "2026-10"
-
 __all__ = [
     "NOTICE_VERSION",
     "CONFIG_SCHEMA", "EVENT_SCHEMA", "VECTOR_SCHEMA", "PINS_SCHEMA", "STATUS_SCHEMA",
-    "MODES", "PROVIDERS",
+    "MODES", "PROVIDERS", "CACHE_PROVIDERS", "CACHE_TTLS",
+    "normalize_cache_usage", "normalize_usage",
     "routing_text", "provider_class", "resolve_anchor", "reachable", "allowed_models",
     "native_model_id", "pick_winner", "routed_model", "filter_ranking", "managed_target",
     "policy_allowed", "route_allowed", "shadow_allowed",

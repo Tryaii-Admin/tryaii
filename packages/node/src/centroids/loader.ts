@@ -178,9 +178,14 @@ export class CentroidLoader {
     }
   }
 
-  /** The catalog bundle's centroids, when they fit the current provider. */
+  /**
+   * The catalog bundle's centroids for the provider's model (`centroids.json`
+   * or a `centroids.<model id>.json`, contract v1.3), when they fit. A model
+   * the bundle has no centroids for is never scored with another model's.
+   */
   private _tryBundle(): Record<string, number[]> | null {
-    const data = this._bundle.centroids;
+    const data = this._bundle.centroidsFor(this._provider.modelName);
+    if (data === null) return null;
     // Copy the vectors: callers (addBenchmarkCentroid) mutate the returned map.
     const centroids: Record<string, number[]> = {};
     for (const [name, vector] of Object.entries(data.centroids)) centroids[name] = [...vector];

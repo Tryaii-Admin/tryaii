@@ -1,0 +1,5 @@
+{
+  "upload": false,
+  "reason": "TRYAII_TELEMETRY=0",
+  "notice_version": "2026-10-18"
+}

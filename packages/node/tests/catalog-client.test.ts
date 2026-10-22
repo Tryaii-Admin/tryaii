@@ -34,6 +34,7 @@ import type { AuthDeps } from '../src/auth/flow.js';
 import { isoUtc } from '../src/auth/store.js';
 import {
   BUNDLE_DATA_FILES,
+  listedDataFiles,
   BundleError,
   bundleFromTexts,
   loadBundle,
@@ -857,11 +858,11 @@ describe('finding 1: a malformed 200 is a failed download, never a crash', () =>
   }
 
   it('bundleFromTexts throws BundleError for non-text values and wrong shapes', () => {
+    const manifest = JSON.parse(readFileSync(join(STARTER_BUNDLE_DIR, 'manifest.json'), 'utf-8'));
     const texts: Record<string, string> = {};
-    for (const name of BUNDLE_DATA_FILES) {
+    for (const name of listedDataFiles(manifest)) {
       texts[name] = readFileSync(join(STARTER_BUNDLE_DIR, name), 'utf-8');
     }
-    const manifest = JSON.parse(readFileSync(join(STARTER_BUNDLE_DIR, 'manifest.json'), 'utf-8'));
     for (const bad of [10 ** 12, { a: 1 }, null]) {
       expect(() =>
         bundleFromTexts(manifest, { ...texts, 'models.json': bad as unknown as string }),

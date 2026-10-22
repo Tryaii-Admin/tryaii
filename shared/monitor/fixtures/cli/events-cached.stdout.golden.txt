@@ -1,0 +1,5 @@
+2026-10-13T08:00:00.000Z  assist | gpt-5.6 | off | winner openai/gpt-5-mini | 3380 tok | cached 1024 | cache write 2048 | 0.0071 | ok
+2026-10-13T08:10:00.000Z  assist | gpt-4o | off | winner openai/gpt-5-mini | 1177 tok | cached 1024 | 0.0031 | ok
+2026-10-13T08:20:00.000Z  summarize | claude-sonnet-4.5 | off | winner openai/gpt-5-mini | 265 tok | cached 0 | cache write 6400 | 0.0262 | ok
+2026-10-13T08:30:00.000Z  summarize | openai/gpt-5-mini | off | winner openai/gpt-5-mini | 690 tok | cached 0 | 0.0003 | ok
+2026-10-13T08:40:00.000Z  assist | gpt-5.5 | off | winner openai/gpt-5-mini | 1030 tok | 0.0083 | ok

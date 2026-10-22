@@ -43,10 +43,14 @@ export {
   type ProcessResolution,
 } from './config.js';
 export {
+  CACHE_PROVIDERS,
+  CACHE_TTLS,
   COST_DECIMALS,
   EVENT_SCHEMA,
   ROUTE_STATUSES,
   TAXONOMY_VERSION_KEY,
+  USAGE_CACHE_KEYS,
+  USAGE_TOKEN_KEYS,
   VECTOR_SCHEMA,
   buildEvent,
   buildVector,
@@ -54,10 +58,18 @@ export {
   estimateCost,
   formatTs,
   newEventId,
+  normalizeCacheTtlPolicy,
+  normalizeCacheUsage,
+  normalizeCacheWrites,
+  normalizeUsage,
   parseTs,
   roundCost,
   taxonomyVersion,
   usageFromResponse,
+  type CacheProvider,
+  type CacheTtl,
+  type CacheUsage,
+  type CacheWrite,
   type CallSiteRecord,
   type Classification,
   type ErrorRecord,
@@ -66,6 +78,19 @@ export {
   type Usage,
 } from './events.js';
 export { messageText, promptHash, routingText } from './extract.js';
+export {
+  buildReport,
+  CacheTracker,
+  cachedTokensFromUsage,
+  lintPrompt,
+  maskExcerpt,
+  outcomeFromExpected,
+  recommendationFrom,
+  sectionKind,
+  type CacheBlock,
+  type CacheFinding,
+  type CacheReport,
+} from './cache.js';
 export {
   MIN_EVENTS_SHORT,
   PINS_SCHEMA,

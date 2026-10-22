@@ -11,7 +11,7 @@ tryaii setup --model all-mpnet-base-v2
 
 | Flag | Type | Default | Effect |
 |---|---|---|---|
-| `--model` | string | `all-MiniLM-L6-v2` | Embedding model name (Python: any `sentence-transformers` model; Node: resolved as `Xenova/<name>` from the HF hub). Python also honors `TRYAII_DRE_EMBEDDING_MODEL`. |
+| `--model` | string | Python `all-MiniLM-L6-v2-onnx-int8`, Node `all-MiniLM-L6-v2` | Embedding model name (Python: the default ONNX build, or any `sentence-transformers` model with `pip install "tryaii[centroids]"`; Node: resolved as `Xenova/<name>` from the HF hub). Python also honors `TRYAII_DRE_EMBEDDING_MODEL`. |
 
 ## Behavior
 

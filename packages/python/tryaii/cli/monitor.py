@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-VERBS = ("status", "set", "apps", "events")
+VERBS = ("status", "set", "apps", "events", "upload")
 WINDOWS = ("24h", "7d", "30d")
 DEFAULT_EVENTS = 20
 HELP_HINT = 'Run "tryaii help monitor".'
@@ -211,7 +211,9 @@ def _source_line(source: dict) -> str:
     return "source: local"
 
 
-def _upload_line(upload: dict) -> str:
+def _upload_line(upload: dict, off_reason: Optional[str] = None) -> str:
+    if off_reason:
+        return f"upload: off ({off_reason})"
     state = upload.get("state")
     if state == "error":
         return f"upload: error {upload.get('last_error')}"
@@ -220,7 +222,20 @@ def _upload_line(upload: dict) -> str:
     return "upload: off"
 
 
-def render_status(doc: dict) -> str:
+def _classification_line(data_dir) -> Optional[str]:
+    """``classification: off since <ts> (<reason>)`` when the monitor last
+    found the embedding model unavailable on this machine (TS-252), else None.
+    Machine-wide, so printed once after every app's block."""
+    from tryaii.embeddings.model_store import read_state
+
+    state = read_state(Path(data_dir))
+    if not state:
+        return None
+    return (f"classification: off since {state.get('since') or '-'} "
+            f"({state.get('reason') or 'embedding model not available'})")
+
+
+def render_status(doc: dict, off_reason: Optional[str] = None) -> str:
     lines = [f"tryaii monitor -- app: {doc['app']} (last {doc['since']})", ""]
     if not doc["processes"]:
         lines.append("no calls in this window")
@@ -240,7 +255,7 @@ def render_status(doc: dict) -> str:
         lines.append(f"realised: {t['swapped_calls']} swapped calls, "
                      f"saved {_money(t['realised_savings_usd'])}")
     lines.append(_source_line(doc["source"]))
-    lines.append(_upload_line(doc["upload"]))
+    lines.append(_upload_line(doc["upload"], off_reason))
     return "\n".join(lines) + "\n"
 
 
@@ -253,6 +268,13 @@ def render_event(event: dict) -> str:
         str(event.get("mode") or "-"),
         f"winner {event.get('winner') or '-'}",
         f"{_int(usage.get('total_tokens'))} tok",
+    ]
+    # v2.2 (SPEC.md §5.5): the cache segments only when the field is a number.
+    for key, label in (("cached_tokens", "cached"), ("cache_write_tokens", "cache write")):
+        value = usage.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            parts.append(f"{label} {_int(value)}")
+    parts += [
         _money(event.get("est_cost_usd")),
         str(event.get("route_status") or "-"),
     ]
@@ -296,7 +318,13 @@ def _verb_status(argv: list, env: dict) -> None:
     if not docs:
         print(_no_records(store.monitor_root(data_dir)))
         return
-    print("\n".join(render_status(doc) for doc in docs), end="")
+    from tryaii.monitor.privacy import upload_decision
+
+    _enabled, off_reason = upload_decision(env, store.monitor_root(data_dir))
+    print("\n".join(render_status(doc, off_reason) for doc in docs), end="")
+    line = _classification_line(data_dir)
+    if line:
+        print(line)
 
 
 def _verb_set(argv: list, env: dict) -> None:
@@ -377,11 +405,55 @@ def _verb_events(argv: list, env: dict) -> None:
     print("\n".join(render_event(e) for e in events))
 
 
+UPLOAD_ACTIONS = ("status", "on", "off")
+
+
+def _record_cli_notice(root: Path) -> None:
+    """The person just saw the notice in a terminal: remember it locally and,
+    when signed in, record it on the account (API.md §7.2). Best effort."""
+    from tryaii.monitor import privacy
+
+    if not privacy.can_show_notice(sys.stdout):
+        return
+    privacy.mark_notice_shown(root, _now_arg(None))
+    try:
+        from tryaii.cli.apps import record_consent
+
+        record_consent("cli")
+    except Exception:  # noqa: BLE001 -- never fails the command
+        pass
+
+
+def _verb_upload(argv: list, env: dict) -> None:
+    """`tryaii monitor upload [status|on|off]` (SPEC.md §9.3)."""
+    from tryaii.monitor import privacy, store
+
+    positionals, opts = _parse(argv)
+    _only_set_takes_model(opts)
+    if len(positionals) > 1 or (positionals and positionals[0] not in UPLOAD_ACTIONS):
+        raise MonitorUsageError(f"usage: tryaii monitor upload [on|off]. {HELP_HINT}")
+    action = positionals[0] if positionals else "status"
+    root = store.monitor_root(_data_dir())
+    if action in ("on", "off"):
+        privacy.write_local_upload(root, action == "on")
+    enabled, reason = privacy.upload_decision(env, root)
+    if opts.get("json"):
+        print(json.dumps({"upload": enabled, "reason": reason,
+                          "notice_version": privacy.NOTICE_VERSION}, indent=2, ensure_ascii=False))
+        return
+    if action != "off":
+        print(privacy.NOTICE_TEXT)
+    print(f"upload: off ({reason})" if not enabled else "upload: on")
+    if action != "off":
+        _record_cli_notice(root)
+
+
 _VERB_HANDLERS = {
     "status": _verb_status,
     "set": _verb_set,
     "apps": _verb_apps,
     "events": _verb_events,
+    "upload": _verb_upload,
 }
 
 

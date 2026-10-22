@@ -145,6 +145,15 @@ jobs:
         working-directory: packages/python
         run: python -m build
 
+      # The embedding model package tryaii pins (tryaii-minilm-int8). Its
+      # version changes only with the model weights; it is published first,
+      # and an unchanged version is skipped (publish-pypi below).
+      - name: Build the model package (tryaii-minilm-int8)
+        working-directory: packages/python-model
+        run: |
+          python -m build
+          twine check dist/*
+
       - name: Validate distributions
         working-directory: packages/python
         run: twine check dist/*
@@ -153,45 +162,20 @@ jobs:
         working-directory: packages/python
         run: |
           python -m venv /tmp/smoke-env
-          /tmp/smoke-env/bin/pip install dist/*.whl
+          /tmp/smoke-env/bin/pip install ../python-model/dist/*.whl dist/*.whl
           /tmp/smoke-env/bin/tryaii --help >/dev/null
           /tmp/smoke-env/bin/python - <<'PY'
-          import numpy as np
-          import sentence_transformers
-
-          class FakeSentenceTransformer:
-              def __init__(self, model_name: str, device=None):
-                  self.model_name = model_name
-                  self.device = device
-
-              def encode(
-                  self,
-                  texts,
-                  convert_to_numpy=True,
-                  normalize_embeddings=False,
-                  batch_size=32,
-              ):
-                  if isinstance(texts, str):
-                      texts = [texts]
-
-                  vectors = []
-                  for text in texts:
-                      seed = abs(hash(text)) % (2**32)
-                      rng = np.random.RandomState(seed)
-                      vector = rng.randn(384).astype(np.float32)
-                      if normalize_embeddings:
-                          vector /= np.linalg.norm(vector)
-                      vectors.append(vector)
-
-                  return np.stack(vectors)
-
-          sentence_transformers.SentenceTransformer = FakeSentenceTransformer
+          import sys
 
           from tryaii import Router
 
+          # The real model from the tryaii-minilm-int8 wheel, on onnxruntime.
           router = Router()
           result = router.route("Write a Python function to merge sorted arrays")
           assert result.best_model, "No model returned"
+          assert result.classification.classifier_used == "embedding"
+          assert "torch" not in sys.modules, "torch was imported"
+          assert "sentence_transformers" not in sys.modules
           print(f"Smoke test passed: best_model={result.best_model}")
           PY
 
@@ -214,6 +198,14 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Upload model dist
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: model-dist
+          path: packages/python-model/dist/
+          if-no-files-found: error
+          retention-days: 7
+
   publish-pypi:
     name: Publish to PyPI
     needs: verify
@@ -226,6 +218,21 @@ jobs:
       contents: read
 
     steps:
+      # The model package first: tryaii pins it exactly, so tryaii must never
+      # reach PyPI before it. An unchanged version is already there (skipped).
+      - name: Download model dist
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: model-dist
+          path: dist-model/
+
+      - name: Publish the model package to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist-model/
+          print-hash: true
+          skip-existing: true
+
       - name: Download python dist
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -272,6 +279,19 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      # TS-253: the embedding model package (optional peer dependency of
+      # tryaii) goes first, and only when its version is not on npm yet: it
+      # changes only with the model weights.
+      - name: Publish the model package (tryaii-minilm-int8) if new
+        working-directory: packages/node-model
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "tryaii-minilm-int8@${VERSION}" version >/dev/null 2>&1; then
+            echo "tryaii-minilm-int8@${VERSION} is already on npm"
+          else
+            npm publish --provenance --access public
+          fi
 
       - name: Publish to npm (Trusted Publishing, with provenance)
         run: npm publish --provenance --access public

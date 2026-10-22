@@ -315,12 +315,46 @@ class Transport:
 
         if daemon_mod.is_disabled():
             return
+        if not self._embedding_model_ready():
+            return
         try:
             self._state = daemon_mod.ensure_daemon(self._config, bundle=bundle)
         except Exception:  # noqa: BLE001 - never let daemon issues break the app
             logger.debug("daemon unavailable", exc_info=True)
             self._state = None
         self._state_checked_at = time.monotonic()
+
+    def _embedding_model_ready(self) -> bool:
+        """Make sure the daemon will have its embedding model: for an ONNX
+        model, a verified file (``TRYAII_EMBEDDING_MODEL_PATH``, else the
+        installed ``tryaii-minilm-int8`` package), checked here on the worker,
+        never on the hot path. Without it no daemon is started and the wrapper
+        behaves exactly as without a daemon: metadata-only events, the model
+        in your code is sent. The warning is logged at most once per machine
+        per day, and ``tryaii monitor status`` shows the state (TS-252)."""
+        from tryaii.embeddings import model_store
+
+        model = self._config.embedding_model
+        if not model_store.is_onnx_model(model):
+            return True
+        try:
+            path = model_store.resolve_model_path(model)
+        except Exception:  # noqa: BLE001 - fail-open
+            logger.debug("monitor: embedding model resolution failed", exc_info=True)
+            path = None
+        if path is not None:
+            model_store.clear_unavailable(self._config.data_dir, log=logger)
+            return True
+        reason = model_store.last_error() or "not found"
+        model_store.report_unavailable(
+            model, reason, data_dir=self._config.data_dir, log=logger,
+            message=(f"tryaii monitor: embedding model {model} is not available ({reason}); "
+                     f"recording metadata only and sending the model in your code. "
+                     f"Fix: pip install --force-reinstall "
+                     f"{model_store.MODELS[model].distribution}, or set "
+                     f"{model_store.ENV_MODEL_PATH} to a copy of the model file. "
+                     f"Shown at most once a day; see: tryaii monitor status"))
+        return False
 
     # -- routing ---------------------------------------------------------
 

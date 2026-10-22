@@ -54,4 +54,4 @@ Routing is fully local — no API key. To also *call* the chosen model, use the 
 |---|---|---|
 | `Router.route` | sync | async (`routeSync` exists but requires a sync-capable embedding provider; the default local provider is async-only) |
 | High-level client | `DREClient` (sync) + `AsyncDREClient` | `DREClient` (async) |
-| Embedding backend | `sentence-transformers` (core dependency) | `@xenova/transformers` (optional dependency, lazy-loaded) |
+| Embedding backend | `onnxruntime` + `tokenizers`, int8 ONNX MiniLM (core dependencies; `sentence-transformers` is the optional `centroids` extra) | `@xenova/transformers` (optional dependency, lazy-loaded) |

@@ -1,7 +1,7 @@
 # Routing daemon
 
 `tryaii route` (and `tryaii eval`) pay a large fixed startup cost on every
-invocation: importing the embedding stack (torch / `@xenova/transformers`) and
+invocation: importing the embedding stack (onnxruntime / `@xenova/transformers`) and
 loading the embedding model dominates wall-clock time, while the routing math
 itself takes well under a millisecond. Because each CLI call is a fresh process,
 that cost cannot be amortized within a single invocation -- caching centroids
@@ -12,7 +12,8 @@ keeps it warm; subsequent `route`/`eval` calls become thin clients that send the
 prompt over a loopback socket and get the routing decision back near-instantly.
 
 Both SDKs (Python and Node) implement the same design. They run **separate**
-daemons: the Python SDK embeds with `sentence-transformers` and the Node SDK
+daemons: the Python SDK embeds with an int8 ONNX build on `onnxruntime`
+(`all-MiniLM-L6-v2-onnx-int8`) and the Node SDK
 with `@xenova/transformers`, so their embeddings (and therefore routing) are not
 guaranteed bit-identical. A client only ever talks to a daemon started by the
 same runtime and for the same embedding model (verified on the ping handshake);

@@ -25,7 +25,8 @@ pytestmark = pytest.mark.skipif(
     reason="shared/monitor/fixtures not present (package-only checkout)",
 )
 
-ENGINE_SUITES = ("extract", "resolve", "winner", "pin", "config", "status")
+ENGINE_SUITES = ("extract", "resolve", "winner", "pin", "config", "status", "cache",
+                 "cache_usage")
 
 
 def _generator():
@@ -68,6 +69,9 @@ def test_every_engine_suite_has_cases():
         assert _cases(suite), f"{suite} has no cases"
 
 
+# Re-runs the whole fixture generator (~35 s): full CI only. The fixture
+# cases themselves (the cross-SDK contract) run in the light suite.
+@pytest.mark.slow
 def test_generator_check_is_clean():
     """`--check` must be clean: the frozen files match the engine."""
     module = _generator()

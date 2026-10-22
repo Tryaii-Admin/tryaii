@@ -15,7 +15,7 @@ import urllib.error
 
 import pytest
 
-from tryaii.monitor import NOTICE_VERSION, store, upload
+from tryaii.monitor import NOTICE_VERSION, privacy, store, upload
 from tryaii.monitor.events import build_event
 
 KEY = "tryaii_k1a2b3c4d5e6_fixtureSecretfixtureSecretfixtureSecretfixt"
@@ -131,12 +131,16 @@ def test_validates_once_then_uploads_the_unread_lines(tmp_path):
     assert list(body) == ["schema", "batch_id", "sdk", "notice_version", "events"]
     assert body["schema"] == "tryaii.monitor.upload/1"
     assert body["sdk"] == {"lang": "python", "version": "0.7.0"}
-    assert body["notice_version"] == NOTICE_VERSION == "2026-10"
+    assert body["notice_version"] == NOTICE_VERSION == "2026-10-18"
     assert [e["event_id"] for e in body["events"]] == [
         "00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]
-    # The stored lines are spliced in verbatim.
-    lines = path.read_bytes().splitlines()
-    assert post["data"].endswith(b"[" + b",".join(lines) + b"]}")
+    # The stored lines go out unchanged except for the keyed prompt hash (SPEC §9).
+    key = privacy.hash_key(tmp_path.parent)
+    stored = [json.loads(line) for line in path.read_bytes().splitlines()]
+    for local, sent in zip(stored, body["events"]):
+        keyed = privacy.keyed_hash(key, local["prompt_hash"])
+        assert sent["prompt_hash"] == keyed != local["prompt_hash"]
+        assert {**sent, "prompt_hash": None} == {**local, "prompt_hash": None}
     cursor = store.read_upload_cursor(tmp_path)
     assert cursor == {"schema": "tryaii.monitor.upload-cursor/1",
                       "files": {path.name: path.stat().st_size},
@@ -455,3 +459,106 @@ def test_absolute_call_site_path_never_leaves_the_machine(tmp_path):
     assert [s["call_site"]["file"] for s in sent] == ["worker.py", "worker.py", "app/worker.py"]
     assert batch.lines[2] == raw_lines[2]            # untouched line: verbatim bytes
     assert b"koren" not in b"".join(batch.lines)
+
+
+# --- privacy (SPEC §9) --------------------------------------------------------------
+
+def app_dir(tmp_path):
+    """An app directory under its own monitor root, so settings stay per test."""
+    directory = tmp_path / "monitor" / "shop"
+    directory.mkdir(parents=True)
+    return directory
+
+
+@pytest.mark.parametrize("env,reason", [
+    ({}, None),
+    ({"TRYAII_MONITOR_UPLOAD": "0"}, "TRYAII_MONITOR_UPLOAD=0"),
+    ({"TRYAII_TELEMETRY": "0"}, "TRYAII_TELEMETRY=0"),
+    ({"TRYAII_TELEMETRY": "false"}, "TRYAII_TELEMETRY=0"),
+    ({"DO_NOT_TRACK": "1"}, "DO_NOT_TRACK=1"),
+    ({"DO_NOT_TRACK": "true"}, "DO_NOT_TRACK=1"),
+    ({"DO_NOT_TRACK": "0"}, None),
+    ({"TRYAII_TELEMETRY": "1"}, None),
+])
+def test_upload_decision_env(env, reason):
+    assert privacy.upload_decision(env) == (reason is None, reason)
+    assert upload.upload_enabled(env) is (reason is None)
+
+
+def test_local_setting_pauses_the_app_directory(tmp_path):
+    directory = app_dir(tmp_path)
+    write_events(directory, [event(1)])
+    root = directory.parent
+    privacy.write_local_upload(root, False)
+    assert privacy.upload_decision({}, root) == (False, "tryaii monitor upload off")
+    up, opener, _ = make(directory, {"/v1/apps/keys/validate": [(200, VALID)],
+                                     "/v1/monitor/events": [(202, {"accepted": 1})]})
+    assert up.run_once() == "idle"
+    assert opener.posts() == []
+    assert store.read_upload_cursor(directory)["last_error"] == "upload_off"
+    privacy.write_local_upload(root, True)
+    assert up.run_once() == "sent"
+
+
+def test_remote_upload_false_pauses_until_true(tmp_path):
+    directory = app_dir(tmp_path)
+    write_events(directory, [event(1)])
+    remote = {"schema": "tryaii.monitor.remote/1", "etag": "e-u0", "app_id": "app_abcdefghijkl",
+              "default_mode": None, "processes": {}, "upload": False, "updated_at": None,
+              "updated_by": None}
+    store.write_remote(directory, remote, "2026-10-12T09:00:00.000Z")
+    up, opener, _ = make(directory, {"/v1/apps/keys/validate": [(200, VALID)],
+                                     "/v1/monitor/events": [(202, {"accepted": 1})]})
+    assert up.run_once() == "idle" and opener.posts() == []
+    assert store.read_upload_cursor(directory)["last_error"] == "upload_disabled"
+    store.write_remote(directory, {**remote, "upload": True}, "2026-10-12T09:01:00.000Z")
+    assert up.run_once() == "sent"
+    assert store.read_upload_cursor(directory)["last_error"] is None
+
+
+def test_403_upload_disabled_backs_off_without_advancing(tmp_path):
+    directory = app_dir(tmp_path)
+    write_events(directory, [event(1)])
+    up, opener, clock = make(directory, {
+        "/v1/apps/keys/validate": [(200, VALID)],
+        "/v1/monitor/events": [(403, {"error": "upload_disabled"}), (202, {"accepted": 1})]})
+    assert up.run_once() == "backoff"
+    cursor = store.read_upload_cursor(directory)
+    assert cursor["last_error"] == "upload_disabled" and cursor["files"] == {}
+    assert up.run_once() == "wait"
+    clock.t += upload.BACKOFF_MAX_S
+    assert up.run_once() == "sent"
+
+
+def test_keyed_hash_is_stable_per_installation(tmp_path):
+    root_a, root_b = tmp_path / "a", tmp_path / "b"
+    key_a = privacy.hash_key(root_a)
+    assert privacy.hash_key(root_a) == key_a and len(key_a) == 32
+    assert privacy.hash_key(root_b) != key_a
+    h = "0" * 64
+    assert privacy.keyed_hash(key_a, h) == privacy.keyed_hash(key_a, h)
+    assert privacy.keyed_hash(key_a, h) != privacy.keyed_hash(privacy.hash_key(root_b), h)
+    assert len(privacy.keyed_hash(key_a, h)) == 64
+
+
+def test_notice_is_shown_once_to_a_terminal(tmp_path, monkeypatch, capsys):
+    directory = app_dir(tmp_path)
+    write_events(directory, [event(1)])
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setattr(privacy, "can_show_notice", lambda stream, env=None: True)
+    up, _, clock = make(directory, {"/v1/apps/keys/validate": [(200, VALID)],
+                                    "/v1/monitor/events": [(202, {"accepted": 1})]})
+    assert up.run_once() == "sent"
+    assert capsys.readouterr().err == privacy.NOTICE_TEXT
+    assert privacy.notice_shown(directory.parent)
+    write_events(directory, [event(2)])
+    clock.t += upload.INTERVAL_S
+    assert up.run_once() == "sent"
+    assert capsys.readouterr().err == ""
+
+
+def test_notice_is_not_shown_without_a_terminal(tmp_path, capsys):
+    assert privacy.can_show_notice(object()) is False
+    terminal = type("T", (), {"isatty": lambda self: True})()
+    assert privacy.can_show_notice(terminal, {"CI": "1"}) is False
+    assert privacy.can_show_notice(terminal, {}) is True

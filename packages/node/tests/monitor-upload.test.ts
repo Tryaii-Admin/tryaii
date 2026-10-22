@@ -6,18 +6,21 @@
  * packages/python/tests/test_monitor_upload.py.
  */
 
-import { appendFileSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, existsSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, existsSync } from 'node:fs';
+import { createHmac } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { NOTICE_VERSION, Transport, buildEvent, store } from '../src/monitor/index.js';
 import { RemotePoller } from '../src/monitor/remote.js';
+import * as privacy from '../src/monitor/privacy.js';
 import * as upload from '../src/monitor/upload.js';
 
 const KEY = 'tryaii_k1a2b3c4d5e6_fixtureSecretfixtureSecretfixtureSecretfixt';
 const BASE = 'https://api.test';
+const PY_HMAC_ABC = 'f0133729c4163dede81e21cd47839256da58171238c8a0d874397c73b14e1e47';
 const VALID = {
   app_id: 'app_abcdefghijkl',
   app_name: 'shop',
@@ -100,6 +103,7 @@ function event(i: number, extra: Record<string, unknown> = {}, ts = '2026-10-12T
 }
 
 let dir: string;
+let base: string;
 
 function writeEvents(events: Record<string, unknown>[], day = '2026-10-12'): string {
   const path = join(dir, `events-${day}.jsonl`);
@@ -125,7 +129,10 @@ const warned: string[] = [];
 const savedWrite = upload.warnings.write;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'tryaii-monitor-upload-'));
+  // An app directory under its own monitor root (settings, notice and hash key live there).
+  base = mkdtempSync(join(tmpdir(), 'tryaii-monitor-upload-'));
+  dir = join(base, 'monitor', 'shop');
+  mkdirSync(dir, { recursive: true });
   upload.resetKeyRejectedLog();
   warned.length = 0;
   upload.warnings.write = (text: string) => {
@@ -136,7 +143,7 @@ beforeEach(() => {
 afterEach(() => {
   upload.warnings.write = savedWrite;
   upload.resetKeyRejectedLog();
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(base, { recursive: true, force: true });
 });
 
 // --- happy path ---------------------------------------------------------------
@@ -157,14 +164,20 @@ describe('happy path', () => {
     expect(body.schema).toBe('tryaii.monitor.upload/1');
     expect(body.sdk).toEqual({ lang: 'node', version: '0.7.0' });
     expect(body.notice_version).toBe(NOTICE_VERSION);
-    expect(NOTICE_VERSION).toBe('2026-10');
+    expect(NOTICE_VERSION).toBe('2026-10-18');
     expect(body.events.map((e: Record<string, unknown>) => e.event_id)).toEqual([
       '00000000-0000-4000-8000-000000000001',
       '00000000-0000-4000-8000-000000000002',
     ]);
-    // The stored lines are spliced in verbatim.
-    const lines = readFileSync(path, 'utf-8').trimEnd().split('\n');
-    expect(String(post.data).endsWith('[' + lines.join(',') + ']}')).toBe(true);
+    // The stored lines go out unchanged except for the keyed prompt hash (SPEC §9).
+    const key = privacy.hashKey(dirname(dir));
+    const stored = readFileSync(path, 'utf-8').trimEnd().split('\n').map((l) => JSON.parse(l));
+    stored.forEach((local: Record<string, unknown>, i: number) => {
+      const sent = body.events[i];
+      expect(sent.prompt_hash).toBe(privacy.keyedHash(key, String(local.prompt_hash)));
+      expect(sent.prompt_hash).not.toBe(local.prompt_hash);
+      expect({ ...sent, prompt_hash: null }).toEqual({ ...local, prompt_hash: null });
+    });
     expect(store.readUploadCursor(dir)).toEqual({
       schema: 'tryaii.monitor.upload-cursor/1',
       files: { 'events-2026-10-12.jsonl': statSync(path).size },
@@ -569,5 +582,130 @@ describe('call-site paths never leave the machine (TS-226)', () => {
     expect(sent.map((s) => s.call_site.file)).toEqual(['worker.js', 'worker.js', 'app/worker.js']);
     expect(batch!.lines[2].toString('utf-8')).toBe(rawLines[2]);
     expect(Buffer.concat(batch!.lines).includes('koren')).toBe(false);
+  });
+});
+
+// --- privacy (SPEC §9) ------------------------------------------------------------
+
+describe('privacy', () => {
+  it.each([
+    [{}, null],
+    [{ TRYAII_MONITOR_UPLOAD: '0' }, 'TRYAII_MONITOR_UPLOAD=0'],
+    [{ TRYAII_TELEMETRY: '0' }, 'TRYAII_TELEMETRY=0'],
+    [{ TRYAII_TELEMETRY: 'false' }, 'TRYAII_TELEMETRY=0'],
+    [{ DO_NOT_TRACK: '1' }, 'DO_NOT_TRACK=1'],
+    [{ DO_NOT_TRACK: 'true' }, 'DO_NOT_TRACK=1'],
+    [{ DO_NOT_TRACK: '0' }, null],
+    [{ TRYAII_TELEMETRY: '1' }, null],
+  ])('upload decision for %o', (env, reason) => {
+    expect(privacy.uploadDecision(env as Record<string, string>)).toEqual([reason === null, reason]);
+    expect(upload.uploadEnabled(env as NodeJS.ProcessEnv)).toBe(reason === null);
+  });
+
+  it('the local setting pauses the app directory', async () => {
+    writeEvents([event(1)]);
+    const root = dirname(dir);
+    privacy.writeLocalUpload(root, false);
+    expect(privacy.uploadDecision({}, root)).toEqual([false, 'tryaii monitor upload off']);
+    const { up, fake } = make({
+      '/v1/apps/keys/validate': [[200, VALID]],
+      '/v1/monitor/events': [[202, { accepted: 1 }]],
+    });
+    expect(await up.runOnce()).toBe('idle');
+    expect(fake.posts()).toEqual([]);
+    expect(store.readUploadCursor(dir)?.last_error).toBe('upload_off');
+    privacy.writeLocalUpload(root, true);
+    expect(await up.runOnce()).toBe('sent');
+  });
+
+  it('remote upload:false pauses until it says true', async () => {
+    writeEvents([event(1)]);
+    const remote = {
+      schema: 'tryaii.monitor.remote/1',
+      etag: 'e-u0',
+      app_id: 'app_abcdefghijkl',
+      default_mode: null,
+      processes: {},
+      upload: false,
+      updated_at: null,
+      updated_by: null,
+    };
+    store.writeRemote(dir, remote, '2026-10-12T09:00:00.000Z');
+    const { up, fake } = make({
+      '/v1/apps/keys/validate': [[200, VALID]],
+      '/v1/monitor/events': [[202, { accepted: 1 }]],
+    });
+    expect(await up.runOnce()).toBe('idle');
+    expect(fake.posts()).toEqual([]);
+    expect(store.readUploadCursor(dir)?.last_error).toBe('upload_disabled');
+    store.writeRemote(dir, { ...remote, upload: true }, '2026-10-12T09:01:00.000Z');
+    expect(await up.runOnce()).toBe('sent');
+    expect(store.readUploadCursor(dir)?.last_error).toBeNull();
+  });
+
+  it('a 403 upload_disabled backs off without advancing', async () => {
+    writeEvents([event(1)]);
+    const { up, clock } = make({
+      '/v1/apps/keys/validate': [[200, VALID]],
+      '/v1/monitor/events': [[403, { error: 'upload_disabled' }], [202, { accepted: 1 }]],
+    });
+    expect(await up.runOnce()).toBe('backoff');
+    const cursor = store.readUploadCursor(dir);
+    expect(cursor?.last_error).toBe('upload_disabled');
+    expect(cursor?.files).toEqual({});
+    expect(await up.runOnce()).toBe('wait');
+    clock.t += upload.BACKOFF_MAX_MS;
+    expect(await up.runOnce()).toBe('sent');
+  });
+
+  it('the keyed hash is stable per installation', () => {
+    const keyA = privacy.hashKey(join(base, 'a'));
+    expect(privacy.hashKey(join(base, 'a'))).toEqual(keyA);
+    expect(keyA.length).toBe(32);
+    const keyB = privacy.hashKey(join(base, 'b'));
+    expect(keyB).not.toEqual(keyA);
+    const h = '0'.repeat(64);
+    expect(privacy.keyedHash(keyA, h)).toBe(privacy.keyedHash(keyA, h));
+    expect(privacy.keyedHash(keyA, h)).not.toBe(privacy.keyedHash(keyB, h));
+    expect(privacy.keyedHash(keyA, h)).toHaveLength(64);
+  });
+
+  it('the keyed hash matches the Python reference vector', () => {
+    // python: hmac.new(bytes(range(32)), b"abc", hashlib.sha256).hexdigest()
+    const key = Buffer.from(Array.from({ length: 32 }, (_, i) => i));
+    expect(privacy.keyedHash(key, 'abc')).toBe(createHmac('sha256', key).update('abc').digest('hex'));
+    expect(privacy.keyedHash(key, 'abc')).toBe(PY_HMAC_ABC);
+  });
+
+  it('the notice is shown once to a terminal', async () => {
+    writeEvents([event(1)]);
+    const shown: string[] = [];
+    const savedNotice = upload.notices.write;
+    upload.notices.write = (text: string) => {
+      shown.push(text);
+    };
+    const spy = vi.spyOn(privacy, 'canShowNotice').mockReturnValue(true);
+    try {
+      const { up, clock } = make({
+        '/v1/apps/keys/validate': [[200, VALID]],
+        '/v1/monitor/events': [[202, { accepted: 1 }]],
+      });
+      expect(await up.runOnce()).toBe('sent');
+      expect(shown).toEqual([privacy.NOTICE_TEXT]);
+      expect(privacy.noticeShown(dirname(dir))).toBe(true);
+      writeEvents([event(2)]);
+      clock.t += upload.INTERVAL_MS;
+      expect(await up.runOnce()).toBe('sent');
+      expect(shown).toHaveLength(1);
+    } finally {
+      spy.mockRestore();
+      upload.notices.write = savedNotice;
+    }
+  });
+
+  it('the notice is never shown without a terminal or under CI', () => {
+    expect(privacy.canShowNotice({})).toBe(false);
+    expect(privacy.canShowNotice({ isTTY: true }, { CI: '1' })).toBe(false);
+    expect(privacy.canShowNotice({ isTTY: true }, {})).toBe(true);
   });
 });

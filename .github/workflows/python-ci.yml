@@ -1,34 +1,57 @@
 name: Python CI
 
-# Production (public release) repo: the FULL check (Python 3.9-3.13, full suite, publish-check) runs on every
-# pull request into main and on manual runs, and on nothing else: no push
-# runs on any branch (main only changes through reviewed PRs, and a release
-# tag is verified by release.yml itself). A newer push to the same PR
-# cancels the running check.
+# One file, two modes. The same file lives in tryaii-dev and in the public
+# release repo (a release copies the tree across), so the mode is decided by
+# the repository the run is in, never by which copy of the file it is:
 #
-# tryaii-dev carries a mode-aware copy of this file (light there, full here,
-# decided by github.repository), so a release that copies the dev tree
-# across keeps this repo on the full matrix.
+#   LIGHT  (Tryaii-Admin/tryaii-dev, the development repo, by default):
+#          Python 3.12 only, ruff + `pytest -m "not slow"`, no publish-check.
+#   FULL   (Tryaii-Admin/tryaii, the production repo, and anything else;
+#          or tryaii-dev on request): Python 3.9-3.13, ruff + the whole suite
+#          (cross-CLI parity included on 3.12), publish-check.
+#
+# Run the full suite on tryaii-dev:
+#   - add the `full-ci` label to the pull request (runs at once, and on every
+#     later push while the label is on), or
+#   - Actions > Python CI > Run workflow > full: true (any branch).
+#
+# Triggers: pull requests into main and manual runs only. No push runs: a
+# feature-branch push is already covered by its PR run, and main only changes
+# through reviewed PRs (main-protection). Releases are gated by release.yml
+# on the tag, which rebuilds and smoke-tests both packages itself.
 
 on:
   pull_request:
     branches: [main]
+    # `labeled` so adding `full-ci` starts the full run straight away; any
+    # other label is ignored (see the job `if` and the concurrency group).
+    types: [opened, synchronize, reopened, labeled]
     paths:
       - "packages/python/**"
+      - "packages/python-model/**"
       - "shared/**"
       - "scripts/**"
       - ".github/workflows/python-ci.yml"
       # Prose-only changes run nothing...
       - "!**/*.md"
-      # ...except the Markdown that tests read.
+      # ...except the Markdown that tests read: shipped skill files, test
+      # fixtures and the black-box contracts the blackbox suites derive from.
       - "shared/*/skill/**"
       - "shared/*/fixtures/**"
       - "docs/auth/CONTRACT-*.md"
       - "docs/catalog/CONTRACT-*.md"
   workflow_dispatch:
+    inputs:
+      full:
+        description: "Full matrix and full suite (3.9-3.13, slow tests, publish-check)"
+        type: boolean
+        default: false
 
+# One run per PR (or per ref for manual runs); a new push cancels the old run.
+# A `labeled` event for a label other than full-ci gets its own throwaway
+# group, so tagging a PR never cancels its real run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}${{ (github.event.action == 'labeled' && github.event.label.name != 'full-ci') && format('-ignored-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -36,11 +59,14 @@ permissions:
 
 jobs:
   test:
+    if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
     runs-on: ubuntu-latest
+    env:
+      CI_FULL: ${{ github.repository != 'Tryaii-Admin/tryaii-dev' || inputs.full == true || contains(github.event.pull_request.labels.*.name, 'full-ci') }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ${{ fromJSON((github.repository != 'Tryaii-Admin/tryaii-dev' || inputs.full == true || contains(github.event.pull_request.labels.*.name, 'full-ci')) && '["3.9", "3.10", "3.11", "3.12", "3.13"]' || '["3.12"]') }}
 
     defaults:
       run:
@@ -56,8 +82,11 @@ jobs:
           cache: pip
           cache-dependency-path: packages/python/pyproject.toml
 
-      - name: Install CPU-only torch (skip ~3.7 GB of CUDA wheels)
-        run: pip install --index-url https://download.pytorch.org/whl/cpu torch
+      # tryaii pins tryaii-minilm-int8 (the embedding model file); install the
+      # repository's copy so CI never depends on what is on PyPI. No torch:
+      # the default embeddings run on onnxruntime (TS-252).
+      - name: Install the model package
+        run: pip install ../python-model
 
       - name: Install dependencies
         run: pip install -e ".[dev]"
@@ -65,26 +94,40 @@ jobs:
       - name: Lint with ruff
         run: ruff check tryaii/ tests/
 
-      # The cross-CLI parity suites (cachelint/diagnose/designpartner, starter
-      # routing parity) run the Node build and skip without it: build it on
-      # one matrix entry so they actually run there.
+      # The cross-CLI parity suites (cachelint/diagnose/designpartner/monitor,
+      # starter routing parity) run the Node build and skip without it: on the
+      # full run, build it on one matrix entry so they actually run there.
+      # The light run skips them (they are also marked slow).
       - name: Set up Node 22 (cross-CLI parity)
-        if: matrix.python-version == '3.12'
+        if: env.CI_FULL == 'true' && matrix.python-version == '3.12'
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: packages/node/package-lock.json
 
       - name: Build the Node CLI (cross-CLI parity)
-        if: matrix.python-version == '3.12'
+        if: env.CI_FULL == 'true' && matrix.python-version == '3.12'
         working-directory: packages/node
         run: |
           npm install
           npm run build
 
-      - name: Run tests
+      - name: Run tests (full suite)
+        if: env.CI_FULL == 'true'
         run: pytest tests/ -v --tb=short
 
+      # Everything except tests marked `slow` (registered in pyproject.toml):
+      # black-box contract suites, end-to-end CLI flows, cross-CLI parity.
+      # The shared-fixture parity suites (the cross-SDK contract) stay in.
+      - name: Run tests (light, not slow)
+        if: env.CI_FULL != 'true'
+        run: pytest tests/ -m "not slow" --tb=short -q
+
   publish-check:
+    if: >-
+      (github.event.action != 'labeled' || github.event.label.name == 'full-ci') &&
+      (github.repository != 'Tryaii-Admin/tryaii-dev' || inputs.full == true || contains(github.event.pull_request.labels.*.name, 'full-ci'))
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -104,51 +147,29 @@ jobs:
       - name: Build sdist and wheel
         run: python -m build
 
+      - name: Build the model package
+        run: python -m build ../python-model --outdir ../python-model/dist
+
       - name: Validate distributions
         run: twine check dist/*
 
       - name: Smoke test -- install wheel in clean env
         run: |
           python -m venv /tmp/smoke-env
-          /tmp/smoke-env/bin/pip install dist/*.whl
+          /tmp/smoke-env/bin/pip install ../python-model/dist/*.whl dist/*.whl
           /tmp/smoke-env/bin/tryaii --help >/dev/null
           /tmp/smoke-env/bin/python - <<'PY'
-          import numpy as np
-          import sentence_transformers
-
-          class FakeSentenceTransformer:
-              def __init__(self, model_name: str, device=None):
-                  self.model_name = model_name
-                  self.device = device
-
-              def encode(
-                  self,
-                  texts,
-                  convert_to_numpy=True,
-                  normalize_embeddings=False,
-                  batch_size=32,
-              ):
-                  if isinstance(texts, str):
-                      texts = [texts]
-
-                  vectors = []
-                  for text in texts:
-                      seed = abs(hash(text)) % (2**32)
-                      rng = np.random.RandomState(seed)
-                      vector = rng.randn(384).astype(np.float32)
-                      if normalize_embeddings:
-                          vector /= np.linalg.norm(vector)
-                      vectors.append(vector)
-
-                  return np.stack(vectors)
-
-          sentence_transformers.SentenceTransformer = FakeSentenceTransformer
+          import sys
 
           from tryaii import Router
 
+          # The real model from the tryaii-minilm-int8 wheel, on onnxruntime.
           router = Router()
           result = router.route("Write a Python function to merge sorted arrays")
           assert result.best_model, "No model returned"
+          assert result.classification.classifier_used == "embedding"
+          assert "torch" not in sys.modules, "torch was imported"
+          assert "sentence_transformers" not in sys.modules
           print(f"Smoke test passed: best_model={result.best_model}")
           PY
 

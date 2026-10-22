@@ -820,6 +820,206 @@
         "stderr": null,
         "exit_code": 0
       }
+    },
+    {
+      "name": "upload-status",
+      "description": "Without an argument: the data notice, then the state (no setting, no opt-out: on).",
+      "input": {
+        "argv": [
+          "monitor",
+          "upload"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "upload-status.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "upload-off",
+      "description": "upload off writes settings.json and says what turned uploads off.",
+      "input": {
+        "argv": [
+          "monitor",
+          "upload",
+          "off"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "upload-off.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "upload-on-env-wins",
+      "description": "upload on with DO_NOT_TRACK=1: the setting is on, the environment still turns uploads off.",
+      "input": {
+        "argv": [
+          "monitor",
+          "upload",
+          "on"
+        ],
+        "env": {
+          "DO_NOT_TRACK": "1"
+        }
+      },
+      "expected": {
+        "stdout_golden": "upload-on-env-wins.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "upload-json",
+      "description": "--json: the decision as a document.",
+      "input": {
+        "argv": [
+          "monitor",
+          "upload",
+          "--json"
+        ],
+        "env": {
+          "TRYAII_TELEMETRY": "0"
+        }
+      },
+      "expected": {
+        "stdout_golden": "upload-json.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "upload-bad-action",
+      "description": "An unknown action is a usage error.",
+      "input": {
+        "argv": [
+          "monitor",
+          "upload",
+          "maybe"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "upload-bad-action.stdout.golden.txt",
+        "stderr": "error: usage: tryaii monitor upload [on|off]. Run \"tryaii help monitor\".\n",
+        "exit_code": 2
+      }
+    },
+    {
+      "name": "status-upload-opted-out",
+      "description": "status names the opt-out on the upload line.",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--app",
+          "shop",
+          "--now",
+          "2026-10-11T12:00:00Z"
+        ],
+        "copy_store": [
+          "shop"
+        ],
+        "env": {
+          "TRYAII_MONITOR_UPLOAD": "0"
+        }
+      },
+      "expected": {
+        "stdout_golden": "status-upload-opted-out.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "events-cached",
+      "description": "Human events lines carry the optional cache segments: `cached <n>` and `cache write <n>` only when the field is a number (0 included); the pre-TS-228 line prints neither.",
+      "input": {
+        "argv": [
+          "monitor",
+          "events",
+          "--app",
+          "cached",
+          "-n",
+          "5"
+        ],
+        "copy_store": [
+          "cached"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "events-cached.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "events-cached-json",
+      "description": "--json prints the stored lines unchanged: the cache fields and cache_ttl_policy where present, nothing added where absent.",
+      "input": {
+        "argv": [
+          "monitor",
+          "events",
+          "--app",
+          "cached",
+          "-n",
+          "5",
+          "--json"
+        ],
+        "copy_store": [
+          "cached"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "events-cached-json.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "status-cached-json",
+      "description": "The status document carries the cache sums per process and in totals (null where no event reported them).",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--app",
+          "cached",
+          "--now",
+          "2026-10-13T12:00:00Z",
+          "--json"
+        ],
+        "copy_store": [
+          "cached"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "status-cached-json.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "status-cached",
+      "description": "The human status table is unchanged by the cache fields.",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--app",
+          "cached",
+          "--now",
+          "2026-10-13T12:00:00Z"
+        ],
+        "copy_store": [
+          "cached"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "status-cached.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
     }
   ]
 }

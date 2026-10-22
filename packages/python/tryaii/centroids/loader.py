@@ -31,8 +31,9 @@ class CentroidLoader:
     """
     Manages centroid lifecycle: load, validate, regenerate.
 
-    For the catalog bundle's embedding model (all-MiniLM-L6-v2), centroids
-    ship in the bundle -- zero first-run delay. For other models, centroids
+    For every embedding model the catalog bundle has centroids for (the
+    default ONNX build and all-MiniLM-L6-v2), centroids ship in the bundle --
+    zero first-run delay. For other models, centroids
     are generated from the bundle's training queries on first use and cached
     to disk. ``bundle`` (a CatalogBundle or bundle directory) defaults to the
     default catalog -- see :func:`tryaii.catalog.resolve_bundle`.
@@ -102,8 +103,13 @@ class CentroidLoader:
             return None
 
     def _try_bundle(self) -> Optional[dict[str, np.ndarray]]:
-        """The catalog bundle's centroids, when they fit the current provider."""
-        data = self._bundle.centroids
+        """The catalog bundle's centroids for the current provider's model
+        (``centroids.json`` or a ``centroids.<model id>.json``), when they fit.
+        A model the bundle has no centroids for is never scored with another
+        model's (they live in different vector spaces)."""
+        data = self._bundle.centroids_for(self._provider.model_name)
+        if data is None:
+            return None
         centroids = {
             name: np.array(vector, dtype=np.float32)
             for name, vector in data["centroids"].items()

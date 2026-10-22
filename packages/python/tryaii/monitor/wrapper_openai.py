@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from tryaii.monitor import callsite, store
+from tryaii.monitor.cache import CacheTracker
 from tryaii.monitor.config import (
     env_from_os,
     resolve_app,
@@ -160,6 +161,12 @@ class CallPlan:
     route_allowed: Optional[list] = None
     shadow_allowed: Optional[list] = None
     lint_key: Optional[str] = None
+    #: The linted request (model, a snapshot of its messages and its tool
+    #: schemas: ``tools`` then legacy ``functions``), kept for the event's
+    #: ``cache`` block (API.md v1.4 §3.2.1).
+    lint_model: Optional[str] = None
+    lint_messages: Optional[list] = None
+    lint_tools: Optional[list] = None
     extra: dict = field(default_factory=dict)
 
 
@@ -190,10 +197,12 @@ class Monitor:
             logger.debug("monitor: register_app failed", exc_info=True)
         self._vectors = vectors_enabled() if vectors is None else bool(vectors)
         self._hook = None
+        self._cache: Optional[CacheTracker] = None
         if cachelint:
             from tryaii.cachelint.hook import CacheLintHook
 
             self._hook = CacheLintHook()
+            self._cache = CacheTracker()
 
     @property
     def transport(self) -> Transport:
@@ -318,8 +327,20 @@ class Monitor:
                     and "stream_options" not in kwargs:
                 kwargs["stream_options"] = {"include_usage": True}
             if self._hook is not None:
-                plan.lint_key = self._hook.preflight(kwargs.get("model") or "",
-                                                     kwargs.get("messages") or [])
+                model = kwargs.get("model") or ""
+                messages = kwargs.get("messages") or []
+                plan.lint_key = self._hook.preflight(model, messages)
+                if plan.lint_key is not None and isinstance(messages, list):
+                    # Snapshot: the caller may append to its list before
+                    # the worker records the event.
+                    plan.lint_model = str(model)
+                    plan.lint_messages = [dict(m) if isinstance(m, dict) else m
+                                          for m in messages]
+                    tools = kwargs.get("tools")
+                    functions = kwargs.get("functions")
+                    schemas = [*(tools if isinstance(tools, list) else []),
+                               *(functions if isinstance(functions, list) else [])]
+                    plan.lint_tools = schemas or None
         except Exception:  # noqa: BLE001
             logger.debug("monitor: apply() failed", exc_info=True)
 
@@ -402,8 +423,23 @@ class Monitor:
             latency_ms=latency_ms, stream=plan.stream, error=error,
             prompt_hash=plan.prompt_hash, vector=vector_written,
             taxonomy_version=self._transport.taxonomy_version(),
+            cache=self._cache_block(plan),
         )
         store.append_event(self.dir, event)
+
+    def _cache_block(self, plan: CallPlan) -> Optional[dict]:
+        """``{"outcome", "report"}`` when this call was linted, else None."""
+        if self._cache is None or plan.lint_messages is None:
+            return None
+        try:
+            return self._cache.observe(plan.process, plan.lint_model or "", plan.lint_messages,
+                                       tools=plan.lint_tools)
+        except Exception:  # noqa: BLE001 - fail-open: the event is still written
+            logger.debug("monitor: cache block failed", exc_info=True)
+            return None
+        finally:
+            plan.lint_messages = None
+            plan.lint_tools = None
 
 
 def _error_dict(exc: Optional[BaseException]) -> Optional[dict]:
@@ -557,7 +593,29 @@ class AsyncMonitoredStream(_StreamBase):
 # ---------------------------------------------------------------------------
 
 def _is_coroutine_function(fn: Any) -> bool:
-    return inspect.iscoroutinefunction(getattr(fn, "__func__", fn))
+    """True for an ``async def``, also behind sync decorators that set
+    ``__wrapped__`` (the real ``AsyncCompletions.create`` is one)."""
+    fn = getattr(fn, "__func__", fn)
+    if inspect.iscoroutinefunction(fn):
+        return True
+    try:
+        inner = inspect.unwrap(fn)
+    except Exception:  # noqa: BLE001 - a cyclic or broken __wrapped__ chain
+        return False
+    return inspect.iscoroutinefunction(getattr(inner, "__func__", inner))
+
+
+def _class_create(resource: Any) -> Callable:
+    """The class's current ``create`` bound to ``resource``, looked up on
+    every call so a class patch applied after ``wrap()`` (``import
+    langfuse.openai``) still runs."""
+    cls = type(resource)
+    for klass in cls.__mro__:
+        attr = vars(klass).get("create")
+        if attr is not None:
+            get = getattr(attr, "__get__", None)
+            return get(resource, cls) if get is not None else attr
+    raise AttributeError("create")
 
 
 def _run_sync(monitor: Monitor, original: Callable, plan: Optional[CallPlan],
@@ -623,19 +681,29 @@ def _raw_usage_value(usage: Any) -> Any:
     return usage
 
 
-def _make_create(monitor: Monitor, original: Callable, is_async: bool) -> Callable:
+def _make_create(monitor: Monitor, original: Callable, is_async: bool,
+                 resource: Any = None) -> Callable:
     # A plain ``def`` even for async clients, so the call site and the
-    # process context are captured before the first ``await``.
+    # process context are captured before the first ``await``. With
+    # ``resource`` the class's ``create`` is looked up per call instead of
+    # calling ``original`` (sync/async is fixed by the client's class).
     def create(*args, **kwargs):
+        target = original
+        if resource is not None:
+            try:
+                target = _class_create(resource)
+            except Exception:  # noqa: BLE001 - fail-open: the captured method
+                logger.debug("monitor: class create lookup failed", exc_info=True)
         per_call = kwargs.pop(PER_CALL_PROCESS_KW, None)
         stream = bool(kwargs.get("stream"))
         plan = monitor.before(kwargs, per_call, stream)
         if is_async:
-            return _run_async(monitor, original, plan, args, kwargs)
-        return _run_sync(monitor, original, plan, args, kwargs)
+            return _run_async(monitor, target, plan, args, kwargs)
+        return _run_sync(monitor, target, plan, args, kwargs)
 
     create.__wrapped__ = original  # type: ignore[attr-defined]
     create.__tryaii_monitor__ = monitor  # type: ignore[attr-defined]
+    create.__tryaii_resource__ = resource  # type: ignore[attr-defined]
     create.__name__ = getattr(original, "__name__", "create")
     create.__doc__ = getattr(original, "__doc__", None)
     return create
@@ -667,10 +735,18 @@ def wrap(client: Any, *, app: Optional[str] = None, process: Optional[str] = Non
     place.
     """
     completions = client.chat.completions
+    try:
+        # No own ``create`` on the instance: follow the class's method per
+        # call, so a later class patch (``import langfuse.openai``) runs too.
+        # An instance someone wrapped before us keeps that wrapper.
+        resource = None if "create" in vars(completions) else completions
+    except TypeError:  # no __dict__
+        resource = None
     original = completions.create
     previous = getattr(original, "__wrapped__", None)
     if previous is not None and getattr(original, "__tryaii_monitor__", None) is not None:
         original = previous  # re-wrapping replaces the earlier monitor
+        resource = getattr(completions.create, "__tryaii_resource__", None)
     transport = None
     if route_fn is not None or inline:
         transport = Transport(route_fn=route_fn, inline=True if inline is None else inline)
@@ -683,7 +759,7 @@ def wrap(client: Any, *, app: Optional[str] = None, process: Optional[str] = Non
         transport=transport, cachelint=cachelint or _defaults["cachelint"],
         vectors=vectors,
     )
-    create = _make_create(monitor, original, _is_coroutine_function(original))
+    create = _make_create(monitor, original, _is_coroutine_function(original), resource)
     setattr(completions, "create", create)
     return monitor
 

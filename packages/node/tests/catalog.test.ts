@@ -26,6 +26,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { BenchmarkRegistry } from '../src/benchmarks/registry.js';
 import {
   BUNDLE_DATA_FILES,
+  listedDataFiles,
   BundleError,
   BundleIntegrityError,
   BundleSchemaError,
@@ -167,7 +168,7 @@ describe('catalog bundle loader', () => {
   it('bundleFromTexts accepts the wire format', () => {
     const manifest = readManifest(STARTER_BUNDLE_DIR);
     const files: Record<string, string> = {};
-    for (const name of BUNDLE_DATA_FILES) {
+    for (const name of listedDataFiles(manifest)) {
       files[name] = readFileSync(join(STARTER_BUNDLE_DIR, name), 'utf-8');
     }
     const bundle = bundleFromTexts(manifest, files);

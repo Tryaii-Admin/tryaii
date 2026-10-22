@@ -49,6 +49,7 @@ import {
   CatalogBundle,
   MANIFEST_FILE,
   OPTIONAL_DATA_FILES,
+  modelCentroidFiles,
   bundleFromTexts,
   listedDataFiles,
   loadBundle,
@@ -409,6 +410,7 @@ export function saveFull(
     trainingQueries: bundle.trainingQueries,
     directory: target,
     origins: bundle.origins,
+    modelCentroids: bundle.modelCentroids,
   });
   loaded.set(target, placed);
   return placed;
@@ -547,7 +549,8 @@ async function runCheck(
     return { outcome: 'failed', bundle: null };
   }
   const fileTexts = files as Record<string, unknown>;
-  for (const name of [...BUNDLE_DATA_FILES, ...OPTIONAL_DATA_FILES]) {
+  const manifestFiles = (manifest as { files?: Record<string, unknown> } | null)?.files ?? {};
+  for (const name of [...BUNDLE_DATA_FILES, ...OPTIONAL_DATA_FILES, ...modelCentroidFiles(manifestFiles)]) {
     if (name in fileTexts && typeof fileTexts[name] !== 'string') {
       return { outcome: 'failed', bundle: null };
     }

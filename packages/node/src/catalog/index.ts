@@ -12,6 +12,8 @@ export {
   CatalogBundle,
   bundleFromTexts,
   listedDataFiles,
+  modelCentroidFiles,
+  modelCentroidsFile,
   loadBundle,
   resolveBundle,
   sha256Hex,

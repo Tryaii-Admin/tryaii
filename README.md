@@ -44,8 +44,8 @@ npm install tryaii        # Node 18+
 ```
 
 Both install a `tryaii` command on your `PATH`. Routing runs **fully locally** —
-embeddings are computed on-device (`sentence-transformers` on Python, ONNX MiniLM via
-`@xenova/transformers` on Node), so no API key is needed just to rank models. An
+embeddings are computed on-device (an int8 ONNX MiniLM on `onnxruntime` on Python, no
+PyTorch; ONNX MiniLM via `@xenova/transformers` on Node), so no API key is needed just to rank models. An
 OpenRouter key is only required if you want the SDK to *call* the chosen model for you.
 
 Out of the box, `tryaii` routes on a **starter catalog** of 45 well-known models and
@@ -125,7 +125,8 @@ Per sub-process you then choose `off` (watch), `stable` (one pinned model per da
 prompt embeddings are stored, no prompt text; nothing is uploaded unless you set an
 app key from `tryaii apps create` — then the metadata (never prompts or vectors)
 goes to your tryaii.com dashboard, which can also set the modes
-([docs](docs/cli/monitor.md), [apps](docs/cli/apps.md)):
+([docs](docs/cli/monitor.md), [apps](docs/cli/apps.md); what is sent and how to
+switch it off: [PRIVACY.md](PRIVACY.md)):
 
 ```python
 import tryaii.monitor as monitor

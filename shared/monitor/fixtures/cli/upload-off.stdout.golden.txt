@@ -1,0 +1,1 @@
+upload: off (tryaii monitor upload off)

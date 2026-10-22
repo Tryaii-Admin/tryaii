@@ -1,5 +1,149 @@
 # Changelog
 
+## 0.8.0 (2026-10-21)
+
+Breaking: the default embedding model changes. Vectors and classifications
+recorded before this release are in the old model's space and are never
+mixed with new ones. Setting `TRYAII_DRE_EMBEDDING_MODEL=all-MiniLM-L6-v2`
+keeps the old model, but it now needs `pip install "tryaii[centroids]"`.
+
+- **Monitor: cache fields on every event (contract `shared/monitor/API.md`
+  v1.4).** `usage.cached_tokens` records the prompt tokens the provider served
+  from its cache (`prompt_tokens_details.cached_tokens`, or
+  `cache_read_input_tokens` in Anthropic-shaped usage; `null` when not
+  reported), in both SDKs, with no option needed. With
+  `wrap(client, cachelint=True)` each event also ends with a `cache` block:
+  the predicted outcome from the previous call of the same sub-process
+  (`hit` / `partial` / `miss` / `null`) and, on a sub-process's first call
+  and then when it changed, the lint report (verdict, token counts, up to 10
+  findings, one recommendation). A full analysis runs at most once per
+  process every 60 s. The lint covers the tool schemas (`tools` /
+  `functions`) as well as the messages. Findings never quote the prompt:
+  only a strict ASCII mask of the matched text is written, locally and in
+  the upload (ASCII digits -> `0`, whitespace -> space, printable ASCII
+  punctuation kept, every other code point -> `x`, cut to 40 code points
+  with `…`; `{{sku}}` -> `{{xxx}}`). Node now honours `cachelint` for the
+  `cache` block (the stderr lint lines stay Python-only). New fixture suite
+  `shared/monitor/fixtures/cache`.
+
+- **No more PyTorch: local embeddings run on an int8 ONNX build** (TS-252).
+  The default embedding model is now `all-MiniLM-L6-v2-onnx-int8`: the same
+  all-MiniLM-L6-v2, exported to ONNX with int8 weights (weight-only: the
+  arithmetic stays fp32, so every CPU computes the same vectors) and run on
+  `onnxruntime` + `tokenizers`. `sentence-transformers` and `torch` are no
+  longer installed with `pip install tryaii`; they moved to the optional extra
+  `tryaii[centroids]`, needed only to build fp32 centroids or to run another
+  sentence-transformers model. Measured with a fresh venv, CPU only, median
+  of 3, model weights included in the size (the 0.7.1 model adds 90 MB to
+  the Hugging Face cache on first use):
+
+  | | Windows 11, Python 3.13: 0.7.1 | ONNX int8 | Linux (python:3.12-slim): 0.7.1 | ONNX int8 |
+  |---|---|---|---|---|
+  | `pip install` size (site-packages) | 1052 MB | 186 MB (-82%) | 6069 MB (CUDA PyTorch) | 228 MB (-96%) |
+  | `pip install` time | 2 min 9 s | 20 s | 4 min 8 s | 13 s |
+  | first classified call through the daemon (cold start) | 10.6 s | 1.3 s | 6.6 s | 0.9 s |
+  | daemon memory (RSS) | 551 MB | 182 MB | 902 MB | 255 MB |
+
+  On Linux a plain `pip install tryaii` 0.7.1 pulled the CUDA build of
+  PyTorch (torch, triton and 15 `nvidia-*` packages) even on machines without
+  a GPU.
+- **The model ships as a package, nothing is downloaded at run time.** The
+  23 MB model file is the new package `tryaii-minilm-int8`, which `tryaii`
+  depends on (pinned exactly). It comes through your usual index, mirror or
+  cache like any other dependency, so locked-down machines need no extra
+  network access. The SDK uses the file only when its size and sha256 match
+  the values pinned in the SDK. On a machine that cannot install the package,
+  set `TRYAII_EMBEDDING_MODEL_PATH` to a copy of the file (or its directory).
+- **A missing model fails open, quietly.** Without a verified file the
+  monitor works as it does without a daemon: metadata-only events, and the
+  model in your code is sent. It logs one warning per machine per day (not one
+  per process start), and `tryaii monitor status` ends with
+  `classification: off since <time> (<reason>)` until it is fixed.
+- **Node: the monitor embeds in-process, no Python and no daemon** (TS-253).
+  `tryaii/monitor` runs the same int8 model file, tokenizer, pooling and
+  centroids as Python on `onnxruntime-node`, so both SDKs classify a prompt
+  the same way. On the parity prompts the category is identical and every
+  similarity agrees to 4 decimals. Install the optional peer dependencies to
+  enable it: `npm install onnxruntime-node tryaii-minilm-int8` (the npm twin
+  of the PyPI model package). Without them the wrapper uses the daemon as
+  before, for this release; with neither, it records metadata only and warns
+  once a day. Measured with a fresh project, Node 22, CPU, median of 3:
+
+  | | Windows 11: 0.7.1 (daemon, @xenova/transformers) | Windows: in-process ONNX int8 | Linux (node:22-slim): 0.7.1 | Linux: in-process ONNX int8 |
+  |---|---|---|---|---|
+  | node_modules after `npm install` | 336 MB | 639 MB | 304 MB | 606 MB |
+  | first classified call (cold start) | 0.64 s | 0.48 s | 0.59 s | 0.54 s |
+  | memory of the embedding process | 194 MB (daemon) | 210 MB (your process) | 217 MB (daemon) | 290 MB (your process) |
+
+  A little faster, a little more memory. The gain is no daemon and
+  no second engine: Node now classifies exactly like Python, where 0.7.1 ran
+  a different quantised MiniLM and scored it against the fp32 centroids.
+  The monitor install is larger: `onnxruntime-node` 1.30 ships native
+  binaries for every platform (301 MB), on top of the 23 MB model, while
+  `@xenova/transformers` is still installed for `Router`. On Linux, install
+  with `ONNXRUNTIME_NODE_INSTALL=skip` (as measured above): without it
+  `onnxruntime-node` also downloads its CUDA libraries (574 MB instead of
+  301 MB). `npm install tryaii` without the two peers is unchanged (337 MB on
+  Windows, 304 MB on Linux). macOS has not been measured.
+
+- **Centroids per embedding model.** A catalog bundle may now carry
+  `centroids.<model id>.json` next to `centroids.json` (catalog contract
+  v1.3); the starter bundle `2026.10.20.2` carries the int8 centroids next to
+  the fp32 ones. A vector is only scored with its own model's centroids, and
+  monitor vector lines carry the model id (`"model":
+  "all-MiniLM-L6-v2-onnx-int8"`). Older SDKs ignore the new file.
+- **Classification parity.** Against the fp32 build, the int8 build gives the
+  same top benchmark and category on every parity prompt (the monitor fixture
+  corpus and the catalog parity set) and routes all 39 to the same model.
+  Embeddings agree to cosine 0.999 or better.
+- New maintainer scripts: `scripts/export-onnx-embedding.py` (reproducible
+  export + quantisation, writes `packages/python-model`),
+  `scripts/gen-centroids.py`, `scripts/gen-embedding-parity.py`.
+- **Privacy: see and control what the monitor sends.** New
+  `tryaii monitor upload [on|off]`: prints the data notice (what is sent to
+  your tryaii.com account, what never is) and switches uploads for this
+  machine. `TRYAII_TELEMETRY=0` and `DO_NOT_TRACK=1` now turn uploads off too,
+  next to `TRYAII_MONITOR_UPLOAD=0`, and so does the new upload switch for your
+  account on tryaii.com (`"upload": false` in the dashboard config, or
+  `403 upload_disabled`). `tryaii monitor status` says what turned uploads off.
+- **The data notice is shown before data is sent.** The first upload from a
+  machine prints the notice once to the terminal, and `tryaii apps create`
+  prints it after the key and records on your account that it was shown.
+  Notice version `2026-10-18` (the publication date) replaces `2026-10`.
+- **The uploaded prompt hash is keyed.** It is an HMAC of the local sha256
+  with a secret that never leaves your machine
+  (`<data dir>/monitor/upload-hash.key`), so the server cannot check a guess
+  of a short prompt against it. Local files are unchanged.
+- New: `PRIVACY.md`, a "Data and privacy" section in the package READMEs and
+  a `Privacy` link in the PyPI metadata. Contract `shared/monitor/API.md`
+  v1.3, `SPEC.md` §9.
+- Fixtures: `shared/monitor/fixtures` and `shared/cachelint/fixtures` are
+  checked out with LF on every OS (`.gitattributes`), so the fixture check
+  also passes on Windows.
+- **Fix (Python): `monitor.wrap()` on an `AsyncOpenAI` client.** The real
+  `AsyncCompletions.create` sits behind a sync decorator, so the wrapper took
+  the client for a sync one: `await create(..., stream=True)` raised
+  `TypeError: object MonitoredStream can't be used in 'await' expression`, and
+  non-streaming calls were recorded with `usage: null` and `latency_ms: 0`.
+  The async check now looks through `__wrapped__` (also for `install()`).
+- **Fix (Python): tools that patch the `openai` classes after `wrap()` now
+  run.** `wrap(client)` looks up the class's `create` on every call instead
+  of keeping the method it saw at wrap time, so a later class-level patch
+  (e.g. `import langfuse.openai`) is no longer bypassed. A `create` already
+  set on the client instance before `wrap()` is kept as before.
+- monitor: events record prompt-cache usage (`cached_tokens`,
+  `cache_write_tokens`, `cache_writes[].ttl`, `cache_ttl_policy`); contract
+  `shared/monitor/API.md` v1.5, `SPEC.md` §3.1b (TS-228). On top of the
+  v1.4 `usage.cached_tokens` read count, both SDKs now write the cache
+  **write** side in contract order (`cache_write_tokens`, the per-lifetime
+  `cache_writes`, and the lifetime the request asked for; `null` until the
+  wrappers capture them in TS-229), `tryaii monitor events` shows
+  `cached <n>` / `cache write <n>` when present, `status --json` sums them,
+  and the new pure helper `normalize_cache_usage` / `normalizeCacheUsage`
+  maps the OpenAI (Chat and Responses), OpenRouter, Azure, Anthropic,
+  Bedrock Converse and Gemini usage shapes to the three usage cache fields
+  (fixture suite `cache_usage`, byte-identical across SDKs).
+
 ## 0.7.1 (2026-10-14)
 
 - **Privacy: the call site never names your machine** (TS-226, TS-225):

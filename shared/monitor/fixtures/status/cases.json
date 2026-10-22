@@ -41,6 +41,8 @@
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0,
+            "cached_tokens": null,
+            "cache_write_tokens": null,
             "est_cost_usd": 0,
             "est_cost_winner_usd": null,
             "savings_usd": null,
@@ -61,6 +63,8 @@
             "prompt_tokens": 20410,
             "completion_tokens": 2921,
             "total_tokens": 23331,
+            "cached_tokens": null,
+            "cache_write_tokens": null,
             "est_cost_usd": 0.18968,
             "est_cost_winner_usd": 0.075045,
             "savings_usd": 0.110635,
@@ -87,6 +91,8 @@
             "prompt_tokens": 2200,
             "completion_tokens": 300,
             "total_tokens": 2500,
+            "cached_tokens": null,
+            "cache_write_tokens": null,
             "est_cost_usd": 0.00115,
             "est_cost_winner_usd": 0.00115,
             "savings_usd": 0,
@@ -105,6 +111,8 @@
         "totals": {
           "calls": 25,
           "errors": 1,
+          "cached_tokens": null,
+          "cache_write_tokens": null,
           "est_cost_usd": 0.19083,
           "est_cost_winner_usd": 0.076195,
           "savings_usd": 0.110635,
@@ -153,6 +161,8 @@
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0,
+            "cached_tokens": null,
+            "cache_write_tokens": null,
             "est_cost_usd": 0,
             "est_cost_winner_usd": null,
             "savings_usd": null,
@@ -173,6 +183,8 @@
             "prompt_tokens": 24610,
             "completion_tokens": 3521,
             "total_tokens": 28131,
+            "cached_tokens": null,
+            "cache_write_tokens": null,
             "est_cost_usd": 0.22868,
             "est_cost_winner_usd": 0.077295,
             "savings_usd": 0.147385,
@@ -199,6 +211,8 @@
             "prompt_tokens": 13200,
             "completion_tokens": 1550,
             "total_tokens": 14750,
+            "cached_tokens": null,
+            "cache_write_tokens": null,
             "est_cost_usd": 0.09365,
             "est_cost_winner_usd": 0.008125,
             "savings_usd": 0.085525,
@@ -217,6 +231,8 @@
         "totals": {
           "calls": 36,
           "errors": 1,
+          "cached_tokens": null,
+          "cache_write_tokens": null,
           "est_cost_usd": 0.32233,
           "est_cost_winner_usd": 0.08542,
           "savings_usd": 0.23291,
@@ -268,6 +284,8 @@
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0,
+            "cached_tokens": null,
+            "cache_write_tokens": null,
             "est_cost_usd": 0,
             "est_cost_winner_usd": null,
             "savings_usd": null,
@@ -288,6 +306,8 @@
             "prompt_tokens": 20410,
             "completion_tokens": 2921,
             "total_tokens": 23331,
+            "cached_tokens": null,
+            "cache_write_tokens": null,
             "est_cost_usd": 0.18968,
             "est_cost_winner_usd": 0.075045,
             "savings_usd": 0.110635,
@@ -314,6 +334,8 @@
             "prompt_tokens": 2200,
             "completion_tokens": 300,
             "total_tokens": 2500,
+            "cached_tokens": null,
+            "cache_write_tokens": null,
             "est_cost_usd": 0.00115,
             "est_cost_winner_usd": 0.00115,
             "savings_usd": 0,
@@ -332,6 +354,8 @@
         "totals": {
           "calls": 25,
           "errors": 1,
+          "cached_tokens": null,
+          "cache_write_tokens": null,
           "est_cost_usd": 0.19083,
           "est_cost_winner_usd": 0.076195,
           "savings_usd": 0.110635,
@@ -377,6 +401,8 @@
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0,
+            "cached_tokens": null,
+            "cache_write_tokens": null,
             "est_cost_usd": 0,
             "est_cost_winner_usd": null,
             "savings_usd": null,
@@ -397,6 +423,8 @@
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0,
+            "cached_tokens": null,
+            "cache_write_tokens": null,
             "est_cost_usd": 0,
             "est_cost_winner_usd": null,
             "savings_usd": null,
@@ -417,6 +445,8 @@
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0,
+            "cached_tokens": null,
+            "cache_write_tokens": null,
             "est_cost_usd": 0,
             "est_cost_winner_usd": null,
             "savings_usd": null,
@@ -430,6 +460,8 @@
         "totals": {
           "calls": 0,
           "errors": 0,
+          "cached_tokens": null,
+          "cache_write_tokens": null,
           "est_cost_usd": 0,
           "est_cost_winner_usd": null,
           "savings_usd": null,
@@ -468,6 +500,8 @@
         "totals": {
           "calls": 0,
           "errors": 0,
+          "cached_tokens": null,
+          "cache_write_tokens": null,
           "est_cost_usd": 0,
           "est_cost_winner_usd": null,
           "savings_usd": null,
@@ -513,6 +547,8 @@
             "prompt_tokens": 1000,
             "completion_tokens": 200,
             "total_tokens": 1200,
+            "cached_tokens": null,
+            "cache_write_tokens": null,
             "est_cost_usd": 0.00065,
             "est_cost_winner_usd": 0.00065,
             "savings_usd": 0,
@@ -538,6 +574,8 @@
             "prompt_tokens": 1000,
             "completion_tokens": 200,
             "total_tokens": 1200,
+            "cached_tokens": null,
+            "cache_write_tokens": null,
             "est_cost_usd": 0.00065,
             "est_cost_winner_usd": 0.00065,
             "savings_usd": 0,
@@ -563,6 +601,8 @@
             "prompt_tokens": 1000,
             "completion_tokens": 200,
             "total_tokens": 1200,
+            "cached_tokens": null,
+            "cache_write_tokens": null,
             "est_cost_usd": 0.011,
             "est_cost_winner_usd": 0.00065,
             "savings_usd": 0.01035,
@@ -581,6 +621,8 @@
         "totals": {
           "calls": 3,
           "errors": 0,
+          "cached_tokens": null,
+          "cache_write_tokens": null,
           "est_cost_usd": 0.0123,
           "est_cost_winner_usd": 0.00195,
           "savings_usd": 0.01035,
@@ -618,12 +660,108 @@
         "totals": {
           "calls": 0,
           "errors": 0,
+          "cached_tokens": null,
+          "cache_write_tokens": null,
           "est_cost_usd": 0,
           "est_cost_winner_usd": null,
           "savings_usd": null,
           "swapped_calls": 0,
           "est_cost_anchor_usd": null,
           "realised_savings_usd": null
+        }
+      }
+    },
+    {
+      "name": "cached-24h",
+      "description": "The cached store: cached_tokens / cache_write_tokens sum the events that carry them (the pre-TS-228 line counts for nothing) and are null for a process whose events report none.",
+      "input": {
+        "store": "cached",
+        "now": "2026-10-13T12:00:00.000Z",
+        "since": "24h"
+      },
+      "expected": {
+        "schema": "tryaii.monitor.status/1",
+        "app": "cached",
+        "now": "2026-10-13T12:00:00.000Z",
+        "since": "24h",
+        "source": {
+          "kind": "local",
+          "etag": null,
+          "fetched_at": null
+        },
+        "upload": {
+          "state": "off",
+          "events": 0,
+          "last_ok": null,
+          "last_error": null
+        },
+        "processes": [
+          {
+            "process": "assist",
+            "mode": "off",
+            "mode_source": "config",
+            "managed_model": null,
+            "pinned": null,
+            "calls": 3,
+            "errors": 0,
+            "prompt_tokens": 5237,
+            "completion_tokens": 350,
+            "total_tokens": 5587,
+            "cached_tokens": 2048,
+            "cache_write_tokens": 2048,
+            "est_cost_usd": 0.0185,
+            "est_cost_winner_usd": 0.00126,
+            "savings_usd": 0.01724,
+            "swapped_calls": 0,
+            "est_cost_anchor_usd": 0.0185,
+            "realised_savings_usd": 0,
+            "top_winner": {
+              "model": "openai/gpt-5-mini",
+              "share": 1
+            },
+            "files": [
+              "app/assist.py"
+            ]
+          },
+          {
+            "process": "summarize",
+            "mode": "off",
+            "mode_source": "config",
+            "managed_model": null,
+            "pinned": null,
+            "calls": 2,
+            "errors": 0,
+            "prompt_tokens": 655,
+            "completion_tokens": 300,
+            "total_tokens": 955,
+            "cached_tokens": 0,
+            "cache_write_tokens": 6400,
+            "est_cost_usd": 0.02653,
+            "est_cost_winner_usd": 0.00153,
+            "savings_usd": 0.025,
+            "swapped_calls": 0,
+            "est_cost_anchor_usd": 0.02653,
+            "realised_savings_usd": 0,
+            "top_winner": {
+              "model": "openai/gpt-5-mini",
+              "share": 1
+            },
+            "files": [
+              "app/summarize.py"
+            ]
+          }
+        ],
+        "totals": {
+          "calls": 5,
+          "errors": 0,
+          "cached_tokens": 2048,
+          "cache_write_tokens": 8448,
+          "est_cost_usd": 0.04503,
+          "est_cost_winner_usd": 0.00279,
+          "savings_usd": 0.04224,
+          "swapped_calls": 0,
+          "est_cost_anchor_usd": 0.04503,
+          "realised_savings_usd": 0
         }
       }
     }

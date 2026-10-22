@@ -170,6 +170,14 @@ def _pair(prev: AnalyzedItem, curr: AnalyzedItem) -> dict:
     }
 
 
+def predict_pair(prev: AnalyzedItem, curr: AnalyzedItem) -> dict:
+    """One consecutive-pair prediction (relation, ``expected`` HIT / PARTIAL /
+    MISS / UNKNOWN / AT_RISK, ...) for two requests of the same (provider,
+    model) group. Public seam for the monitor SDK's per-process outcome
+    (API.md v1.4 §3.2.1); ``curr`` needs only its canonical text and sections."""
+    return _pair(prev, curr)
+
+
 def analyze_sequences(items: list[AnalyzedItem]) -> list[dict]:
     """Group by (provider, normalized model) and analyze consecutive-pair relations."""
     groups: dict[tuple, list] = {}

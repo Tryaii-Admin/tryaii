@@ -201,6 +201,16 @@ function pairAnalysis(prev: AnalyzedItem, curr: AnalyzedItem): Record<string, un
   };
 }
 
+/**
+ * One consecutive-pair prediction (relation, `expected` HIT / PARTIAL / MISS
+ * / UNKNOWN / AT_RISK, ...) for two requests of the same (provider, model)
+ * group. Public seam for the monitor SDK's per-process outcome (API.md v1.4
+ * §3.2.1); `curr` needs only its canonical text and sections.
+ */
+export function predictPair(prev: AnalyzedItem, curr: AnalyzedItem): Record<string, unknown> {
+  return pairAnalysis(prev, curr);
+}
+
 /** Group by (provider, normalized model) and analyze consecutive-pair relations. */
 export function analyzeSequences(items: AnalyzedItem[]): Record<string, unknown>[] {
   const groups = new Map<string, AnalyzedItem[]>();

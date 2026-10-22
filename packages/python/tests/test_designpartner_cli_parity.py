@@ -30,10 +30,14 @@ FIXTURES = REPO_ROOT / "shared" / "designpartner" / "fixtures"
 NODE_CLI = REPO_ROOT / "packages" / "node" / "dist" / "cli.js"
 NODE_EXE = shutil.which("node")
 
-pytestmark = pytest.mark.skipif(
-    not FIXTURES.exists() or not NODE_CLI.exists() or NODE_EXE is None,
-    reason="needs shared fixtures + a built Node CLI (npm run build) + node on PATH",
-)
+pytestmark = [
+    # Cross-CLI parity (spawns the Node CLI): full CI only, see pyproject.toml.
+    pytest.mark.slow,
+    pytest.mark.skipif(
+        not FIXTURES.exists() or not NODE_CLI.exists() or NODE_EXE is None,
+        reason="needs shared fixtures + a built Node CLI (npm run build) + node on PATH",
+    ),
+]
 
 
 def _cases() -> list:

@@ -41,6 +41,10 @@ import pytest
 # TRYAII_CATALOG_TRUSTED_KEYS (see Sandbox.env).
 from tests._catalog_signing import sign_manifest, write_trusted_keys
 
+# Black-box contract suite (spawns the CLI per case): full CI only, see
+# the `slow` marker in pyproject.toml.
+pytestmark = pytest.mark.slow
+
 PKG_DIR = Path(__file__).resolve().parents[1]
 STARTER_DIR = PKG_DIR / "tryaii" / "catalog" / "data" / "starter"
 REAL_HOME = Path(os.path.expanduser("~"))

@@ -1,0 +1,85 @@
+{
+  "schema": "tryaii.monitor.status/1",
+  "app": "cached",
+  "now": "2026-10-13T12:00:00.000Z",
+  "since": "24h",
+  "source": {
+    "kind": "local",
+    "etag": null,
+    "fetched_at": null
+  },
+  "upload": {
+    "state": "off",
+    "events": 0,
+    "last_ok": null,
+    "last_error": null
+  },
+  "processes": [
+    {
+      "process": "assist",
+      "mode": "off",
+      "mode_source": "config",
+      "managed_model": null,
+      "pinned": null,
+      "calls": 3,
+      "errors": 0,
+      "prompt_tokens": 5237,
+      "completion_tokens": 350,
+      "total_tokens": 5587,
+      "cached_tokens": 2048,
+      "cache_write_tokens": 2048,
+      "est_cost_usd": 0.0185,
+      "est_cost_winner_usd": 0.00126,
+      "savings_usd": 0.01724,
+      "swapped_calls": 0,
+      "est_cost_anchor_usd": 0.0185,
+      "realised_savings_usd": 0,
+      "top_winner": {
+        "model": "openai/gpt-5-mini",
+        "share": 1
+      },
+      "files": [
+        "app/assist.py"
+      ]
+    },
+    {
+      "process": "summarize",
+      "mode": "off",
+      "mode_source": "config",
+      "managed_model": null,
+      "pinned": null,
+      "calls": 2,
+      "errors": 0,
+      "prompt_tokens": 655,
+      "completion_tokens": 300,
+      "total_tokens": 955,
+      "cached_tokens": 0,
+      "cache_write_tokens": 6400,
+      "est_cost_usd": 0.02653,
+      "est_cost_winner_usd": 0.00153,
+      "savings_usd": 0.025,
+      "swapped_calls": 0,
+      "est_cost_anchor_usd": 0.02653,
+      "realised_savings_usd": 0,
+      "top_winner": {
+        "model": "openai/gpt-5-mini",
+        "share": 1
+      },
+      "files": [
+        "app/summarize.py"
+      ]
+    }
+  ],
+  "totals": {
+    "calls": 5,
+    "errors": 0,
+    "cached_tokens": 2048,
+    "cache_write_tokens": 8448,
+    "est_cost_usd": 0.04503,
+    "est_cost_winner_usd": 0.00279,
+    "savings_usd": 0.04224,
+    "swapped_calls": 0,
+    "est_cost_anchor_usd": 0.04503,
+    "realised_savings_usd": 0
+  }
+}

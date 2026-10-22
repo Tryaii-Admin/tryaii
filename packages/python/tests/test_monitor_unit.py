@@ -27,7 +27,13 @@ from tryaii.monitor import (
     set_pin,
     store,
 )
-from tryaii.monitor.events import classification_from_wire, usage_from_response
+from tryaii.monitor.events import (
+    CACHE_TTLS,
+    classification_from_wire,
+    normalize_cache_usage,
+    normalize_usage,
+    usage_from_response,
+)
 from tryaii.monitor.extract import prompt_hash
 
 # --- extract ----------------------------------------------------------------
@@ -122,9 +128,11 @@ def test_build_event_key_order_and_rounding():
         "schema", "event_id", "ts", "app", "process", "call_site", "provider",
         "model_requested", "model_resolved", "model_used", "mode", "winner",
         "winner_reachable", "route_status", "classification", "taxonomy_version", "usage",
+        "cache_ttl_policy",
         "est_cost_usd", "est_cost_winner_usd", "est_cost_anchor_usd", "latency_ms",
         "stream", "error",
         "prompt_hash", "vector"]
+    assert event["cache_ttl_policy"] is None
     assert event["call_site"] == {"file": "a.py", "line": 1, "function": "f"}
     assert event["est_cost_usd"] == 1 and isinstance(event["est_cost_usd"], int)
     assert event["est_cost_winner_usd"] == 0.123457
@@ -145,14 +153,62 @@ def test_usage_and_classification_normalisation():
         total_tokens = 12
 
     assert usage_from_response(Usage()) == {
-        "prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}
+        "prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12,
+        "cached_tokens": None, "cache_write_tokens": None, "cache_writes": None}
     assert usage_from_response({"prompt_tokens": 3}) == {
-        "prompt_tokens": 3, "completion_tokens": None, "total_tokens": None}
+        "prompt_tokens": 3, "completion_tokens": None, "total_tokens": None,
+        "cached_tokens": None, "cache_write_tokens": None, "cache_writes": None}
     assert usage_from_response({}) is None
     wire = {"broadCategory": "coding", "subcategory": "x", "confidence": 0.123456}
     assert classification_from_wire(wire) == {
         "category": "coding", "subcategory": "x", "confidence": 0.1235}
     assert classification_from_wire(None) is None
+
+
+# --- prompt-cache usage (SPEC.md §3.1b, TS-228) ------------------------------
+
+def test_build_event_carries_cache_usage_in_contract_order():
+    usage = {"total_tokens": 12, "cache_writes": [{"ttl": "1H", "tokens": 5.0},
+                                                  {"ttl": "5m", "tokens": 0}],
+             "prompt_tokens": 10, "cached_tokens": True, "completion_tokens": 2}
+    event = _event(usage=usage, cache_ttl_policy="1h")
+    assert list(event["usage"]) == ["prompt_tokens", "completion_tokens", "total_tokens",
+                                    "cached_tokens", "cache_write_tokens", "cache_writes"]
+    # a boolean is not a count; the aggregate is summed from the breakdown; a
+    # zero entry is dropped; the ttl is lower-cased; an integral float is an int
+    assert event["usage"]["cached_tokens"] is None
+    assert event["usage"]["cache_write_tokens"] == 5
+    assert event["usage"]["cache_writes"] == [{"tokens": 5, "ttl": "1h"}]
+    assert event["cache_ttl_policy"] == "1h"
+    assert _event(cache_ttl_policy="2h")["cache_ttl_policy"] is None
+    assert _event(cache_ttl_policy=" EXPLICIT ")["cache_ttl_policy"] == "explicit"
+    assert _event(usage={"cache_writes": "nope"})["usage"] is None
+    assert CACHE_TTLS == ("5m", "1h", "30m", "24h", "explicit")
+
+
+def test_normalize_usage_keeps_zero_and_drops_negatives():
+    out = normalize_usage({"prompt_tokens": 1, "cached_tokens": 0,
+                           "cache_write_tokens": -1, "cache_writes": []})
+    assert out == {"prompt_tokens": 1, "completion_tokens": None, "total_tokens": None,
+                   "cached_tokens": 0, "cache_write_tokens": 0, "cache_writes": []}
+
+
+def test_normalize_cache_usage_reads_objects_like_dicts():
+    class Details:
+        cached_tokens = 1024
+        cache_write_tokens = None
+
+    class Usage:
+        prompt_tokens = 1200
+        prompt_tokens_details = Details()
+        cache_write_tokens = 2048
+
+    assert normalize_cache_usage("OpenAI", Usage()) == {
+        "cached_tokens": 1024, "cache_write_tokens": 2048, "cache_writes": None}
+    assert normalize_cache_usage("anthropic", None) == {
+        "cached_tokens": None, "cache_write_tokens": None, "cache_writes": None}
+    assert normalize_cache_usage(None, {"cached_tokens": 1}) == {
+        "cached_tokens": None, "cache_write_tokens": None, "cache_writes": None}
 
 
 # --- pins / config ----------------------------------------------------------

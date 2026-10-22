@@ -12,8 +12,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { starterBundle } from '../src/catalog/bundle.js';
 import {
+  CACHE_TTLS,
   buildEvent,
   buildVector,
+  normalizeCacheUsage,
+  normalizeUsage,
   emptyConfig,
   emptyPins,
   pickWinner,
@@ -147,14 +150,56 @@ describe('slice 2 engine', () => {
       'schema', 'event_id', 'ts', 'app', 'process', 'call_site', 'provider',
       'model_requested', 'model_resolved', 'model_used', 'mode', 'winner',
       'winner_reachable', 'route_status', 'classification', 'taxonomy_version', 'usage',
+      'cache_ttl_policy',
       'est_cost_usd', 'est_cost_winner_usd', 'est_cost_anchor_usd', 'latency_ms',
       'stream', 'error', 'prompt_hash', 'vector',
     ]);
+    expect(a.cache_ttl_policy).toBeNull();
+    expect(a.usage).toEqual({
+      prompt_tokens: 10, completion_tokens: 2, total_tokens: 12,
+      cached_tokens: null, cache_write_tokens: null, cache_writes: null,
+    });
     expect(a.event_id).not.toBe(b.event_id);
     expect(a.event_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(event('2026-10-11T12:00:00.000Z', 'p', { event_id: 'e-1' }).event_id).toBe('e-1');
     expect(event('2026-10-11T12:00:00.000Z', 'p', { taxonomy_version: '2026.10' }).taxonomy_version).toBe('2026.10');
     expect(event('2026-10-11T12:00:00.000Z', 'p', { est_cost_anchor_usd: 0.0012344999 }).est_cost_anchor_usd).toBe(0.001234);
+  });
+
+  it('carries prompt-cache usage in contract order (SPEC.md §3.1b, TS-228)', () => {
+    const usage = {
+      total_tokens: 12,
+      cache_writes: [{ ttl: '1H', tokens: 5.0 }, { ttl: '5m', tokens: 0 }],
+      prompt_tokens: 10,
+      cached_tokens: true,
+      completion_tokens: 2,
+    };
+    const e = event('2026-10-11T12:00:00.000Z', 'p', { usage, cache_ttl_policy: '1h' });
+    expect(Object.keys(e.usage as object)).toEqual([
+      'prompt_tokens', 'completion_tokens', 'total_tokens',
+      'cached_tokens', 'cache_write_tokens', 'cache_writes',
+    ]);
+    // a boolean is not a count; the aggregate is summed from the breakdown; a
+    // zero entry is dropped; the ttl is lower-cased
+    expect(e.usage).toEqual({
+      prompt_tokens: 10, completion_tokens: 2, total_tokens: 12,
+      cached_tokens: null, cache_write_tokens: 5, cache_writes: [{ tokens: 5, ttl: '1h' }],
+    });
+    expect(e.cache_ttl_policy).toBe('1h');
+    expect(event('2026-10-11T12:00:00.000Z', 'p', { cache_ttl_policy: '2h' }).cache_ttl_policy).toBeNull();
+    expect(event('2026-10-11T12:00:00.000Z', 'p', { cache_ttl_policy: ' EXPLICIT ' }).cache_ttl_policy).toBe('explicit');
+    expect(event('2026-10-11T12:00:00.000Z', 'p', { usage: { cache_writes: 'nope' } }).usage).toBeNull();
+    expect(CACHE_TTLS).toEqual(['5m', '1h', '30m', '24h', 'explicit']);
+    expect(normalizeUsage({ prompt_tokens: 1, cached_tokens: 0, cache_write_tokens: -1, cache_writes: [] })).toEqual({
+      prompt_tokens: 1, completion_tokens: null, total_tokens: null,
+      cached_tokens: 0, cache_write_tokens: 0, cache_writes: [],
+    });
+    expect(normalizeCacheUsage('OpenAI', { prompt_tokens_details: { cached_tokens: 1024 }, cache_write_tokens: 2048 })).toEqual({
+      cached_tokens: 1024, cache_write_tokens: 2048, cache_writes: null,
+    });
+    const empty = { cached_tokens: null, cache_write_tokens: null, cache_writes: null };
+    expect(normalizeCacheUsage('anthropic', null)).toEqual(empty);
+    expect(normalizeCacheUsage(null, { cached_tokens: 1 })).toEqual(empty);
   });
 
   it('reads the taxonomy version from benchmarks.json, then the manifest', () => {

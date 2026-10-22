@@ -212,6 +212,9 @@ export function setProcessMode(config: unknown, process: string, mode: string, m
 /** The monitor-relevant environment, for callers that are not pure. */
 export function envFromOs(env: NodeJS.ProcessEnv = process.env): Record<string, string | undefined> {
   const out: Record<string, string | undefined> = {};
-  for (const key of [ENV_MODE, ENV_APP]) if (key in env) out[key] = env[key];
+  // The mode and app overrides plus the upload opt-outs (SPEC.md §9).
+  for (const key of [ENV_MODE, ENV_APP, 'TRYAII_MONITOR_UPLOAD', 'TRYAII_TELEMETRY', 'DO_NOT_TRACK']) {
+    if (key in env) out[key] = env[key];
+  }
   return out;
 }

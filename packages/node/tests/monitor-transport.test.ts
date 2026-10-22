@@ -50,6 +50,14 @@ vi.mock('../src/daemon.js', async (importOriginal) => {
   };
 });
 
+// These tests drive the daemon path, the fallback when the in-process engine
+// (TS-253) is unavailable; tests/monitor-engine.test.ts covers the engine.
+vi.mock('../src/monitor/engine.js', () => ({
+  InProcessEngine: {
+    create: async () => ({ engine: null, reason: 'onnxruntime-node is not installed' }),
+  },
+}));
+
 vi.mock('../src/catalog/client.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/catalog/client.js')>();
   const { starterBundle } = await import('../src/catalog/bundle.js');

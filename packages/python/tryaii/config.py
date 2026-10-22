@@ -23,9 +23,15 @@ except ImportError:
 # Default data directory: ~/.tryaii/
 DEFAULT_DATA_DIR = Path.home() / ".tryaii"
 
-# Default embedding model -- small, fast, runs on any modern CPU
-DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+# Default embedding model -- all-MiniLM-L6-v2 as an int8 ONNX build on
+# onnxruntime (TS-252): small, fast, runs on any modern CPU, no PyTorch. Its
+# vectors are their own space: they are scored only against centroids built
+# with the same file (the catalog publishes them next to the fp32 ones).
+DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2-onnx-int8"
 DEFAULT_EMBEDDING_DIMENSION = 384
+# The fp32 sentence-transformers model the ONNX build was exported from
+# (``pip install "tryaii[centroids]"``); still the catalog's primary model.
+FP32_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
 
 @dataclass
@@ -56,7 +62,8 @@ class TryaiiDreConfig:
     Reads from environment variables if not set explicitly.
     """
 
-    # Embedding model (sentence-transformers model name or path)
+    # Embedding model: an ONNX model id (default) or a sentence-transformers
+    # model name / path (needs the ``centroids`` extra)
     embedding_model: str = field(
         default_factory=lambda: os.environ.get(
             "TRYAII_DRE_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL
