@@ -1,6 +1,6 @@
 # `tryaii login` — sign in and unlock the full catalog
 
-Sign in with your tryaii.com account (Google sign-in, free). Signing in unlocks the **full model catalog** (322 routable models); without it, every command routes on the 45-model **starter catalog** that ships in the package.
+Sign in with your tryaii.com account (Google sign-in, free). Signing in unlocks the **full model catalog** (319 routable models); without it, every command routes on the 46-model **starter catalog** that ships in the package.
 
 ```bash
 tryaii login
@@ -21,7 +21,7 @@ Or open directly: https://tryaii.com/device?user_code=BCDF-GHJK
 
 Waiting for approval (expires in 10 minutes, Ctrl+C to cancel)...
 Logged in as you@example.com.
-Downloaded the full catalog (322 models).
+Downloaded the full catalog (319 models).
 ```
 
 Only approve a code you started from your own terminal. If you were already logged in, the first line is `Already logged in as <email>. Signing in again replaces that session.` and the old session is revoked after the new one succeeds.

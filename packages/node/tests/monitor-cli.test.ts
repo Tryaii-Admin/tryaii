@@ -113,8 +113,9 @@ describe.skipIf(!existsSync(CLI) || !existsSync(CASES))('tryaii monitor CLI (Nod
     });
     expect(code).toBe(0);
     const lines = stdout.trimEnd().split('\n');
-    expect(lines.at(-2)).toMatch(/^source: remote etag e-42 fetched /);
-    expect(lines.at(-1)).toMatch(/^upload: ok 2 events at /);
+    expect(lines.at(-3)).toMatch(/^source: remote etag e-42 fetched /);
+    expect(lines.at(-2)).toMatch(/^upload: ok 2 events at /);
+    expect(lines.at(-1)).toBe('catalog: starter'); // TS-294, SPEC.md §5.2
     expect(lines.some((l) => l.startsWith('realised: '))).toBe(true);
   });
 });

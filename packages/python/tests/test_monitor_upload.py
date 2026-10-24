@@ -130,8 +130,8 @@ def test_validates_once_then_uploads_the_unread_lines(tmp_path):
     body = json.loads(post["data"])
     assert list(body) == ["schema", "batch_id", "sdk", "notice_version", "events"]
     assert body["schema"] == "tryaii.monitor.upload/1"
-    assert body["sdk"] == {"lang": "python", "version": "0.7.0"}
-    assert body["notice_version"] == NOTICE_VERSION == "2026-10-18"
+    assert body["sdk"] == {"lang": "python", "version": "0.7.0"}  # no "source" (v1.6)
+    assert body["notice_version"] == NOTICE_VERSION == "2026-10-24"
     assert [e["event_id"] for e in body["events"]] == [
         "00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]
     # The stored lines go out unchanged except for the keyed prompt hash (SPEC §9).
@@ -562,3 +562,30 @@ def test_notice_is_not_shown_without_a_terminal(tmp_path, capsys):
     terminal = type("T", (), {"isatty": lambda self: True})()
     assert privacy.can_show_notice(terminal, {"CI": "1"}) is False
     assert privacy.can_show_notice(terminal, {}) is True
+
+
+def test_sdk_source_labels_only_the_directory_registered_with_it(tmp_path):
+    """API.md v1.6 §3.2.3: ``sdk.source`` is sent only for a directory
+    registered with it (the Claude Code importer), between version and the
+    notice; other directories' batches leave the key out."""
+    plain, labelled = tmp_path / "shop", tmp_path / "claude-code"
+    for d in (plain, labelled):
+        d.mkdir()
+        write_events(d, [event(1)])
+    opener = Opener({"/v1/apps/keys/validate": [(200, VALID)],
+                     "/v1/monitor/events": [(202, {}), (202, {})]})
+    clock = Clock()
+    up = upload.Uploader(KEY, BASE, opener=opener, clock=clock,
+                         now_ts=lambda: "2026-10-12T09:00:00.000Z", version="0.7.0")
+    up.register(plain)
+    up.register(labelled, source=upload.SOURCE_CLAUDE_CODE_IMPORT)
+    for _ in range(4):  # one batch per pass, then the 5 s interval
+        up.run_once()
+        clock.t += upload.INTERVAL_S + 1
+    sdks = [json.loads(p["data"])["sdk"] for p in opener.posts()]
+    assert {"lang": "python", "version": "0.7.0"} in sdks
+    assert {"lang": "python", "version": "0.7.0", "source": "claude-code-import"} in sdks
+    assert len(sdks) == 2
+    assert upload.envelope_head("b", "0.7.0", "claude-code-import").startswith(
+        b'{"schema":"tryaii.monitor.upload/1","batch_id":"b","sdk":{"lang":"python",'
+        b'"version":"0.7.0","source":"claude-code-import"},"notice_version":')

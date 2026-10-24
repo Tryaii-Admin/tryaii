@@ -1,11 +1,11 @@
 # `tryaii models` — list the model catalog
 
-Print every routable model in the catalog in use. Out of the box that is the **starter catalog** shipped in the package: 45 well-known models from 6 providers (OpenAI, Anthropic, Google, DeepSeek, xAI, Mistral). After [`tryaii login`](login.md) (free) it lists the **full catalog** of 322 routable models; ephemeral `:free` variants are never listed. See [SDK presets](../sdk/models/presets.md).
+Print every routable model in the catalog in use. Out of the box that is the **starter catalog** shipped in the package: 46 well-known models from 6 providers (OpenAI, Anthropic, Google, DeepSeek, xAI, Mistral). After [`tryaii login`](login.md) (free) it lists the **full catalog** of 319 routable models; ephemeral `:free` variants are never listed. See [SDK presets](../sdk/models/presets.md).
 
 When nobody is logged in, `models` (like `route` and `eval`) prints a one-line login hint to **stderr** at most once a day; stdout is unaffected, and `TRYAII_NO_BANNER` silences it:
 
 ```
-Routing on the starter catalog (45 models). Log in for free to use the full catalog (322 models): tryaii login
+Routing on the starter catalog (46 models). Log in for free to use the full catalog (319 models): tryaii login
 ```
 
 ```bash
@@ -27,10 +27,10 @@ tryaii models --json
 Grouped by provider (alphabetical):
 
 ```
-Available Models (45):
+Available Models (46):
 ----------------------------------------------------------------------
 
-  anthropic (10 models):
+  anthropic (11 models):
     - anthropic/claude-sonnet-4 [fast] | $0.0030/0.0150
     - anthropic/claude-sonnet-4.5 [fast] | $0.0030/0.0150
     - ...

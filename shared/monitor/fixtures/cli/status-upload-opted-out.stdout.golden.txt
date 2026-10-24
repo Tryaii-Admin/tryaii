@@ -12,3 +12,4 @@ totals: 25 calls, 1 errors, est cost 0.1908, at winner 0.0762, savings 0.1106
 realised: 1 swapped calls, saved -
 source: local
 upload: off (TRYAII_MONITOR_UPLOAD=0)
+catalog: starter

@@ -1,6 +1,6 @@
 # `tryaii benchmarks` — list registered benchmarks
 
-Print the benchmarks of the catalog in use (see [SDK benchmarks](../sdk/benchmarks/README.md)). The starter catalog shipped in the package has 16; after [`tryaii login`](login.md) the full catalog adds more.
+Print the benchmarks of the catalog in use (see [SDK benchmarks](../sdk/benchmarks/README.md)). The starter catalog shipped in the package has 14; after [`tryaii login`](login.md) the full catalog adds more.
 
 ```bash
 tryaii benchmarks
@@ -16,7 +16,7 @@ tryaii benchmarks --json
 ## Text output
 
 ```
-Available Benchmarks (16):
+Available Benchmarks (14):
 ------------------------------------------------------------
   AIME-2024                      [23.3-99.583]   AIME 2024 competition mathematics
   AIME-2025                      [35.5833-99.0]  AIME 2025 competition mathematics
@@ -26,9 +26,9 @@ Available Benchmarks (16):
 
 Each line shows the benchmark name, its raw-score normalization range, and description. The starter catalog's set is:
 
-- Math and reasoning: AIME-2024, AIME-2025, GPQA, HLE, AA-LCR.
+- Math and reasoning: AIME-2024, AIME-2025, GPQA, HLE.
 - Knowledge and professional domains: MMLU-Pro, MMMU, LegalBench.
 - Code: LiveCodeBench, SciCode.
-- Agentic tasks: Tau2-bench, Terminal-bench-Hard.
+- Agentic tasks: Tau2-bench.
 - Instruction following: IFBench.
 - Human preference: Chatbot Arena Elo plus its Code and Vision tracks.

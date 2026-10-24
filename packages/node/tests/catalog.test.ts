@@ -70,10 +70,10 @@ describe('catalog bundle loader', () => {
     expect(bundle.kind).toBe('starter');
     expect(bundle.schema).toBe(SUPPORTED_SCHEMA);
     expect(bundle.embeddingModel).toBe('all-MiniLM-L6-v2');
-    expect(bundle.counts).toEqual({ models: 45, benchmarks: 16 });
-    expect(bundle.fullCounts!.models).toBeGreaterThan(45);
-    expect(bundle.modelEntries()).toHaveLength(45);
-    expect(bundle.benchmarkNames).toHaveLength(16);
+    expect(bundle.counts).toEqual({ models: 46, benchmarks: 15 });
+    expect(bundle.fullCounts!.models).toBeGreaterThan(46);
+    expect(bundle.modelEntries()).toHaveLength(46);
+    expect(bundle.benchmarkNames).toHaveLength(15);
   });
 
   it('manifest hashes are the sha256 of the exact file bytes', () => {
@@ -207,10 +207,10 @@ describe('resolveBundle seam', () => {
     const dir = bundleCopy();
     const router = new Router({ bundle: dir });
     expect(router.bundle.directory).toBe(dir);
-    expect(router.models.length).toBe(45);
+    expect(router.models.length).toBe(46);
     expect(router.benchmarks.names).toEqual(starterBundle().benchmarkNames);
     expect(new Router().bundle).toBe(starterBundle());
-    expect(ModelRegistry.default().length).toBe(45);
+    expect(ModelRegistry.default().length).toBe(46);
     expect(BenchmarkRegistry.default().names).toEqual(starterBundle().benchmarkNames);
   });
 });
@@ -219,8 +219,8 @@ describe.skipIf(!HAS_FULL_BUNDLE)(`full catalog bundle ${FULL_ONLY}`, () => {
   it('routes the full catalog through the Router', () => {
     const router = new Router({ bundle: fullBundle() });
     expect(router.bundle.kind).toBe('full');
-    expect(router.models.length).toBe(322);
-    expect(router.benchmarks.length).toBe(33);
+    expect(router.models.length).toBe(319);
+    expect(router.benchmarks.length).toBe(30);
     expect(router.benchmarks.getNormalizer().getWeight('SWE-bench-verified')).toBe(
       fullBundle().benchmarkWeights()['SWE-bench-verified'],
     );

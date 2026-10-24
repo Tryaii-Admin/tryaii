@@ -4,7 +4,7 @@
 
 ## Constructing
 
-All dependencies are injectable; defaults give you the models and benchmarks of the [default catalog](../models/presets.md) and local embeddings (initialized lazily on first route). The default catalog is the 45-model, 16-benchmark **starter catalog** shipped in the package, or — after [`tryaii login`](../../cli/login.md) (free) — the **full catalog** of 322 routable models, downloaded and refreshed at most once a day. Ephemeral `:free` variants are never routed.
+All dependencies are injectable; defaults give you the models and benchmarks of the [default catalog](../models/presets.md) and local embeddings (initialized lazily on first route). The default catalog is the 46-model, 15-benchmark **starter catalog** shipped in the package, or — after [`tryaii login`](../../cli/login.md) (free) — the **full catalog** of 319 routable models, downloaded and refreshed at most once a day. Ephemeral `:free` variants are never routed.
 
 `catalog` picks it: `"auto"` (default; full when logged in, else starter), `"starter"` (always the packaged catalog, no network) or `"full"` (raises `LoginRequiredError` when not logged in). A session the server rejected raises `SessionEndedError` (the local credentials and cached catalog are deleted; run `tryaii login` again). `bundle=` routes on a catalog bundle directory you loaded yourself. In Node the constructor starts from the local cache and the first `route()` (or `await router.ready()`) completes the daily check.
 

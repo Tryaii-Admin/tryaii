@@ -31,7 +31,7 @@ describe('WordPieceTokenizer (Python parity)', () => {
   it('covers the fixture corpus, the starter queries and the edge cases', () => {
     const sources = fixture.cases.map((c) => c.source.split('/')[0]);
     expect(new Set(sources)).toEqual(new Set(['monitor', 'starter', 'edge']));
-    expect(fixture.cases.length).toBeGreaterThan(250);
+    expect(fixture.cases.length).toBeGreaterThan(220);
   });
 
   for (const c of fixture.cases) {

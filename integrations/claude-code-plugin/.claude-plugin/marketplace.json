@@ -1,0 +1,17 @@
+{
+  "name": "tryaii",
+  "description": "TryAii plugins for Claude Code: connect your Claude Code usage to TryAii and get plain-language cost reports.",
+  "owner": {
+    "name": "TryAii",
+    "url": "https://github.com/Tryaii-Admin"
+  },
+  "plugins": [
+    {
+      "name": "tryaii",
+      "source": ".",
+      "description": "Connect Claude Code to TryAii in one step (/tryaii:tryaii-connect) and get a 30-day cost report (/tryaii:tryaii-report). A session-end hook adds project, subagent type and task advice to live calls (tryaii claude-code sync). Metadata only; prompts and code never leave your machine.",
+      "category": "productivity",
+      "tags": ["usage", "cost", "tokens", "cache"]
+    }
+  ]
+}

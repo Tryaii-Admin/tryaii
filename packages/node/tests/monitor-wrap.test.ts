@@ -606,6 +606,132 @@ describe('identity', () => {
   });
 });
 
+// --- Langfuse observeOpenAI, either order -------------------------------------
+
+/**
+ * The shape of @langfuse/openai 6.0.0 `observeOpenAI` (dist/index.mjs:383-399):
+ * a Proxy with only a `get` trap that returns a fresh proxy for every nested
+ * object and a fresh tracing closure (one generation per call) for every method.
+ */
+function fakeObserveOpenAI<T extends object>(sdk: T, generations: string[]): T {
+  return new Proxy(sdk, {
+    get(target, key, receiver) {
+      const value = (target as Record<PropertyKey, unknown>)[key];
+      if (typeof value === 'function') {
+        const bound = (value as (...a: unknown[]) => unknown).bind(target);
+        return (...args: unknown[]) => {
+          generations.push(String(key));
+          const res = bound(...args);
+          if (res instanceof Promise) {
+            return res.then((r) => {
+              if (r && typeof r === 'object' && Symbol.asyncIterator in r) {
+                const it = r as AsyncIterable<unknown>;
+                return (async function* () {
+                  for await (const c of it) yield c;
+                })();
+              }
+              return r;
+            });
+          }
+          return res;
+        };
+      }
+      if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+        return fakeObserveOpenAI(value as object, generations);
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+}
+
+describe('langfuse observeOpenAI', () => {
+  function setup(order: 'wrap_first' | 'observe_first') {
+    const raw = new FakeClient();
+    const generations: string[] = [];
+    let client: FakeClient;
+    let monitor: Monitor;
+    if (order === 'wrap_first') {
+      monitor = wrap(raw, { app: 'shop', routeFn: makeRouteFn(SCORES_MINI_WINS) });
+      client = fakeObserveOpenAI(raw, generations);
+    } else {
+      client = fakeObserveOpenAI(raw, generations);
+      monitor = wrap(client, { app: 'shop', routeFn: makeRouteFn(SCORES_MINI_WINS) });
+    }
+    return { raw, client, monitor, generations };
+  }
+
+  for (const order of ['wrap_first', 'observe_first'] as const) {
+    it(`${order}: one request, one generation, one event per call`, async () => {
+      const { raw, client, monitor, generations } = setup(order);
+      for (let i = 0; i < 3; i++) {
+        const resp = (await client.chat.completions.create({
+          model: 'gpt-5.5', messages: MESSAGES, tryaii_process: `p${i}`,
+        })) as { model: string };
+        expect(resp.model).toBe('gpt-5.5');
+      }
+      await monitor.drain();
+      expect(raw.chat.completions.calls).toHaveLength(3);
+      expect('tryaii_process' in raw.chat.completions.calls[0]).toBe(false);
+      expect(generations).toEqual(['create', 'create', 'create']);
+      expect(eventsOf(monitor).map((e) => e.process)).toEqual(['p0', 'p1', 'p2']);
+    });
+
+    it(`${order}: streams once through both`, async () => {
+      const { raw, client, monitor, generations } = setup(order);
+      const stream = (await client.chat.completions.create({
+        model: 'gpt-5.5', messages: MESSAGES, stream: true,
+      })) as AsyncIterable<Chunk>;
+      const texts: string[] = [];
+      for await (const c of stream) texts.push(c.text);
+      expect(texts).toEqual(['a', 'b', '']);
+      await monitor.drain();
+      expect(raw.chat.completions.calls).toHaveLength(1);
+      expect(raw.chat.completions.calls[0].stream_options).toEqual({ include_usage: true });
+      expect(generations).toEqual(['create']);
+      const [event] = eventsOf(monitor);
+      expect(event.stream).toBe(true);
+      expect((event.usage as { total_tokens: number }).total_tokens).toBe(150);
+    });
+  }
+
+  it('observe_first: patches the client behind the proxy, and re-wrapping replaces the monitor', async () => {
+    const { raw, client } = setup('observe_first');
+    const first = Object.getOwnPropertyDescriptor(raw.chat.completions, 'create')?.value as { __wrapped__?: unknown };
+    expect(first.__wrapped__).toBe(FakeCompletions.prototype.create);
+    const monitor = wrap(client, { app: 'two', routeFn: makeRouteFn(SCORES_MINI_WINS) });
+    const second = Object.getOwnPropertyDescriptor(raw.chat.completions, 'create')?.value as { __wrapped__?: unknown };
+    expect(second.__wrapped__).toBe(FakeCompletions.prototype.create);
+    await client.chat.completions.create({ model: 'gpt-5.5', messages: MESSAGES });
+    await monitor.drain();
+    expect(raw.chat.completions.calls).toHaveLength(1);
+    expect(eventsOf(monitor).map((e) => e.app)).toEqual(['two']);
+  });
+
+  it('a plain client is patched in place as before', async () => {
+    const client = new FakeClient();
+    const completions = client.chat.completions;
+    const monitor = wrap(client, { app: 'shop', routeFn: makeRouteFn(SCORES_MINI_WINS) });
+    expect(client.chat.completions).toBe(completions);
+    const own = Object.getOwnPropertyDescriptor(completions, 'create')?.value as { __wrapped__?: unknown };
+    expect(own.__wrapped__).toBe(FakeCompletions.prototype.create);
+    await call(client, { model: 'gpt-5.5', messages: MESSAGES });
+    await monitor.drain();
+    expect(completions.calls).toHaveLength(1);
+    expect(eventsOf(monitor)).toHaveLength(1);
+  });
+
+  it('a stable Proxy around a client is patched through the proxy as before', async () => {
+    const raw = new FakeClient();
+    const chatProxy = new Proxy(raw.chat, {});
+    const client = new Proxy(raw, { get: (t, k, r) => (k === 'chat' ? chatProxy : Reflect.get(t, k, r)) });
+    const monitor = wrap(client, { app: 'shop', routeFn: makeRouteFn(SCORES_MINI_WINS) });
+    await call(client, { model: 'gpt-5.5', messages: MESSAGES });
+    await monitor.drain();
+    expect(raw.chat.completions.calls).toHaveLength(1);
+    expect(eventsOf(monitor)).toHaveLength(1);
+  });
+});
+
 // --- slice 2: managed mode ----------------------------------------------------
 
 function setManaged(monitor: Monitor, process: string, model: string): void {

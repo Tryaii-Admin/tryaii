@@ -256,6 +256,18 @@ export function readRemote(directory: string): Record<string, unknown> | null {
 }
 
 /**
+ * Bumped by every `writeRemote` in this process, so the wrapper's cached copy
+ * is re-read on the very next call after the long poll wrote a new answer
+ * (no 5 s re-check delay, no reliance on mtime resolution; TS-296).
+ */
+let remoteWrites = 0;
+
+/** How many times this process wrote a `remote.json` (any app). */
+export function remoteGeneration(): number {
+  return remoteWrites;
+}
+
+/**
  * Write a server `RemoteConfig` plus `fetched_at` (last key), atomically,
  * indent 2. The server's key order is kept.
  */
@@ -265,6 +277,7 @@ export function writeRemote(directory: string, remote: Record<string, unknown>, 
   doc.fetched_at = fetchedAt;
   const path = join(directory, REMOTE_FILE);
   writeFileAtomic(path, dumpDoc(doc));
+  remoteWrites += 1;
   return path;
 }
 

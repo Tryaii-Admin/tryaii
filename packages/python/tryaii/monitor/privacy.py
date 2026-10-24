@@ -28,7 +28,7 @@ from typing import Optional
 from tryaii.auth.store import write_atomic
 
 #: The notice version: its publication date (API.md §7.1).
-NOTICE_VERSION = "2026-10-18"
+NOTICE_VERSION = "2026-10-24"
 NOTICE_URL = "https://tryaii.com/privacy-policy#cli-sdk"
 NOTICE_TEXT = (
     "[tryaii] monitor records sync to your TryAii account.\n"

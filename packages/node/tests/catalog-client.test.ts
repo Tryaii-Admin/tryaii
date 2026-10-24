@@ -65,9 +65,12 @@ const DAY = 24 * 3600 * 1000;
 const V1 = '2026.10.04.1';
 const V2 = '2026.10.05.1';
 const DEAD = 'http://127.0.0.1:9';
+/** Test app keys (monitor API.md section 1 shape; never real keys). */
+const APP_KEY = 'tryaii_fakeappkey01_' + 'A'.repeat(43);
+const BAD_APP_KEY = 'tryaii_fakeappkey02_' + 'B'.repeat(43);
 const NUDGE =
-  'Routing on the starter catalog (45 models). Log in for free to use the ' +
-  'full catalog (322 models): tryaii login\n';
+  'Routing on the starter catalog (46 models). Log in for free to use the ' +
+  'full catalog (319 models): tryaii login\n';
 
 // ---------------------------------------------------------------- bundles
 function makeFullBundle(dest: string, version: string, signed = true): string {
@@ -135,6 +138,8 @@ class FakeApi {
   private n = 0;
   private access = new Set<string>();
   private refresh = new Set<string>();
+  /** App keys GET /v1/catalog/live accepts (catalog contract v1.4). */
+  appKeys = new Set<string>([APP_KEY]);
 
   constructor() {
     this.server = createServer((req, res) => {
@@ -213,7 +218,8 @@ class FakeApi {
       }, {}];
     }
     if (req.method === 'GET' && path === '/v1/catalog/live') {
-      if (this.mode === '401' || !this.access.has(token)) return [401, { error: 'invalid_token' }, {}];
+      const valid = token.startsWith('tryaii_') ? this.appKeys.has(token) : this.access.has(token);
+      if (this.mode === '401' || !valid) return [401, { error: 'invalid_token' }, {}];
       if (this.mode === '403' || !this.entitlements.includes('catalog:full')) {
         return [403, { error: 'insufficient_entitlement' }, {}];
       }
@@ -311,6 +317,8 @@ beforeEach(async () => {
   // The library paths (Router, resolveBundle) read process.env.
   process.env.TRYAII_DRE_DATA_DIR = env.TRYAII_DRE_DATA_DIR;
   delete process.env.TRYAII_NO_BANNER;
+  // An app key in the caller's shell would change "not logged in" (contract v1.4).
+  delete process.env.TRYAII_API_KEY;
   clock = T0;
   api = await new FakeApi().start();
   api.catalogDir = bundles[V1];
@@ -321,6 +329,8 @@ afterEach(async () => {
   await api.stop();
   client.resetCatalogCache();
   process.env.TRYAII_DRE_DATA_DIR = savedEnv.TRYAII_DRE_DATA_DIR;
+  if (savedEnv.TRYAII_API_KEY === undefined) delete process.env.TRYAII_API_KEY;
+  else process.env.TRYAII_API_KEY = savedEnv.TRYAII_API_KEY;
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -556,10 +566,10 @@ describe('download failures (contract section 5)', () => {
 describe('counts and nudge (contract sections 1 and 5)', () => {
   it('routable count skips :free variants; starter full_counts are routable', () => {
     const full = loadBundle(bundles[V1]);
-    expect(full.counts!.models).toBe(46);
-    expect(client.routableCount(full)).toBe(45);
-    expect(client.routableCount(starterBundle())).toBe(45);
-    expect(starterBundle().fullCounts).toEqual({ models: 322, benchmarks: 33 });
+    expect(full.counts!.models).toBe(47);
+    expect(client.routableCount(full)).toBe(46);
+    expect(client.routableCount(starterBundle())).toBe(46);
+    expect(starterBundle().fullCounts).toEqual({ models: 319, benchmarks: 30 });
   });
 
   it('nudge: once per local day, exact text, nudge.json', async () => {
@@ -612,10 +622,10 @@ describe('library: catalog option (contract section 5)', () => {
     // ... ready() (and route()) completes the check and switches.
     await router.ready();
     expect([router.bundle.kind, router.bundle.version]).toEqual(['full', V1]);
-    expect(router.models.allModels).toHaveLength(45);
+    expect(router.models.allModels).toHaveLength(46);
     // now cached + memoized: new routers, registries and resolveBundle agree
     expect(new Router().bundle.version).toBe(V1);
-    expect(ModelRegistry.default().allModels).toHaveLength(45);
+    expect(ModelRegistry.default().allModels).toHaveLength(46);
     expect(new Router({ catalog: 'full' }).bundle.kind).toBe('full');
     // an explicit bundle wins over the catalog option
     expect(new Router({ bundle: starterBundle(), catalog: 'full' }).bundle.kind).toBe('starter');
@@ -674,7 +684,7 @@ describe('login / logout / whoami (contract section 5, CLI changes)', () => {
   it('login downloads the full catalog right away', async () => {
     const out = await login();
     expect(out.endsWith(
-      'Logged in as dev@example.com.\nDownloaded the full catalog (45 models).\n',
+      'Logged in as dev@example.com.\nDownloaded the full catalog (46 models).\n',
     )).toBe(true);
     expect(cacheVersions()).toEqual([V1]);
   });
@@ -706,7 +716,7 @@ describe('login / logout / whoami (contract section 5, CLI changes)', () => {
     expect(await runWhoami(w, { ...deps(), version: '9.9.9' }, { json: false })).toBe(0);
     expect(io.out).toBe(
       'Logged in as dev@example.com (Dev User)\nEntitlements: catalog:full\n' +
-        `Catalog: full, release ${V1} (45 models)\n`,
+        `Catalog: full, release ${V1} (46 models)\n`,
     );
     ({ io, w } = capture());
     expect(await runWhoami(w, { ...deps(), version: '9.9.9' }, { json: true })).toBe(0);
@@ -1212,5 +1222,176 @@ describe('daemon re-verifies the cache (contract section 6)', () => {
     expect(() => daemon.bundleFromSpec(spec)).toThrow(/signature/);
     const own = makeFullBundle(join(dir, 'own'), V1, false);
     expect(daemon.bundleFromSpec(own).kind).toBe('full');
+  });
+});
+
+// ---------------------------------------------------------------- app key (TS-294)
+// Catalog contract v1.4: a login session, else TRYAII_API_KEY, else starter.
+// Mirrors packages/python/tests/test_catalog_app_key.py.
+describe('app key unlocks the full catalog (contract v1.4)', () => {
+  const KEY_REJECTED =
+    'TRYAII_API_KEY was not accepted for the full catalog; using the starter catalog.';
+
+  function useKey(key: string = APP_KEY): void {
+    env.TRYAII_API_KEY = key;
+    env.TRYAII_API_URL = api.url;
+  }
+
+  it('a key-only machine gets the full catalog', async () => {
+    useKey();
+    expect(creds()).toBeNull();
+    const sel = await client.selectCatalog('auto', deps());
+    expect([sel.bundle.kind, sel.bundle.version, sel.notice, sel.checked, sel.source]).toEqual([
+      'full', V1, null, true, 'app_key',
+    ]);
+    const [call] = api.catalogCalls();
+    expect(call.headers.authorization).toBe(`Bearer ${APP_KEY}`);
+    expect(call.headers['if-none-match']).toBeUndefined();
+    // Same bytes as the Python SDK writes.
+    expect(readFileSync(client.statePath(env), 'utf-8')).toBe(
+      `{"version": "${V1}", "checked_at": "2026-10-03T12:00:00Z", "auth": "app_key"}`,
+    );
+    expect(client.catalogInUse(env)).toBe('full (app key)');
+  });
+
+  it('full mode does not need a login when a key is set', async () => {
+    useKey();
+    expect((await client.selectCatalog('full', deps())).bundle.kind).toBe('full');
+  });
+
+  it('within 24 h the key cache is used; after 24 h If-None-Match is sent', async () => {
+    useKey();
+    await client.selectCatalog('auto', deps());
+    clock = T0 + DAY - 1000;
+    const sel = await client.selectCatalog('auto', deps());
+    expect([sel.bundle.kind, sel.checked, sel.source]).toEqual(['full', false, 'app_key']);
+    expect(api.catalogCalls()).toHaveLength(1);
+    clock = T0 + DAY + 1000;
+    expect((await client.selectCatalog('auto', deps())).checked).toBe(true);
+    expect(api.catalogCalls()[1].headers['if-none-match']).toBe(`"${V1}"`);
+  });
+
+  it('the offline selection serves a cache the key fetched', async () => {
+    useKey();
+    await client.selectCatalog('auto', deps());
+    const sel = client.selectCatalogOffline('auto', deps());
+    expect([sel.bundle.kind, sel.source]).toEqual(['full', 'app_key']);
+  });
+
+  it('login wins over the key', async () => {
+    loginTo();
+    useKey();
+    const sel = await client.selectCatalog('auto', deps());
+    expect([sel.bundle.kind, sel.source]).toEqual(['full', 'login']);
+    const [call] = api.catalogCalls();
+    expect(call.headers.authorization).toBe(`Bearer ${creds()!.access_token}`);
+    // A login's state keeps the pre-v1.4 bytes (no "auth").
+    expect(readFileSync(client.statePath(env), 'utf-8')).toBe(
+      `{"version": "${V1}", "checked_at": "2026-10-03T12:00:00Z"}`,
+    );
+    expect(client.catalogInUse(env)).toBe('full (login)');
+  });
+
+  it('a login session that ends still throws even with a key', async () => {
+    loginTo();
+    useKey();
+    api.mode = '401';
+    await expect(client.selectCatalog('auto', deps())).rejects.toThrow(client.SessionEndedError);
+    expect(creds()).toBeNull();
+  });
+
+  it('switching from the key to a login checks again at once', async () => {
+    useKey();
+    await client.selectCatalog('auto', deps());
+    loginTo();
+    const sel = await client.selectCatalog('auto', deps());
+    expect([sel.source, sel.checked]).toEqual(['login', true]);
+    expect(api.catalogCalls()).toHaveLength(2);
+    expect(stateJson().auth).toBeUndefined();
+  });
+
+  it('a rejected key falls back to the starter without throwing', async () => {
+    useKey(BAD_APP_KEY);
+    const sel = await client.selectCatalog('auto', deps());
+    expect([sel.bundle.kind, sel.notice, sel.source]).toEqual(['starter', 'key_rejected', undefined]);
+    expect(api.catalogCalls()).toHaveLength(1);
+    expect(existsSync(client.statePath(env))).toBe(false);
+    expect(client.noticeMessage(sel.notice)).toBe(KEY_REJECTED);
+    expect(client.catalogInUse(env)).toBe('starter');
+  });
+
+  it('a revoked key drops the cached full catalog', async () => {
+    useKey();
+    expect((await client.selectCatalog('auto', deps())).bundle.kind).toBe('full');
+    api.appKeys.clear();
+    clock = T0 + DAY + 1000;
+    const sel = await client.selectCatalog('auto', deps());
+    expect([sel.bundle.kind, sel.notice]).toEqual(['starter', 'key_rejected']);
+    expect(existsSync(client.fullDir(env))).toBe(false);
+    expect(existsSync(client.statePath(env))).toBe(false);
+  });
+
+  it('a rejected key in full mode is LoginRequiredError', async () => {
+    useKey(BAD_APP_KEY);
+    await expect(client.selectCatalog('full', deps())).rejects.toThrow(client.LoginRequiredError);
+  });
+
+  it('a malformed key is never sent', async () => {
+    useKey('not-a-key');
+    const sel = await client.selectCatalog('auto', deps());
+    expect([sel.bundle.kind, sel.notice]).toEqual(['starter', 'key_rejected']);
+    expect(api.catalogCalls()).toHaveLength(0);
+    expect(client.selectCatalogOffline('auto', deps()).notice).toBe('key_rejected');
+  });
+
+  it('a key without the entitlement is the no-access starter', async () => {
+    api.entitlements = [];
+    useKey();
+    const sel = await client.selectCatalog('auto', deps());
+    expect([sel.bundle.kind, sel.notice]).toEqual(['starter', 'no_entitlement']);
+    expect(readFileSync(client.statePath(env), 'utf-8')).toBe(
+      '{"version": null, "checked_at": "2026-10-03T12:00:00Z", "auth": "app_key"}',
+    );
+  });
+
+  it.each(['404', '429', '500', 'corrupt'] as const)(
+    'a %s download failure is the download notice',
+    async (mode) => {
+      api.mode = mode;
+      useKey();
+      const sel = await client.selectCatalog('auto', deps());
+      expect([sel.bundle.kind, sel.notice, sel.failed]).toEqual(['starter', 'download_failed', true]);
+    },
+  );
+
+  it('a network failure never throws', async () => {
+    env.TRYAII_API_KEY = APP_KEY;
+    env.TRYAII_API_URL = DEAD;
+    const sel = await client.selectCatalog('auto', deps());
+    expect([sel.bundle.kind, sel.notice]).toEqual(['starter', 'download_failed']);
+  });
+
+  it('the library memo is keyed by the key id', async () => {
+    process.env.TRYAII_API_URL = api.url;
+    process.env.TRYAII_API_KEY = BAD_APP_KEY;
+    try {
+      expect((await client.selectedBundle('auto')).kind).toBe('starter');
+      process.env.TRYAII_API_KEY = APP_KEY;
+      expect((await client.selectedBundle('auto')).kind).toBe('full');
+    } finally {
+      if (savedEnv.TRYAII_API_URL === undefined) delete process.env.TRYAII_API_URL;
+      else process.env.TRYAII_API_URL = savedEnv.TRYAII_API_URL;
+    }
+  });
+
+  it('monitor status catalog line', async () => {
+    const { catalogLine } = await import('../src/cli-monitor.js');
+    expect(catalogLine()).toBe('catalog: starter');
+    useKey();
+    await client.selectCatalog('auto', deps());
+    expect(catalogLine()).toBe('catalog: full (app key)');
+    loginTo();
+    await client.selectCatalog('auto', deps());
+    expect(catalogLine()).toBe('catalog: full (login)');
   });
 });

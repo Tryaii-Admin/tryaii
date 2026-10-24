@@ -28,23 +28,23 @@
       "expected": {
         "status": "ok",
         "reason": null,
-        "summary": "anthropic/claude-fable-5 is a strong fit (rank 3 of 45)",
+        "summary": "anthropic/claude-fable-5 is a strong fit (rank 3 of 46)",
         "classification": {
           "broad_category": "coding",
           "subcategory": "code-generation",
           "confidence": 0.87
         },
         "current_rank": 3,
-        "catalog_size": 45,
+        "catalog_size": 46,
         "current": {
           "model_id": "anthropic/claude-fable-5",
-          "quality_score": 0.9323,
+          "quality_score": 0.9293,
           "cost_score": 0.0739,
           "speed_score": 0.2319
         },
         "recommended": {
           "model_id": "anthropic/claude-fable-5.1",
-          "quality_score": 0.9551,
+          "quality_score": 0.9643,
           "cost_score": 0.0739,
           "speed_score": 0.2547,
           "top_benchmarks": [
@@ -61,12 +61,12 @@
               1
             ]
           ],
-          "reasoning": "q'=0.96 (3 real of 4) | imputed: 1/4 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+          "reasoning": "q'=0.96 (3 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
         },
         "recommended_same_price": {
           "model_id": "anthropic/claude-fable-5.1",
           "rank": 1,
-          "quality_score": 0.9551,
+          "quality_score": 0.9643,
           "cost_score": 0.0739,
           "speed_score": 0.2547,
           "is_current": false
@@ -75,42 +75,42 @@
           {
             "rank": 1,
             "model_id": "anthropic/claude-fable-5.1",
-            "quality_score": 0.9551,
+            "quality_score": 0.9643,
             "cost_score": 0.0739,
             "speed_score": 0.2547,
-            "reasoning": "q'=0.96 (3 real of 4) | imputed: 1/4 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "reasoning": "q'=0.96 (3 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 2,
             "model_id": "anthropic/claude-opus-5.5",
-            "quality_score": 0.9432,
+            "quality_score": 0.9626,
             "cost_score": 0.2066,
-            "speed_score": 0.4154,
-            "reasoning": "q'=0.94 (1 real of 4) | imputed: 3/4 | cost 0.2066 ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "speed_score": 0.4149,
+            "reasoning": "q'=0.96 (1 real of 4) | imputed: 2/4 | cost 0.2066 ($12.00/M) | speed 0.4149 (4.44 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 3,
             "model_id": "anthropic/claude-fable-5",
-            "quality_score": 0.9323,
+            "quality_score": 0.9293,
             "cost_score": 0.0739,
             "speed_score": 0.2319,
-            "reasoning": "q'=0.93 (4 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2319 (10.31 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "reasoning": "q'=0.93 (3 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2319 (10.31 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 4,
             "model_id": "google/gemini-3.1-pro-preview",
-            "quality_score": 0.8737,
+            "quality_score": 0.8899,
             "cost_score": 0.2846,
             "speed_score": 0.3643,
-            "reasoning": "q'=0.87 (4 real of 4) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "reasoning": "q'=0.89 (3 real of 4) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 5,
-            "model_id": "google/gemini-3.8-flash",
-            "quality_score": 0.8679,
-            "cost_score": 0.4489,
-            "speed_score": 0.5353,
-            "reasoning": "q'=0.87 (3 real of 4) | imputed: 1/4 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "model_id": "anthropic/claude-opus-5",
+            "quality_score": 0.8793,
+            "cost_score": 0.1743,
+            "speed_score": 0.3194,
+            "reasoning": "q'=0.88 (3 real of 4) | cost 0.1743 ($15.00/M) | speed 0.3194 (6.89 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           }
         ]
       }
@@ -141,23 +141,23 @@
       "expected": {
         "status": "finding",
         "reason": null,
-        "summary": "consider anthropic/claude-fable-5.1 (current anthropic/claude-opus-4.8 ranks 6 of 45)",
+        "summary": "consider anthropic/claude-fable-5.1 (current anthropic/claude-opus-4.8 ranks 8 of 46)",
         "classification": {
           "broad_category": "coding",
           "subcategory": "code-generation",
           "confidence": 0.87
         },
-        "current_rank": 6,
-        "catalog_size": 45,
+        "current_rank": 8,
+        "catalog_size": 46,
         "current": {
           "model_id": "anthropic/claude-opus-4.8",
-          "quality_score": 0.8366,
+          "quality_score": 0.8302,
           "cost_score": 0.1743,
           "speed_score": 0.431
         },
         "recommended": {
           "model_id": "anthropic/claude-fable-5.1",
-          "quality_score": 0.9551,
+          "quality_score": 0.9643,
           "cost_score": 0.0739,
           "speed_score": 0.2547,
           "top_benchmarks": [
@@ -174,56 +174,56 @@
               1
             ]
           ],
-          "reasoning": "q'=0.96 (3 real of 4) | imputed: 1/4 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+          "reasoning": "q'=0.96 (3 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
         },
         "recommended_same_price": {
-          "model_id": "anthropic/claude-opus-4.8",
-          "rank": 6,
-          "quality_score": 0.8366,
+          "model_id": "anthropic/claude-opus-5",
+          "rank": 5,
+          "quality_score": 0.8793,
           "cost_score": 0.1743,
-          "speed_score": 0.431,
-          "is_current": true
+          "speed_score": 0.3194,
+          "is_current": false
         },
         "top": [
           {
             "rank": 1,
             "model_id": "anthropic/claude-fable-5.1",
-            "quality_score": 0.9551,
+            "quality_score": 0.9643,
             "cost_score": 0.0739,
             "speed_score": 0.2547,
-            "reasoning": "q'=0.96 (3 real of 4) | imputed: 1/4 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "reasoning": "q'=0.96 (3 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 2,
             "model_id": "anthropic/claude-opus-5.5",
-            "quality_score": 0.9432,
+            "quality_score": 0.9626,
             "cost_score": 0.2066,
-            "speed_score": 0.4154,
-            "reasoning": "q'=0.94 (1 real of 4) | imputed: 3/4 | cost 0.2066 ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "speed_score": 0.4149,
+            "reasoning": "q'=0.96 (1 real of 4) | imputed: 2/4 | cost 0.2066 ($12.00/M) | speed 0.4149 (4.44 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 3,
             "model_id": "anthropic/claude-fable-5",
-            "quality_score": 0.9323,
+            "quality_score": 0.9293,
             "cost_score": 0.0739,
             "speed_score": 0.2319,
-            "reasoning": "q'=0.93 (4 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2319 (10.31 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "reasoning": "q'=0.93 (3 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2319 (10.31 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 4,
             "model_id": "google/gemini-3.1-pro-preview",
-            "quality_score": 0.8737,
+            "quality_score": 0.8899,
             "cost_score": 0.2846,
             "speed_score": 0.3643,
-            "reasoning": "q'=0.87 (4 real of 4) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "reasoning": "q'=0.89 (3 real of 4) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 5,
-            "model_id": "google/gemini-3.8-flash",
-            "quality_score": 0.8679,
-            "cost_score": 0.4489,
-            "speed_score": 0.5353,
-            "reasoning": "q'=0.87 (3 real of 4) | imputed: 1/4 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "model_id": "anthropic/claude-opus-5",
+            "quality_score": 0.8793,
+            "cost_score": 0.1743,
+            "speed_score": 0.3194,
+            "reasoning": "q'=0.88 (3 real of 4) | cost 0.1743 ($15.00/M) | speed 0.3194 (6.89 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           }
         ]
       }
@@ -254,23 +254,23 @@
       "expected": {
         "status": "finding",
         "reason": null,
-        "summary": "openai/gpt-4o is a poor fit for this prompt (rank 43 of 45) — best: anthropic/claude-fable-5.1",
+        "summary": "openai/gpt-4o is a poor fit for this prompt (rank 44 of 46) — best: anthropic/claude-fable-5.1",
         "classification": {
           "broad_category": "coding",
           "subcategory": "code-generation",
           "confidence": 0.87
         },
-        "current_rank": 43,
-        "catalog_size": 45,
+        "current_rank": 44,
+        "catalog_size": 46,
         "current": {
           "model_id": "openai/gpt-4o",
-          "quality_score": 0.0162,
+          "quality_score": 0.0193,
           "cost_score": 0.301,
           "speed_score": 0.3502
         },
         "recommended": {
           "model_id": "anthropic/claude-fable-5.1",
-          "quality_score": 0.9551,
+          "quality_score": 0.9643,
           "cost_score": 0.0739,
           "speed_score": 0.2547,
           "top_benchmarks": [
@@ -287,12 +287,12 @@
               1
             ]
           ],
-          "reasoning": "q'=0.96 (3 real of 4) | imputed: 1/4 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+          "reasoning": "q'=0.96 (3 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
         },
         "recommended_same_price": {
           "model_id": "google/gemini-3.1-pro-preview",
           "rank": 4,
-          "quality_score": 0.8737,
+          "quality_score": 0.8899,
           "cost_score": 0.2846,
           "speed_score": 0.3643,
           "is_current": false
@@ -301,42 +301,42 @@
           {
             "rank": 1,
             "model_id": "anthropic/claude-fable-5.1",
-            "quality_score": 0.9551,
+            "quality_score": 0.9643,
             "cost_score": 0.0739,
             "speed_score": 0.2547,
-            "reasoning": "q'=0.96 (3 real of 4) | imputed: 1/4 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "reasoning": "q'=0.96 (3 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 2,
             "model_id": "anthropic/claude-opus-5.5",
-            "quality_score": 0.9432,
+            "quality_score": 0.9626,
             "cost_score": 0.2066,
-            "speed_score": 0.4154,
-            "reasoning": "q'=0.94 (1 real of 4) | imputed: 3/4 | cost 0.2066 ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "speed_score": 0.4149,
+            "reasoning": "q'=0.96 (1 real of 4) | imputed: 2/4 | cost 0.2066 ($12.00/M) | speed 0.4149 (4.44 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 3,
             "model_id": "anthropic/claude-fable-5",
-            "quality_score": 0.9323,
+            "quality_score": 0.9293,
             "cost_score": 0.0739,
             "speed_score": 0.2319,
-            "reasoning": "q'=0.93 (4 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2319 (10.31 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "reasoning": "q'=0.93 (3 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2319 (10.31 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 4,
             "model_id": "google/gemini-3.1-pro-preview",
-            "quality_score": 0.8737,
+            "quality_score": 0.8899,
             "cost_score": 0.2846,
             "speed_score": 0.3643,
-            "reasoning": "q'=0.87 (4 real of 4) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "reasoning": "q'=0.89 (3 real of 4) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 5,
-            "model_id": "google/gemini-3.8-flash",
-            "quality_score": 0.8679,
-            "cost_score": 0.4489,
-            "speed_score": 0.5353,
-            "reasoning": "q'=0.87 (3 real of 4) | imputed: 1/4 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "model_id": "anthropic/claude-opus-5",
+            "quality_score": 0.8793,
+            "cost_score": 0.1743,
+            "speed_score": 0.3194,
+            "reasoning": "q'=0.88 (3 real of 4) | cost 0.1743 ($15.00/M) | speed 0.3194 (6.89 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           }
         ]
       }
@@ -374,11 +374,11 @@
           "confidence": 0.87
         },
         "current_rank": null,
-        "catalog_size": 45,
+        "catalog_size": 46,
         "current": null,
         "recommended": {
           "model_id": "anthropic/claude-fable-5.1",
-          "quality_score": 0.9551,
+          "quality_score": 0.9643,
           "cost_score": 0.0739,
           "speed_score": 0.2547,
           "top_benchmarks": [
@@ -395,49 +395,49 @@
               1
             ]
           ],
-          "reasoning": "q'=0.96 (3 real of 4) | imputed: 1/4 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+          "reasoning": "q'=0.96 (3 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
         },
         "recommended_same_price": null,
         "top": [
           {
             "rank": 1,
             "model_id": "anthropic/claude-fable-5.1",
-            "quality_score": 0.9551,
+            "quality_score": 0.9643,
             "cost_score": 0.0739,
             "speed_score": 0.2547,
-            "reasoning": "q'=0.96 (3 real of 4) | imputed: 1/4 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "reasoning": "q'=0.96 (3 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 2,
             "model_id": "anthropic/claude-opus-5.5",
-            "quality_score": 0.9432,
+            "quality_score": 0.9626,
             "cost_score": 0.2066,
-            "speed_score": 0.4154,
-            "reasoning": "q'=0.94 (1 real of 4) | imputed: 3/4 | cost 0.2066 ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "speed_score": 0.4149,
+            "reasoning": "q'=0.96 (1 real of 4) | imputed: 2/4 | cost 0.2066 ($12.00/M) | speed 0.4149 (4.44 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 3,
             "model_id": "anthropic/claude-fable-5",
-            "quality_score": 0.9323,
+            "quality_score": 0.9293,
             "cost_score": 0.0739,
             "speed_score": 0.2319,
-            "reasoning": "q'=0.93 (4 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2319 (10.31 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "reasoning": "q'=0.93 (3 real of 4) | cost 0.0739 ($30.00/M) | speed 0.2319 (10.31 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 4,
             "model_id": "google/gemini-3.1-pro-preview",
-            "quality_score": 0.8737,
+            "quality_score": 0.8899,
             "cost_score": 0.2846,
             "speed_score": 0.3643,
-            "reasoning": "q'=0.87 (4 real of 4) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "reasoning": "q'=0.89 (3 real of 4) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           },
           {
             "rank": 5,
-            "model_id": "google/gemini-3.8-flash",
-            "quality_score": 0.8679,
-            "cost_score": 0.4489,
-            "speed_score": 0.5353,
-            "reasoning": "q'=0.87 (3 real of 4) | imputed: 1/4 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | quality only (no tolerance) | at 5/1/1 only quality counts"
+            "model_id": "anthropic/claude-opus-5",
+            "quality_score": 0.8793,
+            "cost_score": 0.1743,
+            "speed_score": 0.3194,
+            "reasoning": "q'=0.88 (3 real of 4) | cost 0.1743 ($15.00/M) | speed 0.3194 (6.89 s to 300 tok) | quality only (no tolerance) | at 5/1/1 only quality counts"
           }
         ]
       }
@@ -475,13 +475,13 @@
           "confidence": 0.87
         },
         "current_rank": null,
-        "catalog_size": 45,
+        "catalog_size": 46,
         "current": null,
         "recommended": {
           "model_id": "google/gemini-3.8-flash",
-          "quality_score": 0.8679,
+          "quality_score": 0.8735,
           "cost_score": 0.4489,
-          "speed_score": 0.5353,
+          "speed_score": 0.5344,
           "top_benchmarks": [
             [
               "LiveCodeBench",
@@ -496,49 +496,49 @@
               0.8834
             ]
           ],
-          "reasoning": "q'=0.87 (3 real of 4) | imputed: 1/4 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.09 vs anthropic/claude-fable-5.1"
+          "reasoning": "q'=0.87 (3 real of 4) | cost 0.4489 ($2.25/M) | speed 0.5344 (2.56 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.09 vs anthropic/claude-fable-5.1"
         },
         "recommended_same_price": null,
         "top": [
           {
             "rank": 1,
             "model_id": "google/gemini-3.8-flash",
-            "quality_score": 0.8679,
+            "quality_score": 0.8735,
             "cost_score": 0.4489,
-            "speed_score": 0.5353,
-            "reasoning": "q'=0.87 (3 real of 4) | imputed: 1/4 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.09 vs anthropic/claude-fable-5.1"
+            "speed_score": 0.5344,
+            "reasoning": "q'=0.87 (3 real of 4) | cost 0.4489 ($2.25/M) | speed 0.5344 (2.56 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.09 vs anthropic/claude-fable-5.1"
           },
           {
             "rank": 2,
             "model_id": "google/gemini-3-flash-preview",
-            "quality_score": 0.8303,
+            "quality_score": 0.8432,
             "cost_score": 0.4853,
             "speed_score": 0.3702,
-            "reasoning": "q'=0.83 (2 real of 4) | imputed: 2/4 | cost 0.4853 ($1.75/M) | speed 0.3702 (5.45 s to 300 tok) | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.09 vs anthropic/claude-fable-5.1"
+            "reasoning": "q'=0.84 (2 real of 4) | imputed: 1/4 | cost 0.4853 ($1.75/M) | speed 0.3702 (5.45 s to 300 tok) | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.09 vs anthropic/claude-fable-5.1"
           },
           {
             "rank": 3,
-            "model_id": "openai/gpt-5.5",
-            "quality_score": 0.8241,
-            "cost_score": 0.152,
-            "speed_score": 0.5105,
-            "reasoning": "q'=0.82 (4 real of 4) | cost 0.1520 ($17.50/M) | speed 0.5105 (2.86 s to 300 tok) | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.09 vs anthropic/claude-fable-5.1"
+            "model_id": "google/gemini-3.1-pro-preview",
+            "quality_score": 0.8899,
+            "cost_score": 0.2846,
+            "speed_score": 0.3643,
+            "reasoning": "q'=0.89 (3 real of 4) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.09 vs anthropic/claude-fable-5.1"
           },
           {
             "rank": 4,
-            "model_id": "google/gemini-3.1-pro-preview",
-            "quality_score": 0.8737,
-            "cost_score": 0.2846,
-            "speed_score": 0.3643,
-            "reasoning": "q'=0.87 (4 real of 4) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.09 vs anthropic/claude-fable-5.1"
+            "model_id": "anthropic/claude-opus-5.5",
+            "quality_score": 0.9626,
+            "cost_score": 0.2066,
+            "speed_score": 0.4149,
+            "reasoning": "q'=0.96 (1 real of 4) | imputed: 2/4 | cost 0.2066 ($12.00/M) | speed 0.4149 (4.44 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.09 vs anthropic/claude-fable-5.1"
           },
           {
             "rank": 5,
-            "model_id": "anthropic/claude-opus-5.5",
-            "quality_score": 0.9432,
-            "cost_score": 0.2066,
-            "speed_score": 0.4154,
-            "reasoning": "q'=0.94 (1 real of 4) | imputed: 3/4 | cost 0.2066 ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.09 vs anthropic/claude-fable-5.1"
+            "model_id": "anthropic/claude-opus-4.8",
+            "quality_score": 0.8302,
+            "cost_score": 0.1743,
+            "speed_score": 0.431,
+            "reasoning": "q'=0.83 (3 real of 4) | cost 0.1743 ($15.00/M) | speed 0.4310 (4.12 s to 300 tok) | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.09 vs anthropic/claude-fable-5.1"
           }
         ]
       }
@@ -568,13 +568,13 @@
           "confidence": 0.74
         },
         "current_rank": null,
-        "catalog_size": 45,
+        "catalog_size": 46,
         "current": null,
         "recommended": {
           "model_id": "google/gemini-3.8-flash",
-          "quality_score": 0.9191,
+          "quality_score": 0.9188,
           "cost_score": 0.4489,
-          "speed_score": 0.5353,
+          "speed_score": 0.5344,
           "top_benchmarks": [
             [
               "Chatbot Arena Elo",
@@ -585,49 +585,49 @@
               0.8834
             ]
           ],
-          "reasoning": "q'=0.92 (2 real of 3) | imputed: 1/3 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5"
+          "reasoning": "q'=0.92 (2 real of 3) | imputed: 1/3 | cost 0.4489 ($2.25/M) | speed 0.5344 (2.56 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.97) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.05 vs anthropic/claude-opus-5"
         },
         "recommended_same_price": null,
         "top": [
           {
             "rank": 1,
             "model_id": "google/gemini-3.8-flash",
-            "quality_score": 0.9191,
+            "quality_score": 0.9188,
             "cost_score": 0.4489,
-            "speed_score": 0.5353,
-            "reasoning": "q'=0.92 (2 real of 3) | imputed: 1/3 | cost 0.4489 ($2.25/M) | speed 0.5353 (2.55 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5"
+            "speed_score": 0.5344,
+            "reasoning": "q'=0.92 (2 real of 3) | imputed: 1/3 | cost 0.4489 ($2.25/M) | speed 0.5344 (2.56 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.97) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.05 vs anthropic/claude-opus-5"
           },
           {
             "rank": 2,
             "model_id": "google/gemini-3.5-flash",
-            "quality_score": 0.8502,
+            "quality_score": 0.8503,
             "cost_score": 0.3263,
             "speed_score": 0.4802,
-            "reasoning": "q'=0.85 (3 real of 3) | cost 0.3263 ($5.25/M) | speed 0.4802 (3.29 s to 300 tok) | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5"
+            "reasoning": "q'=0.85 (3 real of 3) | cost 0.3263 ($5.25/M) | speed 0.4802 (3.29 s to 300 tok) | within 0.136 of the best (0.97) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.05 vs anthropic/claude-opus-5"
           },
           {
             "rank": 3,
             "model_id": "google/gemini-3.1-pro-preview",
-            "quality_score": 0.8769,
+            "quality_score": 0.8771,
             "cost_score": 0.2846,
             "speed_score": 0.3643,
-            "reasoning": "q'=0.88 (3 real of 3) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5"
+            "reasoning": "q'=0.88 (3 real of 3) | cost 0.2846 ($7.00/M) | speed 0.3643 (5.60 s to 300 tok) | within 0.136 of the best (0.97) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.05 vs anthropic/claude-opus-5"
           },
           {
             "rank": 4,
             "model_id": "anthropic/claude-opus-5.5",
-            "quality_score": 0.9557,
+            "quality_score": 0.9579,
             "cost_score": 0.2066,
-            "speed_score": 0.4154,
-            "reasoning": "q'=0.96 (1 real of 3) | imputed: 2/3 | cost 0.2066 ($12.00/M) | speed 0.4154 (4.43 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5"
+            "speed_score": 0.4149,
+            "reasoning": "q'=0.96 (1 real of 3) | imputed: 2/3 | cost 0.2066 ($12.00/M) | speed 0.4149 (4.44 s to 300 tok) [ttft estimated] | within 0.136 of the best (0.97) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.05 vs anthropic/claude-opus-5"
           },
           {
             "rank": 5,
-            "model_id": "anthropic/claude-fable-5.1",
-            "quality_score": 0.9443,
-            "cost_score": 0.0739,
-            "speed_score": 0.2547,
-            "reasoning": "q'=0.94 (2 real of 3) | imputed: 1/3 | cost 0.0739 ($30.00/M) | speed 0.2547 (9.28 s to 300 tok) | within 0.136 of the best (0.96) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.04 vs anthropic/claude-opus-5.5"
+            "model_id": "anthropic/claude-opus-5",
+            "quality_score": 0.9722,
+            "cost_score": 0.1743,
+            "speed_score": 0.3194,
+            "reasoning": "q'=0.97 (2 real of 3) | imputed: 1/3 | cost 0.1743 ($15.00/M) | speed 0.3194 (6.89 s to 300 tok) | within 0.136 of the best (0.97) | at 3/3/3 you accept up to 0.136 less quality for a cheaper or faster model; this pick gave up 0.05 vs anthropic/claude-opus-5"
           }
         ]
       }

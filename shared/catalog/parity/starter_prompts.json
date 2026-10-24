@@ -32,7 +32,6 @@
   {
    "prompt": "What is the capital of Japan? Answer in one sentence.",
    "similarities": {
-    "AA-LCR": 0.10998653620481491,
     "AIME-2024": 0.22966963052749634,
     "AIME-2025": 0.20758678019046783,
     "Chatbot Arena Elo": 0.32283440232276917,
@@ -45,15 +44,14 @@
     "LiveCodeBench": 0.14333654940128326,
     "MMLU-Pro": 0.19542762637138367,
     "MMMU": 0.1633116602897644,
+    "SWE-bench-Pro": 0.0,
     "SciCode": 0.0,
-    "Tau2-bench": 0.0,
-    "Terminal-bench-Hard": 0.05290692672133446
+    "Tau2-bench": 0.0
    }
   },
   {
    "prompt": "Explain the difference between OAuth 2.0 and OpenID Connect to a developer who has used API keys.",
    "similarities": {
-    "AA-LCR": 0.11033379286527634,
     "AIME-2024": 0.0,
     "AIME-2025": 0.0,
     "Chatbot Arena Elo": 0.0017615091055631638,
@@ -66,15 +64,14 @@
     "LiveCodeBench": 0.008431117981672287,
     "MMLU-Pro": 0.12765522301197052,
     "MMMU": 0.017689913511276245,
+    "SWE-bench-Pro": 0.031713176518678665,
     "SciCode": 0.0,
-    "Tau2-bench": 0.0,
-    "Terminal-bench-Hard": 0.022984318435192108
+    "Tau2-bench": 0.0
    }
   },
   {
    "prompt": "A service has 99.9% monthly availability. Estimate its allowed downtime in a 30-day month and show the calculation.",
    "similarities": {
-    "AA-LCR": 0.31480181217193604,
     "AIME-2024": 0.12382648140192032,
     "AIME-2025": 0.10410755127668381,
     "Chatbot Arena Elo": 0.14466755092144012,
@@ -87,15 +84,14 @@
     "LiveCodeBench": 0.11593969166278839,
     "MMLU-Pro": 0.11769112944602966,
     "MMMU": 0.13393628597259521,
+    "SWE-bench-Pro": 0.0,
     "SciCode": 0.06490888446569443,
-    "Tau2-bench": 0.24341566860675812,
-    "Terminal-bench-Hard": 0.01873776689171791
+    "Tau2-bench": 0.24341566860675812
    }
   },
   {
    "prompt": "Review this JavaScript and explain the bug: const jobs = ids.map(async id => fetchJob(id)); console.log(jobs[0].status);",
    "similarities": {
-    "AA-LCR": 0.06433673202991486,
     "AIME-2024": 0.0,
     "AIME-2025": 0.0,
     "Chatbot Arena Elo": 0.11137353628873825,
@@ -108,15 +104,14 @@
     "LiveCodeBench": 0.0,
     "MMLU-Pro": 0.03324646130204201,
     "MMMU": 0.033498965203762054,
+    "SWE-bench-Pro": 0.19932341575622559,
     "SciCode": 0.0,
-    "Tau2-bench": 0.14114589989185333,
-    "Terminal-bench-Hard": 0.06598405539989471
+    "Tau2-bench": 0.14114589989185333
    }
   },
   {
    "prompt": "Translate 'Your workspace is ready' into Hebrew, French, and Japanese.",
    "similarities": {
-    "AA-LCR": 0.009809814393520355,
     "AIME-2024": 0.0,
     "AIME-2025": 0.0,
     "Chatbot Arena Elo": 0.11555638909339905,
@@ -129,15 +124,14 @@
     "LiveCodeBench": 0.06764481961727142,
     "MMLU-Pro": 0.0,
     "MMMU": 0.036578863859176636,
+    "SWE-bench-Pro": 0.02309131622314453,
     "SciCode": 0.007393632084131241,
-    "Tau2-bench": 0.12556257843971252,
-    "Terminal-bench-Hard": 0.1885964423418045
+    "Tau2-bench": 0.12556257843971252
    }
   },
   {
    "prompt": "Turn the request 'add dark mode' into five testable acceptance criteria, including accessibility and saved preferences.",
    "similarities": {
-    "AA-LCR": 0.012556305155158043,
     "AIME-2024": 0.0,
     "AIME-2025": 0.011049657128751278,
     "Chatbot Arena Elo": 0.0,
@@ -150,15 +144,14 @@
     "LiveCodeBench": 0.0,
     "MMLU-Pro": 0.007225800305604935,
     "MMMU": 0.03613089397549629,
+    "SWE-bench-Pro": 0.2192775011062622,
     "SciCode": 0.005714887753129005,
-    "Tau2-bench": 0.14308132231235504,
-    "Terminal-bench-Hard": 0.06142133101820946
+    "Tau2-bench": 0.14308132231235504
    }
   },
   {
    "prompt": "Classify this support message as billing, bug, feature request, or account access: I was charged twice after upgrading yesterday.",
    "similarities": {
-    "AA-LCR": 0.16946670413017273,
     "AIME-2024": 0.051365070044994354,
     "AIME-2025": 0.015425964258611202,
     "Chatbot Arena Elo": 0.0,
@@ -171,15 +164,14 @@
     "LiveCodeBench": 0.006211318075656891,
     "MMLU-Pro": 0.08243401348590851,
     "MMMU": 0.09787634760141373,
+    "SWE-bench-Pro": 0.3595162332057953,
     "SciCode": 0.0,
-    "Tau2-bench": 0.40653613209724426,
-    "Terminal-bench-Hard": 0.03988749533891678
+    "Tau2-bench": 0.40653613209724426
    }
   },
   {
    "prompt": "Draft a calm two-paragraph response to a customer whose data import has been stuck for six hours. Acknowledge impact without inventing a resolution time.",
    "similarities": {
-    "AA-LCR": 0.2801039516925812,
     "AIME-2024": 0.022631118074059486,
     "AIME-2025": 0.04252631962299347,
     "Chatbot Arena Elo": 0.1038089245557785,
@@ -192,15 +184,14 @@
     "LiveCodeBench": 0.06246519461274147,
     "MMLU-Pro": 0.23883353173732758,
     "MMMU": 0.15906716883182526,
+    "SWE-bench-Pro": 0.16855140030384064,
     "SciCode": 0.0,
-    "Tau2-bench": 0.208568274974823,
-    "Terminal-bench-Hard": 0.14248134195804596
+    "Tau2-bench": 0.208568274974823
    }
   },
   {
    "prompt": "Assess whether this marketplace listing needs review and explain why: Guaranteed exam answers. Send your university login and we will complete the course for you.",
    "similarities": {
-    "AA-LCR": 0.22959406673908234,
     "AIME-2024": 0.13759607076644897,
     "AIME-2025": 0.1246655285358429,
     "Chatbot Arena Elo": 0.1477866768836975,
@@ -213,15 +204,14 @@
     "LiveCodeBench": 0.10260128229856491,
     "MMLU-Pro": 0.13639242947101593,
     "MMMU": 0.12648668885231018,
+    "SWE-bench-Pro": 0.060294196009635925,
     "SciCode": 0.017126593738794327,
-    "Tau2-bench": 0.1806015968322754,
-    "Terminal-bench-Hard": 0.0930398628115654
+    "Tau2-bench": 0.1806015968322754
    }
   },
   {
    "prompt": "Translate this support reply into natural Spanish while preserving a professional tone: We restored access to your account and invalidated all previous sessions.",
    "similarities": {
-    "AA-LCR": 0.0615357905626297,
     "AIME-2024": 0.03619806095957756,
     "AIME-2025": 0.02098187245428562,
     "Chatbot Arena Elo": 0.04009261354804039,
@@ -234,15 +224,14 @@
     "LiveCodeBench": 0.009267307817935944,
     "MMLU-Pro": 0.1310526430606842,
     "MMMU": 0.025922954082489014,
+    "SWE-bench-Pro": 0.2253948599100113,
     "SciCode": 0.0,
-    "Tau2-bench": 0.3077542781829834,
-    "Terminal-bench-Hard": 0.13882490992546082
+    "Tau2-bench": 0.3077542781829834
    }
   },
   {
    "prompt": "A freemium product has 40,000 active users, a 3% paid conversion rate, and $28 paid ARPU. If conversion rises to 3.6% with users unchanged, calculate the monthly revenue increase.",
    "similarities": {
-    "AA-LCR": 0.3632954955101013,
     "AIME-2024": 0.18250952661037445,
     "AIME-2025": 0.18092025816440582,
     "Chatbot Arena Elo": 0.02892642840743065,
@@ -255,15 +244,14 @@
     "LiveCodeBench": 0.20538657903671265,
     "MMLU-Pro": 0.18657734990119934,
     "MMMU": 0.25619107484817505,
+    "SWE-bench-Pro": 0.0,
     "SciCode": 0.1021689772605896,
-    "Tau2-bench": 0.06521784514188766,
-    "Terminal-bench-Hard": 0.00042770523577928543
+    "Tau2-bench": 0.06521784514188766
    }
   },
   {
    "prompt": "Write a concise internal policy for retaining user prompts and generated answers, covering default retention, deletion requests, access controls, and incident investigation.",
    "similarities": {
-    "AA-LCR": 0.17406105995178223,
     "AIME-2024": 0.07060184329748154,
     "AIME-2025": 0.010745932348072529,
     "Chatbot Arena Elo": 0.0,
@@ -276,15 +264,14 @@
     "LiveCodeBench": 0.0,
     "MMLU-Pro": 0.21509787440299988,
     "MMMU": 0.08704662322998047,
+    "SWE-bench-Pro": 0.14261585474014282,
     "SciCode": 0.0,
-    "Tau2-bench": 0.09901947528123856,
-    "Terminal-bench-Hard": 0.005429698154330254
+    "Tau2-bench": 0.09901947528123856
    }
   },
   {
    "prompt": "Rename the local variable tmp to normalizedEmail in this function and update its two references. Do not change behavior.",
    "similarities": {
-    "AA-LCR": 0.0935000404715538,
     "AIME-2024": 0.0,
     "AIME-2025": 0.0014377852203324437,
     "Chatbot Arena Elo": 0.014652319252490997,
@@ -297,15 +284,14 @@
     "LiveCodeBench": 0.027484383434057236,
     "MMLU-Pro": 0.06332507729530334,
     "MMMU": 0.07827968895435333,
+    "SWE-bench-Pro": 0.215112566947937,
     "SciCode": 0.09455570578575134,
-    "Tau2-bench": 0.19128842651844025,
-    "Terminal-bench-Hard": 0.06147625297307968
+    "Tau2-bench": 0.19128842651844025
    }
   },
   {
    "prompt": "A React effect opens a WebSocket whenever roomId changes, but connections accumulate. Show the likely bug and a correct cleanup implementation.",
    "similarities": {
-    "AA-LCR": 0.005587197840213776,
     "AIME-2024": 0.0,
     "AIME-2025": 0.011643674224615097,
     "Chatbot Arena Elo": 0.016490880399942398,
@@ -318,15 +304,14 @@
     "LiveCodeBench": 0.008455373346805573,
     "MMLU-Pro": 0.12423363327980042,
     "MMMU": 0.06125221773982048,
+    "SWE-bench-Pro": 0.13292062282562256,
     "SciCode": 0.0032750889658927917,
-    "Tau2-bench": 0.08386235684156418,
-    "Terminal-bench-Hard": 0.0
+    "Tau2-bench": 0.08386235684156418
    }
   },
   {
    "prompt": "Review a file-upload endpoint design for path traversal, content-type spoofing, decompression bombs, malware, and cross-tenant access. Propose layered mitigations.",
    "similarities": {
-    "AA-LCR": 0.002605898305773735,
     "AIME-2024": 0.0,
     "AIME-2025": 0.0,
     "Chatbot Arena Elo": 0.0,
@@ -339,15 +324,14 @@
     "LiveCodeBench": 0.0,
     "MMLU-Pro": 0.03170430660247803,
     "MMMU": 0.0,
+    "SWE-bench-Pro": 0.22508086264133453,
     "SciCode": 0.0,
-    "Tau2-bench": 0.0043161590583622456,
-    "Terminal-bench-Hard": 0.20780327916145325
+    "Tau2-bench": 0.0043161590583622456
    }
   },
   {
    "prompt": "Diagnose a rare double-charge caused by two workers processing the same payment job. Compare database locking, idempotency keys, and distributed locks.",
    "similarities": {
-    "AA-LCR": 0.1787758469581604,
     "AIME-2024": 0.05355323851108551,
     "AIME-2025": 0.03724898397922516,
     "Chatbot Arena Elo": 0.046691372990608215,
@@ -360,15 +344,14 @@
     "LiveCodeBench": 0.05941365659236908,
     "MMLU-Pro": 0.16361863911151886,
     "MMMU": 0.15562576055526733,
+    "SWE-bench-Pro": 0.16605819761753082,
     "SciCode": 0.0,
-    "Tau2-bench": 0.23216062784194946,
-    "Terminal-bench-Hard": 0.0
+    "Tau2-bench": 0.23216062784194946
    }
   },
   {
    "prompt": "Implement an LRU cache with O(1) get and put operations, explain the invariants, and include tests for eviction and updates.",
    "similarities": {
-    "AA-LCR": 0.0777822732925415,
     "AIME-2024": 0.044808998703956604,
     "AIME-2025": 0.07264077663421631,
     "Chatbot Arena Elo": 0.06410939991474152,
@@ -381,15 +364,14 @@
     "LiveCodeBench": 0.15746647119522095,
     "MMLU-Pro": 0.08198663592338562,
     "MMMU": 0.09986701607704163,
+    "SWE-bench-Pro": 0.1267261803150177,
     "SciCode": 0.26422643661499023,
-    "Tau2-bench": 0.0,
-    "Terminal-bench-Hard": 0.02206636220216751
+    "Tau2-bench": 0.0
    }
   },
   {
    "prompt": "Plan how a coding agent should investigate and fix a flaky integration test without weakening assertions. Include evidence gathering, reproduction, change boundaries, and verification.",
    "similarities": {
-    "AA-LCR": 0.0965173989534378,
     "AIME-2024": 0.0,
     "AIME-2025": 0.0,
     "Chatbot Arena Elo": 0.0679466500878334,
@@ -402,15 +384,14 @@
     "LiveCodeBench": 0.0,
     "MMLU-Pro": 0.12240806967020035,
     "MMMU": 0.04808645695447922,
+    "SWE-bench-Pro": 0.21575826406478882,
     "SciCode": 0.023763122037053108,
-    "Tau2-bench": 0.038608111441135406,
-    "Terminal-bench-Hard": 0.1518985629081726
+    "Tau2-bench": 0.038608111441135406
    }
   },
   {
    "prompt": "Write five concise headline options for a neighborhood bakery introducing online preorders. Avoid hype and mention same-day pickup.",
    "similarities": {
-    "AA-LCR": 0.2471035122871399,
     "AIME-2024": 0.04008106887340546,
     "AIME-2025": 0.13745911419391632,
     "Chatbot Arena Elo": 0.1449054777622223,
@@ -423,15 +404,14 @@
     "LiveCodeBench": 0.09101125597953796,
     "MMLU-Pro": 0.09589095413684845,
     "MMMU": 0.07959777861833572,
+    "SWE-bench-Pro": 0.043172530829906464,
     "SciCode": 0.0,
-    "Tau2-bench": 0.1558045595884323,
-    "Terminal-bench-Hard": 0.0
+    "Tau2-bench": 0.1558045595884323
    }
   },
   {
    "prompt": "Analyze campaign results: channel A spent $4,000 for 120 leads and 18 sales; channel B spent $2,500 for 70 leads and 14 sales. Compare CPL, conversion, and cost per sale.",
    "similarities": {
-    "AA-LCR": 0.4026632308959961,
     "AIME-2024": 0.17238903045654297,
     "AIME-2025": 0.15125638246536255,
     "Chatbot Arena Elo": 0.0404428169131279,
@@ -444,15 +424,14 @@
     "LiveCodeBench": 0.16684064269065857,
     "MMLU-Pro": 0.21902646124362946,
     "MMMU": 0.3088328242301941,
+    "SWE-bench-Pro": 0.0,
     "SciCode": 0.0,
-    "Tau2-bench": 0.02432076819241047,
-    "Terminal-bench-Hard": 0.0
+    "Tau2-bench": 0.02432076819241047
    }
   },
   {
    "prompt": "Turn a 45-minute webinar about reducing warehouse picking errors into a blog outline, three short social posts, and an email teaser.",
    "similarities": {
-    "AA-LCR": 0.2727433443069458,
     "AIME-2024": 0.12200907617807388,
     "AIME-2025": 0.09912029653787613,
     "Chatbot Arena Elo": 0.14311642944812775,
@@ -465,15 +444,14 @@
     "LiveCodeBench": 0.1459190547466278,
     "MMLU-Pro": 0.11180881410837173,
     "MMMU": 0.1658373475074768,
+    "SWE-bench-Pro": 0.06358405947685242,
     "SciCode": 0.002708055078983307,
-    "Tau2-bench": 0.15415500104427338,
-    "Terminal-bench-Hard": 0.10203520953655243
+    "Tau2-bench": 0.15415500104427338
    }
   },
   {
    "prompt": "Condense these interview findings into four themes: buyers like fast setup; administrators fear migration; users want mobile access; procurement requires SSO and audit logs.",
    "similarities": {
-    "AA-LCR": 0.2594883441925049,
     "AIME-2024": 0.01751796528697014,
     "AIME-2025": 0.00537767494097352,
     "Chatbot Arena Elo": 0.11288419365882874,
@@ -486,15 +464,14 @@
     "LiveCodeBench": 0.026138052344322205,
     "MMLU-Pro": 0.20890659093856812,
     "MMMU": 0.1242230236530304,
+    "SWE-bench-Pro": 0.06143790856003761,
     "SciCode": 0.0,
-    "Tau2-bench": 0.03541979566216469,
-    "Terminal-bench-Hard": 0.0
+    "Tau2-bench": 0.03541979566216469
    }
   },
   {
    "prompt": "Identify ambiguous language and negotiation questions in this clause: Vendor may use Customer Data as necessary to improve its services and for related business purposes.",
    "similarities": {
-    "AA-LCR": 0.2594257891178131,
     "AIME-2024": 0.1505933403968811,
     "AIME-2025": 0.11673260480165482,
     "Chatbot Arena Elo": 0.10781262814998627,
@@ -507,15 +484,14 @@
     "LiveCodeBench": 0.11894387751817703,
     "MMLU-Pro": 0.23009975254535675,
     "MMMU": 0.2187531739473343,
+    "SWE-bench-Pro": 0.04423181712627411,
     "SciCode": 0.0,
-    "Tau2-bench": 0.19624316692352295,
-    "Terminal-bench-Hard": 0.0
+    "Tau2-bench": 0.19624316692352295
    }
   },
   {
    "prompt": "Generate three distinct campaign concepts for a repairable laptop brand. For each, provide the insight, central idea, sample execution, and major risk.",
    "similarities": {
-    "AA-LCR": 0.16926559805870056,
     "AIME-2024": 0.02977394498884678,
     "AIME-2025": 0.07861911505460739,
     "Chatbot Arena Elo": 0.07524228096008301,
@@ -528,15 +504,14 @@
     "LiveCodeBench": 0.08392834663391113,
     "MMLU-Pro": 0.10500676929950714,
     "MMMU": 0.13412651419639587,
+    "SWE-bench-Pro": 0.0,
     "SciCode": 0.0,
-    "Tau2-bench": 0.12592773139476776,
-    "Terminal-bench-Hard": 0.016836456954479218
+    "Tau2-bench": 0.12592773139476776
    }
   },
   {
    "prompt": "A couple with two children, ages 6 and 10 years old, decided to go to an amusement park. The regular ticket costs $109, but children below 12 years old have a $5 discount. If they gave the cashier $500, how much change will they receive?",
    "similarities": {
-    "AA-LCR": 0.17010296881198883,
     "AIME-2024": 0.24238064885139465,
     "AIME-2025": 0.27206793427467346,
     "Chatbot Arena Elo": 0.10701969265937805,
@@ -549,15 +524,14 @@
     "LiveCodeBench": 0.20537278056144714,
     "MMLU-Pro": 0.12109705060720444,
     "MMMU": 0.26095545291900635,
+    "SWE-bench-Pro": 0.0052488152869045734,
     "SciCode": 0.0,
-    "Tau2-bench": 0.22476649284362793,
-    "Terminal-bench-Hard": 0.0
+    "Tau2-bench": 0.22476649284362793
    }
   },
   {
    "prompt": "What is the most important factor for virus classification?\nOptions: A. The geometry of the virus  B. How many proteins the virus has  C. The disease a virus causes  D. Chemistry of the DNA and RNA",
    "similarities": {
-    "AA-LCR": 0.13215014338493347,
     "AIME-2024": 0.13827967643737793,
     "AIME-2025": 0.14300550520420074,
     "Chatbot Arena Elo": 0.08292730897665024,
@@ -570,15 +544,14 @@
     "LiveCodeBench": 0.18973180651664734,
     "MMLU-Pro": 0.18751399219036102,
     "MMMU": 0.2176327407360077,
+    "SWE-bench-Pro": 0.0,
     "SciCode": 0.08975300192832947,
-    "Tau2-bench": 0.0,
-    "Terminal-bench-Hard": 0.0
+    "Tau2-bench": 0.0
    }
   },
   {
    "prompt": "Acordul a fost semnat la 14 iulie 2010 şi acoperă aspecte legate de siguranţă, impozitarea carburantului pentru aviaţie, normele de concurenţă etc. Translate to English English:",
    "similarities": {
-    "AA-LCR": 0.15613825619220734,
     "AIME-2024": 0.05189387500286102,
     "AIME-2025": 0.052791010588407516,
     "Chatbot Arena Elo": 0.13410210609436035,
@@ -591,15 +564,14 @@
     "LiveCodeBench": 0.10820358991622925,
     "MMLU-Pro": 0.12547050416469574,
     "MMMU": 0.06734628230333328,
+    "SWE-bench-Pro": 0.0,
     "SciCode": 0.0,
-    "Tau2-bench": 0.05313104763627052,
-    "Terminal-bench-Hard": 0.04971358925104141
+    "Tau2-bench": 0.05313104763627052
    }
   },
   {
    "prompt": "Let 12-9+c=12. What value of c makes the equation true?\nOptions: A. 0  B. 3  C. 9  D. 12",
    "similarities": {
-    "AA-LCR": 0.19604942202568054,
     "AIME-2024": 0.3963077664375305,
     "AIME-2025": 0.48079049587249756,
     "Chatbot Arena Elo": 0.17254890501499176,
@@ -612,15 +584,14 @@
     "LiveCodeBench": 0.2561988830566406,
     "MMLU-Pro": 0.20211122930049896,
     "MMMU": 0.27435359358787537,
+    "SWE-bench-Pro": 0.0,
     "SciCode": 0.03176610544323921,
-    "Tau2-bench": 0.06931361556053162,
-    "Terminal-bench-Hard": 0.0
+    "Tau2-bench": 0.06931361556053162
    }
   },
   {
    "prompt": "He was receiving workman's compensation, he had tripped over a metal rod while building where?\nOptions: factory, construction site, engine, insides of skyscraper's walls, shops",
    "similarities": {
-    "AA-LCR": 0.17650477588176727,
     "AIME-2024": 0.028754595667123795,
     "AIME-2025": 0.06470872461795807,
     "Chatbot Arena Elo": 0.020450321957468987,
@@ -633,15 +604,14 @@
     "LiveCodeBench": 0.1362985521554947,
     "MMLU-Pro": 0.09499843418598175,
     "MMMU": 0.1972438097000122,
+    "SWE-bench-Pro": 0.042697370052337646,
     "SciCode": 0.0,
-    "Tau2-bench": 0.15964138507843018,
-    "Terminal-bench-Hard": 0.047537870705127716
+    "Tau2-bench": 0.15964138507843018
    }
   },
   {
    "prompt": "Which of the following states of matter is characterized by a closely packed arrangement of particles, resulting in a stable, definite shape and definite volume?\nOptions: A. Solid  B. Liquid  C. Gas  D. Plasma",
    "similarities": {
-    "AA-LCR": 0.10321326553821564,
     "AIME-2024": 0.18735745549201965,
     "AIME-2025": 0.2182847559452057,
     "Chatbot Arena Elo": 0.0,
@@ -654,15 +624,14 @@
     "LiveCodeBench": 0.1569511741399765,
     "MMLU-Pro": 0.23726487159729004,
     "MMMU": 0.27600157260894775,
+    "SWE-bench-Pro": 0.0,
     "SciCode": 0.17768599092960358,
-    "Tau2-bench": 0.0,
-    "Terminal-bench-Hard": 0.008314869366586208
+    "Tau2-bench": 0.0
    }
   },
   {
    "prompt": "John was a terrible writer. To practice, his teacher suggest that he consider people he knows and do what? Options: - write novels - advertising firm - write letter - write notes - write poems Let's think now! Step-by-step reasoning:",
    "similarities": {
-    "AA-LCR": 0.119844451546669,
     "AIME-2024": 0.07058309763669968,
     "AIME-2025": 0.11492887139320374,
     "Chatbot Arena Elo": 0.23099732398986816,
@@ -675,15 +644,14 @@
     "LiveCodeBench": 0.08697715401649475,
     "MMLU-Pro": 0.15060409903526306,
     "MMMU": 0.24717053771018982,
+    "SWE-bench-Pro": 0.007844645529985428,
     "SciCode": 0.0,
-    "Tau2-bench": 0.0,
-    "Terminal-bench-Hard": 0.14751681685447693
+    "Tau2-bench": 0.0
    }
   },
   {
    "prompt": "Samantha’s last name has three fewer letters than Bobbie’s last name. If Bobbie took two letters off her last name, she would have a last name twice the length of Jamie’s. Jamie’s full name is Jamie Grey. How many letters are in Samantha’s last name?",
    "similarities": {
-    "AA-LCR": 0.20282214879989624,
     "AIME-2024": 0.30903860926628113,
     "AIME-2025": 0.3302192986011505,
     "Chatbot Arena Elo": 0.16788262128829956,
@@ -696,9 +664,9 @@
     "LiveCodeBench": 0.3556743860244751,
     "MMLU-Pro": 0.06209852173924446,
     "MMMU": 0.16875730454921722,
+    "SWE-bench-Pro": 0.0,
     "SciCode": 0.0,
-    "Tau2-bench": 0.12463618069887161,
-    "Terminal-bench-Hard": 0.015598053112626076
+    "Tau2-bench": 0.12463618069887161
    }
   }
  ]

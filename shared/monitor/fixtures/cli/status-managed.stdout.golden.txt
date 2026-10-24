@@ -12,3 +12,4 @@ totals: 3 calls, 0 errors, est cost 0.0123, at winner 0.0019, savings 0.0103
 realised: 2 swapped calls, saved 0.0207
 source: remote etag e-42 fetched 2026-10-12T08:05:00.000Z
 upload: ok 2 events at 2026-10-12T08:25:00.000Z
+catalog: starter

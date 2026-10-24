@@ -9,7 +9,7 @@ Imports — Node: `CentroidGenerator`, `CentroidLoader` from the package root. P
 1. In-memory (already loaded this process).
 2. User cache file: `<data-dir>/centroids/centroids_<model with "/" → "__">__<kind>-<version>.json` (default `~/.tryaii/...`), one file per catalog (`<kind>` is `starter` or `full`), so switching between the starter and the full catalog never overwrites the other's cache.
 3. The catalog's own centroids for the provider's model — every catalog (the starter catalog in the package, the full catalog in its download) ships them pre-computed for `all-MiniLM-L6-v2` (`centroids.json`) and, from starter `2026.10.20.2`, for the Python default `all-MiniLM-L6-v2-onnx-int8` (`centroids.all-MiniLM-L6-v2-onnx-int8.json`), so first run needs no embedding work. A model's vectors are never scored with another model's centroids.
-4. Freshly generated from the catalog's training queries (232 queries across 16 benchmarks in the starter catalog), then saved to the user cache.
+4. Freshly generated from the catalog's training queries (217 queries across 15 benchmarks in the starter catalog), then saved to the user cache.
 
 A cached/bundled file is rejected (and regenerated) when its embedding-model name, dimension, or **benchmark-set fingerprint** (sorted names joined by `|`) doesn't match — which is why [custom benchmark](README.md#adding-a-custom-benchmark) centroids don't survive restarts.
 

@@ -164,7 +164,7 @@ describe('happy path', () => {
     expect(body.schema).toBe('tryaii.monitor.upload/1');
     expect(body.sdk).toEqual({ lang: 'node', version: '0.7.0' });
     expect(body.notice_version).toBe(NOTICE_VERSION);
-    expect(NOTICE_VERSION).toBe('2026-10-18');
+    expect(NOTICE_VERSION).toBe('2026-10-24');
     expect(body.events.map((e: Record<string, unknown>) => e.event_id)).toEqual([
       '00000000-0000-4000-8000-000000000001',
       '00000000-0000-4000-8000-000000000002',

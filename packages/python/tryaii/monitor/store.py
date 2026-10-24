@@ -278,6 +278,17 @@ def config_mtime(directory) -> Optional[float]:
 
 # --- remote.json (SPEC.md §3.3) ------------------------------------------------
 
+#: Bumped by every :func:`write_remote` in this process, so the wrapper's
+#: cached copy is re-read on the very next call after the long poll wrote a
+#: new answer (no 5 s re-check delay, no reliance on mtime resolution).
+_remote_generation = 0
+
+
+def remote_generation() -> int:
+    """How many times this process wrote a ``remote.json`` (any app)."""
+    return _remote_generation
+
+
 def read_remote(directory) -> Optional[dict]:
     """The cached remote config, or None when the file is missing, not
     JSON, or not a ``tryaii.monitor.remote/1`` object ("no remote config":
@@ -301,6 +312,8 @@ def write_remote(directory, remote: dict, fetched_at: str) -> Path:
     doc["fetched_at"] = fetched_at
     path = Path(directory) / REMOTE_FILE
     write_atomic(path, _dump_doc(doc))
+    global _remote_generation
+    _remote_generation += 1
     return path
 
 

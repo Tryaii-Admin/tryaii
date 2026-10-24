@@ -93,6 +93,11 @@ export const DEFAULT_ROUTE_TIMEOUT_MS = 1500;
 export const SHADOW_TIMEOUT_MS = 2000;
 export const STATE_RECHECK_MS = 5000;
 export const DRAIN_TIMEOUT_MS = 2000;
+/**
+ * The first call of a process waits at most this long, once, for the first
+ * remote-config answer (SPEC.md §3.3, TS-296).
+ */
+export const REMOTE_FIRST_WAIT_MS = 500;
 /** How long `atExit()` gives the pending calls to record `unavailable` once routing is over. */
 const FLUSH_TIMEOUT_MS = 500;
 
@@ -153,6 +158,14 @@ interface AppService {
   register(directory: string): void;
 }
 
+/** The remote poller as the transport sees it (see `RemotePoller`). */
+interface RemoteService extends AppService {
+  /** True once the first poll returned (any outcome). */
+  answered?: boolean;
+  /** Resolves when the first poll returned; never rejects. */
+  firstAnswer?: Promise<void>;
+}
+
 const BROKEN = Symbol('broken policy');
 
 export function inPathTimeoutMs(): number {
@@ -200,8 +213,11 @@ export class Transport {
   private policyCache: { bundle: CatalogBundle | null; allowed: string[] | null } | null = null;
   /** The uploader / remote poller (null until started, or when off). */
   uploader: (AppService & { drain(timeoutMs?: number): Promise<void> }) | null = null;
-  remote: AppService | null = null;
+  remote: RemoteService | null = null;
   private readonly appDirs: string[] = [];
+  /** True once the first remote answer came or the first-call wait ran out. */
+  private remoteSettled = false;
+  private remoteWait: Promise<void> | null = null;
 
   constructor(config?: TryaiiDreConfig | null, opts: TransportOptions = {}) {
     this.config = config ?? createDefaultConfig({ dataDir: dataDirFromEnv() });
@@ -284,6 +300,39 @@ export class Transport {
     for (const service of [this.uploader, this.remote]) {
       if (service !== null) service.register(directory);
     }
+  }
+
+  /**
+   * A promise the first call(s) of the process wait on before deciding the
+   * mode: resolves on the poller's first answer (200/304/error/401) or after
+   * `REMOTE_FIRST_WAIT_MS`, whichever comes first; concurrent first calls
+   * share it. Null when there is no poller or once settled, so later calls
+   * never wait (a flag check). The bound timer is ref'd on purpose: a script
+   * awaiting its first call must not exit while the poll socket (unref'd) is
+   * the only other handle; it lives at most 500 ms.
+   */
+  remoteGate(): Promise<void> | null {
+    if (this.remoteSettled) return null;
+    const remote = this.remote;
+    if (remote === null || remote.firstAnswer === undefined) return null;
+    if (remote.answered) {
+      this.remoteSettled = true;
+      return null;
+    }
+    if (this.remoteWait === null) {
+      const first = remote.firstAnswer;
+      this.remoteWait = new Promise<void>((resolve) => {
+        const done = (): void => {
+          clearTimeout(timer);
+          resolve();
+        };
+        const timer = setTimeout(done, REMOTE_FIRST_WAIT_MS);
+        first.then(done, done);
+      }).then(() => {
+        this.remoteSettled = true;
+      });
+    }
+    return this.remoteWait;
   }
 
   /**

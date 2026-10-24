@@ -17,6 +17,7 @@ import { aggregate, windowSeconds } from './monitor/status.js';
 import * as store from './monitor/store.js';
 import { MODES } from './monitor/winner.js';
 import { readState as readModelState } from './embeddings/modelStore.js';
+import { catalogInUse } from './catalog/client.js';
 
 export const VERBS = ['status', 'set', 'apps', 'events', 'upload'] as const;
 const WINDOWS = ['24h', '7d', '30d'];
@@ -341,6 +342,16 @@ function verbStatus(argv: string[], env: Env, write: Write): void {
   write(docs.map((doc) => renderStatus(doc, offReason)).join('\n'));
   const classification = classificationLine(dataDir);
   if (classification !== null) write(`${classification}\n`);
+  write(`${catalogLine()}\n`);
+}
+
+/**
+ * `catalog: full (login)` / `full (app key)` / `starter` (SPEC.md §5.2,
+ * TS-294): the catalog this machine routes on and which credential fetched
+ * it. Machine-wide, so printed once after every app block.
+ */
+export function catalogLine(): string {
+  return `catalog: ${catalogInUse()}`;
 }
 
 function verbSet(argv: string[], env: Env, write: Write): void {

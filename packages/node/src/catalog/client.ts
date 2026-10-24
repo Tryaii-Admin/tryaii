@@ -8,8 +8,9 @@
  * Cache layout under the data dir (TRYAII_DRE_DATA_DIR or ~/.tryaii):
  *
  *   catalog/full/<version>/   the six bundle files exactly as received
- *   catalog/state.json        {"version": "<live version or null>", "checked_at": "<ISO Z>"}
- *   catalog/nudge.json        {"last_shown": "<YYYY-MM-DD local date>"}
+ *   catalog/state.json        {"version": "<live version or null>", "checked_at": "<ISO Z>",
+ *                              "auth": "app_key" only after an app key's check}
+ *   catalog/nudge.json       {"last_shown": "<YYYY-MM-DD local date>"}
  *
  * Every write goes through the credentials file's atomic helper
  * (`writeFileAtomic`); only the newest version directory is kept.
@@ -20,6 +21,12 @@
  * catalog is accepted only with a valid signature from a trusted key
  * (contract section 6, `signing.ts`), both when it is downloaded (before the
  * cache is written) and when the cache is loaded.
+ *
+ * Credentials (contract section 5, "Which catalog", v1.4 / TS-294): a stored
+ * `tryaii login` session wins; without one, an app key in TRYAII_API_KEY
+ * fetches the same signed full catalog (a server needs no personal login);
+ * without either, the starter catalog. `state.auth` records which credential
+ * made the last check, so switching credentials re-checks at once.
  *
  * The library never prints: `selectCatalog` returns a `CatalogSelection`
  * whose `notice` tells the CLI what to print (`noticeMessage`, `maybeNudge`).
@@ -43,6 +50,7 @@ import {
   writeFileAtomic,
 } from '../auth/store.js';
 import { AuthProtocolError, TIMEOUT_MS } from '../auth/transport.js';
+import { apiKey as envApiKey, apiUrl as monitorApiUrl, isAppKey } from '../monitor/api.js';
 import {
   BUNDLE_DATA_FILES,
   BundleSchemaError,
@@ -88,11 +96,22 @@ export const MSG_SCHEMA_TOO_NEW =
   'The full catalog needs a newer tryaii version; using the starter catalog.';
 export const MSG_LOGIN_DOWNLOAD_FAILED =
   'Could not download the full catalog now; it will be fetched on next use.';
+export const MSG_KEY_REJECTED =
+  'TRYAII_API_KEY was not accepted for the full catalog; using the starter catalog.';
+
+/** Which credential fetched the full catalog (`state.auth`, `CatalogSelection.source`). */
+export type CatalogAuth = 'login' | 'app_key';
 
 /** Why a selection landed on the starter catalog (null = nothing to say). */
-export type CatalogNotice = 'not_logged_in' | 'no_entitlement' | 'download_failed' | 'schema_too_new';
+export type CatalogNotice =
+  | 'not_logged_in'
+  | 'no_entitlement'
+  | 'download_failed'
+  | 'schema_too_new'
+  | 'key_rejected';
 
 const NOTICE_MESSAGES: Record<string, string> = {
+  key_rejected: MSG_KEY_REJECTED,
   no_entitlement: MSG_NO_ENTITLEMENT,
   download_failed: MSG_DOWNLOAD_FAILED,
   schema_too_new: MSG_SCHEMA_TOO_NEW,
@@ -138,6 +157,8 @@ export interface CatalogSelection {
    * or the starter). The library memo retries these soon. Absent otherwise.
    */
   failed?: boolean;
+  /** The credential behind a full catalog (absent for the starter catalog). */
+  source?: CatalogAuth;
 }
 
 /** Seams for tests: fetch, clock, environment (all optional). */
@@ -212,6 +233,15 @@ export function nudgePath(env: NodeJS.ProcessEnv = process.env): string {
 export interface CatalogState {
   version?: string | null;
   checked_at?: string;
+  auth?: string;
+}
+
+/**
+ * The credential of the last check; a state written before contract v1.4
+ * (no `auth`) was written by a login session.
+ */
+export function stateAuth(state: CatalogState | null): CatalogAuth {
+  return state?.auth === 'app_key' ? 'app_key' : 'login';
 }
 
 export function readState(env: NodeJS.ProcessEnv = process.env): CatalogState | null {
@@ -230,10 +260,13 @@ export function writeState(
   version: string | null,
   checkedAtMs: number,
   env: NodeJS.ProcessEnv = process.env,
+  auth: CatalogAuth = 'login',
 ): void {
   const text =
     `{"version": ${JSON.stringify(version)}, ` +
-    `"checked_at": ${JSON.stringify(isoUtc(checkedAtMs))}}`;
+    `"checked_at": ${JSON.stringify(isoUtc(checkedAtMs))}` +
+    // Only an app key's check says so: a login's state keeps the pre-v1.4 bytes.
+    (auth === 'app_key' ? `, "auth": "app_key"}` : '}');
   writeFileAtomic(statePath(env), Buffer.from(text, 'utf-8'), '.state-');
 }
 
@@ -243,8 +276,10 @@ function parseIsoZ(value: unknown): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
-function checkDue(state: CatalogState | null, nowMs: number): boolean {
+function checkDue(state: CatalogState | null, nowMs: number, auth: CatalogAuth = 'login'): boolean {
   if (!state) return true;
+  // Another credential made the last check: ask again with this one.
+  if (stateAuth(state) !== auth) return true;
   const checked = parseIsoZ(state.checked_at);
   if (checked === null) return true;
   const age = nowMs - checked;
@@ -471,7 +506,14 @@ function jsonObject(text: string): Record<string, unknown> | null {
 }
 
 // ------------------------------------------------------------------ the check
-type Outcome = 'ok' | 'not_modified' | 'session_ended' | 'forbidden' | 'failed' | 'schema_too_new';
+type Outcome =
+  | 'ok'
+  | 'not_modified'
+  | 'session_ended'
+  | 'forbidden'
+  | 'failed'
+  | 'schema_too_new'
+  | 'key_rejected';
 
 /** Session ended: delete the credentials file and the full cache. */
 export function endSession(env: NodeJS.ProcessEnv = process.env): void {
@@ -483,9 +525,14 @@ export function endSession(env: NodeJS.ProcessEnv = process.env): void {
   clearCache(env);
 }
 
-function tryWriteState(version: string | null, nowMs: number, env: NodeJS.ProcessEnv): void {
+function tryWriteState(
+  version: string | null,
+  nowMs: number,
+  env: NodeJS.ProcessEnv,
+  auth: CatalogAuth = 'login',
+): void {
   try {
-    writeState(version, nowMs, env);
+    writeState(version, nowMs, env, auth);
   } catch {
     // the next use checks again
   }
@@ -520,19 +567,59 @@ async function runCheck(
   } catch {
     return { outcome: 'failed', bundle: null };
   }
-  const now = nowOf(deps);
+  if (status === 401) return { outcome: 'session_ended', bundle: null };
+  return handleLive(status, text, cached, 'login', deps);
+}
 
+/**
+ * GET /v1/catalog/live with the app key (TRYAII_API_KEY) against
+ * TRYAII_API_URL (the monitor's API base). A 401 (invalid, revoked or expired
+ * key, deleted app) is `key_rejected`: the full cache and state.json are
+ * dropped, nothing throws, no session is touched.
+ */
+async function runKeyCheck(
+  key: string,
+  cached: CatalogBundle | null,
+  deps: CatalogDeps,
+): Promise<{ outcome: Outcome; bundle: CatalogBundle | null }> {
+  const env = envOf(deps);
+  let status: number;
+  let text: string;
+  try {
+    ({ status, text } = await fetchLive(monitorApiUrl(env), key, cached?.version ?? null, authDeps(deps)));
+  } catch {
+    return { outcome: 'failed', bundle: null };
+  }
+  if (status === 401) {
+    clearCache(env);
+    return { outcome: 'key_rejected', bundle: null };
+  }
+  return handleLive(status, text, cached, 'app_key', deps);
+}
+
+/**
+ * Every answer of /v1/catalog/live except 401 (whose meaning depends on the
+ * credential): 304, 403, 200 and the failures.
+ */
+function handleLive(
+  status: number,
+  text: string,
+  cached: CatalogBundle | null,
+  auth: CatalogAuth,
+  deps: CatalogDeps,
+): { outcome: Outcome; bundle: CatalogBundle | null } {
+  const env = envOf(deps);
+  const now = nowOf(deps);
   if (status === 304) {
     if (cached === null) return { outcome: 'failed', bundle: null };
-    tryWriteState(cached.version, now, env);
+    tryWriteState(cached.version, now, env, auth);
     return { outcome: 'not_modified', bundle: cached };
   }
-  if (status === 401) return { outcome: 'session_ended', bundle: null };
   if (status === 403) {
     if (jsonObject(text)?.error === 'insufficient_entitlement') {
       // No access: remember it for 24 h and drop any old full cache.
       rmSync(fullDir(env), { recursive: true, force: true });
-      tryWriteState(null, now, env);
+      tryWriteState(null, now, env, auth);
       return { outcome: 'forbidden', bundle: null };
     }
     return { outcome: 'failed', bundle: null };
@@ -577,8 +664,19 @@ async function runCheck(
     // Use it for this run; the next use downloads again.
     return { outcome: 'ok', bundle };
   }
-  tryWriteState(bundle.version, now, env);
+  tryWriteState(bundle.version, now, env, auth);
   return { outcome: 'ok', bundle };
+}
+
+/**
+ * The credential for a selection without a login session: the app key from
+ * TRYAII_API_KEY, `'malformed'` when it is set but not even key-shaped (it is
+ * never sent anywhere), or null when unset.
+ */
+function envKey(env: NodeJS.ProcessEnv): string | 'malformed' | null {
+  const key = envApiKey(env);
+  if (key === null) return null;
+  return isAppKey(key) ? key : 'malformed';
 }
 
 /**
@@ -593,14 +691,22 @@ export function selectCatalogOffline(
   assertCatalogMode(catalog);
   if (catalog === 'starter') return { bundle: starterBundle(), notice: null, checked: false };
   const env = envOf(deps);
+  let auth: CatalogAuth = 'login';
   if (loadCredentials(env) === null) {
-    if (catalog === 'full') throw new LoginRequiredError();
-    return { bundle: starterBundle(), notice: 'not_logged_in', checked: false };
+    const key = envKey(env);
+    if (key === null || key === 'malformed') {
+      if (catalog === 'full') throw new LoginRequiredError();
+      const notice = key === null ? 'not_logged_in' : 'key_rejected';
+      return { bundle: starterBundle(), notice, checked: false };
+    }
+    auth = 'app_key';
   }
   const state = readState(env);
-  const cached = cachedFull(state, env);
-  if (cached) return { bundle: cached, notice: null, checked: false };
-  if (state && state.version === null && !checkDue(state, nowOf(deps))) {
+  // An app key serves offline only a cache that an app key fetched; the
+  // server confirms anything else first (selectCatalog).
+  const cached = auth === 'login' || stateAuth(state) === 'app_key' ? cachedFull(state, env) : null;
+  if (cached) return { bundle: cached, notice: null, checked: false, source: auth };
+  if (state && state.version === null && !checkDue(state, nowOf(deps), auth)) {
     return { bundle: starterBundle(), notice: 'no_entitlement', checked: false };
   }
   return { bundle: starterBundle(), notice: null, checked: false };
@@ -610,13 +716,16 @@ export function selectCatalogOffline(
  * Pick the catalog per contract section 5 ("Which catalog").
  *
  *  - 'starter': the packaged starter catalog; no network, no nudge.
- *  - 'auto': starter when not logged in (notice not_logged_in); otherwise the
- *    full catalog, checked against the server at most once per 24 h
- *    (`forceCheck` checks now).
- *  - 'full': like auto, but throws LoginRequiredError when not logged in.
+ *  - 'auto': the full catalog, checked against the server at most once per
+ *    24 h (`forceCheck` checks now), with the first credential found: a
+ *    `tryaii login` session, else TRYAII_API_KEY. Starter without either
+ *    (notice not_logged_in) or when the key is rejected (notice key_rejected).
+ *  - 'full': like auto, but throws LoginRequiredError when there is no
+ *    session and no accepted app key.
  *
  * Throws SessionEndedError (after deleting the credentials file and the full
- * cache) when the session is gone. Never prints.
+ * cache) when the session is gone. A rejected app key never throws in
+ * 'auto'. Never prints.
  */
 export async function selectCatalog(
   catalog: CatalogMode = 'auto',
@@ -626,16 +735,23 @@ export async function selectCatalog(
   assertCatalogMode(catalog);
   if (catalog === 'starter') return { bundle: starterBundle(), notice: null, checked: false };
   const env = envOf(deps);
+  let key: string | null = null;
   if (loadCredentials(env) === null) {
-    if (catalog === 'full') throw new LoginRequiredError();
-    return { bundle: starterBundle(), notice: 'not_logged_in', checked: false };
+    const found = envKey(env);
+    if (found === null || found === 'malformed') {
+      if (catalog === 'full') throw new LoginRequiredError();
+      const notice = found === null ? 'not_logged_in' : 'key_rejected';
+      return { bundle: starterBundle(), notice, checked: false };
+    }
+    key = found;
   }
+  const auth: CatalogAuth = key === null ? 'login' : 'app_key';
 
   const state = readState(env);
   const cached = cachedFull(state, env);
-  const due = Boolean(opts.forceCheck) || checkDue(state, nowOf(deps));
+  const due = Boolean(opts.forceCheck) || checkDue(state, nowOf(deps), auth);
   if (!due && state) {
-    if (cached) return { bundle: cached, notice: null, checked: false };
+    if (cached) return { bundle: cached, notice: null, checked: false, source: auth };
     if (state.version === null || state.version === undefined) {
       // Checked within 24 h and the account had no access then.
       return { bundle: starterBundle(), notice: 'no_entitlement', checked: false };
@@ -643,24 +759,48 @@ export async function selectCatalog(
     // state names a version but its directory is gone: check now.
   }
 
-  const { outcome, bundle } = await runCheck(cached, deps);
+  const { outcome, bundle } =
+    key === null ? await runCheck(cached, deps) : await runKeyCheck(key, cached, deps);
   if ((outcome === 'ok' || outcome === 'not_modified') && bundle) {
-    return { bundle, notice: null, checked: true };
+    return { bundle, notice: null, checked: true, source: auth };
   }
   if (outcome === 'session_ended') {
     endSession(env);
     throw new SessionEndedError();
   }
+  if (outcome === 'key_rejected') {
+    if (catalog === 'full') throw new LoginRequiredError();
+    return { bundle: starterBundle(), notice: 'key_rejected', checked: true };
+  }
   if (outcome === 'forbidden') {
     return { bundle: starterBundle(), notice: 'no_entitlement', checked: true };
   }
-  if (cached) return { bundle: cached, notice: null, checked: true, failed: true };
+  if (cached) return { bundle: cached, notice: null, checked: true, failed: true, source: auth };
   return {
     bundle: starterBundle(),
     notice: outcome === 'schema_too_new' ? 'schema_too_new' : 'download_failed',
     checked: true,
     failed: true,
   };
+}
+
+/** `tryaii monitor status` labels (shared/monitor/SPEC.md §5.2). */
+export const CATALOG_FULL_LOGIN = 'full (login)';
+export const CATALOG_FULL_APP_KEY = 'full (app key)';
+export const CATALOG_STARTER = 'starter';
+
+/**
+ * Which catalog this machine routes on, from local files only (no network,
+ * no environment): `full (login)` / `full (app key)` when state.json names a
+ * cached, verified full release (`auth` says which credential fetched it),
+ * else `starter`.
+ */
+export function catalogInUse(env: NodeJS.ProcessEnv = process.env): string {
+  const state = readState(env);
+  if (!state || typeof state.version !== 'string') return CATALOG_STARTER;
+  const cached = cachedFull(state, env);
+  if (!cached || cached.version !== state.version) return CATALOG_STARTER;
+  return stateAuth(state) === 'app_key' ? CATALOG_FULL_APP_KEY : CATALOG_FULL_LOGIN;
 }
 
 /**
@@ -737,8 +877,9 @@ export function maybeNudge(
 // download_failed, schema_too_new, or a stale cached catalog kept after a
 // failure) is kept for FAILURE_RETRY_MS only, so a long-running process that
 // started during a network blip retries on a later use instead of staying
-// put for a day. Not-logged-in and no-access (403) selections are final
-// answers: 24 h.
+// put for a day. Not-logged-in, no-access (403) and key-rejected selections
+// are final answers: 24 h. The memo key includes the app key's id (never its
+// secret), so a process that changes TRYAII_API_KEY selects again.
 const selections = new Map<string, { at: number; selection: CatalogSelection }>();
 
 function memoFresh(hit: { at: number; selection: CatalogSelection } | undefined): boolean {
@@ -760,7 +901,8 @@ export function resetCatalogCache(): void {
 }
 
 function memoKey(catalog: CatalogMode, env: NodeJS.ProcessEnv): string {
-  return `${catalog}\u0000${dataDir(env)}`;
+  const keyId = (envApiKey(env) ?? '').slice(0, 19); // "tryaii_" + key_id
+  return `${catalog}\u0000${dataDir(env)}\u0000${keyId}`;
 }
 
 /**

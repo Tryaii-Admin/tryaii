@@ -325,6 +325,16 @@ def _verb_status(argv: list, env: dict) -> None:
     line = _classification_line(data_dir)
     if line:
         print(line)
+    print(_catalog_line())
+
+
+def _catalog_line() -> str:
+    """``catalog: full (login)`` / ``full (app key)`` / ``starter`` (SPEC.md
+    §5.2, TS-294): the catalog this machine routes on and which credential
+    fetched it. Machine-wide, so printed once after every app's block."""
+    from tryaii.catalog.client import catalog_in_use
+
+    return f"catalog: {catalog_in_use()}"
 
 
 def _verb_set(argv: list, env: dict) -> None:

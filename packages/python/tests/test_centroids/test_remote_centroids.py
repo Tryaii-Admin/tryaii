@@ -18,7 +18,7 @@ from tryaii.centroids.generator import benchmark_fingerprint
 
 from ..conftest import load_full_bundle
 
-_EXPECTED_COUNT = {"starter": 16, "full": 33}
+_EXPECTED_COUNT = {"starter": 15, "full": 30}
 
 
 @pytest.fixture(params=["starter", "full"])

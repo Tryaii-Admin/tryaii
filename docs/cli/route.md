@@ -42,7 +42,7 @@ Top 5 Recommendations:
 
 `Score` is meaningful within one call only: models inside the quality band score in `[0.5, 1.0]`, models outside it below 0.5 (see [scoring](../sdk/routing/scoring.md)) — don't compare it across different prompts. `Quality`, `Cost` and `Speed` are the per-model utilities and are comparable across calls.
 
-`route` uses the catalog in use: the 45-model starter catalog shipped in the package, or the full catalog after [`tryaii login`](login.md). When nobody is logged in, a one-line login hint is printed to stderr at most once a day (`TRYAII_NO_BANNER` silences it).
+`route` uses the catalog in use: the 46-model starter catalog shipped in the package, or the full catalog after [`tryaii login`](login.md). When nobody is logged in, a one-line login hint is printed to stderr at most once a day (`TRYAII_NO_BANNER` silences it).
 
 ## Exit codes
 
