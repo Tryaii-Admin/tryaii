@@ -83,6 +83,7 @@ import { taxonomyVersion, type RouteStatus } from './events.js';
 import { RemotePoller, remoteEnabled } from './remote.js';
 import { dataDirFromEnv } from './store.js';
 import { Uploader, uploadEnabled } from './upload.js';
+import { Exporter as LangfuseExporter } from './langfuse.js';
 import { filterRanking, policyAllowed, type ScoreLike } from './winner.js';
 
 export const QUEUE_MAX = 256;
@@ -214,6 +215,8 @@ export class Transport {
   /** The uploader / remote poller (null until started, or when off). */
   uploader: (AppService & { drain(timeoutMs?: number): Promise<void> }) | null = null;
   remote: RemoteService | null = null;
+  /** The Langfuse exporter (SPEC.md "Langfuse export"), or null. */
+  langfuse: LangfuseExporter | null = null;
   private readonly appDirs: string[] = [];
   /** True once the first remote answer came or the first-call wait ran out. */
   private remoteSettled = false;
@@ -297,7 +300,7 @@ export class Transport {
    */
   registerApp(directory: string): void {
     if (!this.appDirs.includes(directory)) this.appDirs.push(directory);
-    for (const service of [this.uploader, this.remote]) {
+    for (const service of [this.uploader, this.remote, this.langfuse]) {
       if (service !== null) service.register(directory);
     }
   }
@@ -340,6 +343,7 @@ export class Transport {
    * (each unless disabled by its env switch). Never throws.
    */
   private startServices(): void {
+    this.startLangfuse();
     try {
       const key = apiKey();
       if (!key) return;
@@ -355,6 +359,19 @@ export class Transport {
       }
     } catch (err) {
       debug('upload/remote services failed to start', err);
+    }
+  }
+
+  /** Start the Langfuse exporter when its settings say on. Never throws. */
+  private startLangfuse(): void {
+    try {
+      const exporter = LangfuseExporter.fromEnv();
+      if (exporter === null) return;
+      this.langfuse = exporter;
+      for (const directory of this.appDirs) exporter.register(directory);
+      exporter.start();
+    } catch (err) {
+      debug('the Langfuse exporter failed to start', err);
     }
   }
 
@@ -377,7 +394,7 @@ export class Transport {
   /**
    * Process exit: finish queued records (<= 2 s); whatever is still waiting
    * for the warm-up is recorded now as `unavailable` (TS-224); then one last
-   * upload pass (<= 2 s).
+   * upload pass (<= 2 s) and one last Langfuse pass (<= 2 s).
    */
   async atExit(): Promise<void> {
     await this.drain(DRAIN_TIMEOUT_MS);
@@ -385,6 +402,8 @@ export class Transport {
     await this.drain(FLUSH_TIMEOUT_MS);
     const uploader = this.uploader;
     if (uploader !== null) await uploader.drain(DRAIN_TIMEOUT_MS);
+    const langfuse = this.langfuse;
+    if (langfuse !== null) await langfuse.drain(DRAIN_TIMEOUT_MS);
   }
 
   /**

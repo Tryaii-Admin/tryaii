@@ -319,8 +319,10 @@ def gen_cache_usage(inp):
 
 
 #: Environment variables a `cli` case never inherits from the caller (the
-#: upload opt-outs change `status` and `upload` output; SPEC.md §9).
-_CLI_SCRUBBED_ENV = ("TRYAII_MONITOR_UPLOAD", "TRYAII_TELEMETRY", "DO_NOT_TRACK", "CI")
+#: upload opt-outs change `status` and `upload` output; SPEC.md §9; the
+#: Langfuse switch adds a `status` line, SPEC.md "Langfuse export").
+_CLI_SCRUBBED_ENV = ("TRYAII_MONITOR_UPLOAD", "TRYAII_TELEMETRY", "DO_NOT_TRACK", "CI",
+                     "TRYAII_LANGFUSE")
 
 
 def run_cli_case(inp: dict) -> subprocess.CompletedProcess:

@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { NOTICE_VERSION, Transport, buildEvent, store } from '../src/monitor/index.js';
 import { RemotePoller } from '../src/monitor/remote.js';
+import { langfuseEnabled } from '../src/monitor/config.js';
 import * as privacy from '../src/monitor/privacy.js';
 import * as upload from '../src/monitor/upload.js';
 
@@ -111,7 +112,7 @@ function writeEvents(events: Record<string, unknown>[], day = '2026-10-12'): str
   return path;
 }
 
-function make(routes: Record<string, Answer[]>, opts: { validate?: boolean } = {}) {
+function make(routes: Record<string, Answer[]>, opts: { validate?: boolean; env?: NodeJS.ProcessEnv } = {}) {
   const fake = new FakeFetch(routes);
   const clock = new Clock();
   const up = new upload.Uploader(KEY, BASE, {
@@ -147,6 +148,51 @@ afterEach(() => {
 });
 
 // --- happy path ---------------------------------------------------------------
+
+const LANGFUSE_KEYS = { TRYAII_API_KEY: KEY, LANGFUSE_PUBLIC_KEY: 'pk-lf-test', LANGFUSE_SECRET_KEY: 'sk-lf-test' };
+
+describe('integrations (API.md v1.7)', () => {
+  it('follows the real export state: the switch (on, 1, true; trimmed, any case) and the keys', () => {
+    const cases: [string | undefined, boolean][] = [
+      ['on', true], ['1', true], ['true', true], [' ON ', true], ['TRUE', true],
+      ['off', false], ['0', false], ['', false], ['yes', false], [undefined, false],
+    ];
+    for (const [value, on] of cases) {
+      const env = value === undefined ? {} : { TRYAII_LANGFUSE: value };
+      expect(langfuseEnabled(env)).toBe(on);
+      // The switch alone is not enough: the exporter is off without the keys.
+      expect(upload.batchIntegrations(env)).toBeNull();
+      expect(upload.batchIntegrations({ ...env, ...LANGFUSE_KEYS })).toEqual(on ? ['langfuse'] : null);
+    }
+    for (const missing of Object.keys(LANGFUSE_KEYS)) {
+      const env: NodeJS.ProcessEnv = { TRYAII_LANGFUSE: 'on', ...LANGFUSE_KEYS };
+      delete env[missing];
+      expect(upload.batchIntegrations(env)).toBeNull();
+    }
+    expect(upload.batchIntegrations({ TRYAII_LANGFUSE: 'on', ...LANGFUSE_KEYS, TRYAII_API_KEY: 'not-an-app-key' })).toBeNull();
+    expect(String(upload.envelopeHead('b', '0.7.0', ['langfuse']))).toMatch(/,"integrations":\["langfuse"\],"events":\[$/);
+    expect(String(upload.envelopeHead('b', '0.7.0', []))).not.toContain('integrations');
+  });
+
+  it('adds integrations after notice_version only while the export is on', async () => {
+    writeEvents([event(1)]);
+    const env: NodeJS.ProcessEnv = { TRYAII_LANGFUSE: 'on', ...LANGFUSE_KEYS };
+    const { up, fake, clock } = make({
+      '/v1/apps/keys/validate': [[200, VALID]],
+      '/v1/monitor/events': [[202, { accepted: 1, batch_id: 'x' }]],
+    }, { env });
+    expect(await up.runOnce()).toBe('sent');
+    const body = JSON.parse(String(fake.posts()[0].data));
+    expect(Object.keys(body)).toEqual(['schema', 'batch_id', 'sdk', 'notice_version', 'integrations', 'events']);
+    expect(body.integrations).toEqual(['langfuse']);
+
+    env.TRYAII_LANGFUSE = 'off';
+    writeEvents([event(2)]);
+    clock.t += upload.INTERVAL_MS;
+    expect(await up.runOnce()).toBe('sent');
+    expect('integrations' in JSON.parse(String(fake.posts()[1].data))).toBe(false);
+  });
+});
 
 describe('happy path', () => {
   it('validates once, then uploads the unread lines', async () => {

@@ -17,9 +17,14 @@ prompt-cache usage to the event, on top of v1.4's `usage.cached_tokens`:
 `cache_ttl_policy` (§3.1b), the `normalize_cache_usage` helper and its
 `cache_usage` fixture suite, the status `cached_tokens` /
 `cache_write_tokens` sums (§2.7) and the optional cache segments of the
-human `events` line (§5.5). The wrappers start filling the write fields in
+human `events` line (§5.5). The wrappers fill the write fields since
 TS-229; the cost estimate learns about them in TS-230; the server stores
 them in TS-231.
+
+API.md v1.7 (2026-10-24, Jira TS-245) adds the optional event field
+`usage.reasoning_tokens` (§3.1) and the optional upload-batch field
+`integrations` (§3.4); the Langfuse export that sets it is the section
+"Langfuse export".
 
 §10 (2026-10-21, Python only) adds `tryaii claude-code`: a developer's own
 Claude Code usage read from its local logs, reported, and imported as events
@@ -403,7 +408,8 @@ daemon state).
  "route_status":"ok","classification":{"category":"coding","subcategory":"debugging","confidence":0.81},
  "taxonomy_version":null,
  "usage":{"prompt_tokens":812,"completion_tokens":140,"total_tokens":952,
-          "cached_tokens":512,"cache_write_tokens":null,"cache_writes":null},
+          "cached_tokens":512,"cache_write_tokens":null,"cache_writes":null,
+          "reasoning_tokens":null},
  "cache_ttl_policy":null,
  "est_cost_usd":0.004213,"est_cost_winner_usd":0.000731,"est_cost_anchor_usd":0.004213,
  "latency_ms":1432,"stream":false,"error":null,"prompt_hash":"<sha256>","vector":true}
@@ -435,8 +441,16 @@ unknown and tolerate missing keys, so slice-1 lines stay readable):
   absolute path names the developer's machine, not the app, and never leaves
   it: the uploader replaces an absolute `call_site.file` (drive letter, root
   slash or `~`) with the base name before the batch is built (TS-226).
-- `provider` ∈ `openai|openrouter|other` (§2.2); events imported from
-  Claude Code (§10, Python only) carry `anthropic`.
+- `provider` ∈ `openai|openrouter|other` (§2.2), or `anthropic` for a
+  Messages-API client: the Anthropic SDK wrapper (TS-169; `Anthropic`,
+  `AnthropicBedrock` and `AnthropicVertex` clients alike, since all answer
+  with Messages-API usage) and events imported from Claude Code (§10,
+  Python only). `anthropic` is not a §2.2 class: every routing rule treats
+  it like `other` (only the anchor is reachable, so `stable` / `dynamic`
+  never swap and a different `managed` model records
+  `unreachable_managed`). It tells the server that `usage.prompt_tokens`
+  excludes the cached and written tokens (§3.1b); the server's hit rate
+  adds them back for `anthropic` and `bedrock` events only (API.md §3.2.2).
 - `model_requested` = the id as written in the call; `model_resolved` = the
   anchor catalog id or `null`; `model_used` = the native id actually sent.
 - `route_status` ∈ `ok|unavailable|timeout|disabled|queue_full|skipped|
@@ -449,9 +463,10 @@ unknown and tolerate missing keys, so slice-1 lines stay readable):
 - `usage` = the provider's token counts (`null` fields when absent; `null`
   when the provider sent none, e.g. a stream without `include_usage`), in
   the key order `prompt_tokens`, `completion_tokens`, `total_tokens`,
-  `cached_tokens`, `cache_write_tokens`, `cache_writes` (`cached_tokens`
-  since API v1.4, the last two since v2.2, §3.1b). A writer always emits all six keys; a reader
-  treats a missing key as `null`.
+  `cached_tokens`, `cache_write_tokens`, `cache_writes`, `reasoning_tokens`
+  (`cached_tokens` since API v1.4, `cache_write_tokens` / `cache_writes`
+  since v2.2, §3.1b, `reasoning_tokens` since API v1.7). A writer always
+  emits all seven keys; a reader treats a missing key as `null`.
 - `cache_ttl_policy` (v2.2, §3.1b) — right after `usage`.
 - `cache_cold` (API.md v1.6, optional) — right after `cache_ttl_policy`, only
   in Claude Code import events (§10.5); the wrappers of both SDKs leave it
@@ -493,6 +508,22 @@ v1.4 fields (API.md §3.2.1 is normative for shape, limits and redaction):
   (`messages[0]:system`, `messages[2]:developer`) counts as `system` (its findings
   and its tokens, in `system_tokens`); `tools` as `tools`; every other message as
   `messages`.
+
+v1.7 field (API.md §3.2.4, TS-245):
+
+- `usage.reasoning_tokens` — `integer >= 0 | null`: the output tokens the
+  model spent on reasoning, read from the response's
+  `usage.completion_tokens_details.reasoning_tokens` (OpenAI-compatible chat
+  completions; for a stream, the usage of the last chunk, which the wrapper
+  asks for with `stream_options.include_usage`). Sync and async, streamed and
+  not, are read the same way. `null` when the provider does not report it
+  (no `completion_tokens_details`, no `reasoning_tokens` in it, or a value
+  that is not a count by §3.1b rule 5); a reported `0` stays `0`. It is
+  **part of** `completion_tokens`, as the provider counts it, and is never
+  added on top: `completion_tokens`, `total_tokens` and the cost estimates
+  do not change. An event-shaped usage that already carries
+  `reasoning_tokens` keeps it. The last key inside `usage`. The `cache`
+  suite's `usage-reasoning-*` cases freeze it.
 
 ### §3.1b Prompt-cache usage (v2.2, TS-228; API.md v1.5)
 
@@ -560,6 +591,26 @@ event's `provider` class (§2.2): an Azure or OpenRouter client has class
 | `anthropic` (Messages API) | `cache_read_input_tokens` | `cache_creation_input_tokens` | `cache_creation.ephemeral_5m_input_tokens` → `"5m"`, `cache_creation.ephemeral_1h_input_tokens` → `"1h"` (that order); no `cache_creation` object → null | `input_tokens` **excludes** cached and written tokens |
 | `bedrock` (Converse) | `cacheReadInputTokens` | `cacheWriteInputTokens` | `cacheDetails[]` → `{"tokens": inputTokens, "ttl": ttl}` in the given order | `inputTokens` **excludes** cached tokens |
 | `gemini` (generateContent) | `usageMetadata.cachedContentTokenCount` (also `cached_content_token_count`) | null (explicit caches are written by `cachedContents.create`, outside the call) | null | `promptTokenCount` includes cached tokens |
+
+**Wrappers (TS-229).** The `openai` wrapper fills the cache columns with
+`usage_from_provider(shape, raw_usage)`. It takes the token counts as
+`usage_from_response` reads them and adds each column that
+`normalize_cache_usage` finds. The shape is `openai` for class `openai`
+and `openrouter` for class `openrouter`. For class `other` it tries
+`openai` first, then `anthropic` for any column still null, which covers
+OpenAI-compatible proxies in front of Claude. The wrapper fills
+`cache_ttl_policy` with `cache_ttl_policy_from_request(kwargs)`, which
+takes `prompt_cache_retention`, then the same key inside `extra_body`
+(`24h` gives `"24h"`; `in_memory` and any other value give null). Without
+a retention it takes the longest explicit `cache_control.ttl` on the
+messages, their content parts or the tools. A `cache_control` without a
+`ttl` gives null: a default is never assumed. The Anthropic wrapper
+(TS-169, event `provider` `anthropic`) reads the `anthropic` shape only:
+`prompt_tokens` = `input_tokens` as reported (excluding the cache),
+`completion_tokens` = `output_tokens`, `total_tokens` = their sum, and the
+cache columns from `normalize_cache_usage("anthropic", …)`; its
+`cache_ttl_policy` is the longest explicit `cache_control.ttl` on the
+request, its `tools`, `system` blocks and message content blocks.
 
 TS-229 maps `prompt_tokens` / `completion_tokens` / `total_tokens` of the
 non-OpenAI shapes in the wrappers; this helper only covers the cache
@@ -686,7 +737,13 @@ when `TRYAII_API_KEY` is set and `TRYAII_MONITOR_REMOTE` is not `"0"`:
   registered with a source (only the Claude Code importer's,
   `register(dir, source="claude-code-import")`, §10.5) gets
   `"sdk":{"lang":"python","version":"…","source":"claude-code-import"}`; every
-  other upload leaves `source` out;
+  other upload leaves `source` out; API.md v1.7, both SDKs: while the
+  Langfuse export is on (§11.1 `settings`: the switch `TRYAII_LANGFUSE` is `on`, also `1`,
+  `true`, trimmed, any case, read by `config.langfuse_enabled()` /
+  `langfuseEnabled()`; an app key in `TRYAII_API_KEY`; both Langfuse keys),
+  `"integrations":["langfuse"]` follows `notice_version`; otherwise the key
+  is absent. It is read at batch time (Python `upload.batch_integrations`,
+  Node `batchIntegrations`);
 - POSTs `/v1/monitor/events` with `Authorization: Bearer <key>`, at most
   one batch every **5 s** per process:
   - 2xx (202) → cursor advanced, `last_ok` = now, `last_error` = null
@@ -1217,7 +1274,7 @@ event per call in §3.1 key order:
 | `ts` | the call's time (§1.4 format) |
 | `app` / `process` | `claude-code` / §10.2 |
 | `call_site` | `{"file": <project label>, "line": null, "function": null}` |
-| `provider` | `anthropic` (outside the §2.2 classes; the server treats it as `other`) |
+| `provider` | `anthropic` (outside the §2.2 classes; routed like `other`, and marks `prompt_tokens` as excluding the cache, §3.1) |
 | `model_requested`, `model_used` | the log's model id; `model_resolved` = the catalog id or `null` |
 | `mode`, `winner`, `winner_reachable`, `route_status`, `classification`, `taxonomy_version` | `off`, `null`, `false`, `skipped`, `null`, `null`; for a call with an `analyze` result (§10.7): `off`, the Anthropic answer (`null` when the task's model is not in the catalog), `true` when there is one, `ok`, the task profile `{category, subcategory, confidence}`, the catalog's taxonomy version |
 | `usage` | `prompt_tokens` = `input_tokens` (Anthropic: excludes cached and written tokens, §3.1b), `completion_tokens` = `output_tokens`, `total_tokens` = input + cache write + cache read + output; the cache columns from `normalize_cache_usage("anthropic", …)` |
@@ -1539,3 +1596,256 @@ connected.
 
 Imported events carry the result as `cache_cold` (§10.5); the report shows it
 (§10.4). Nothing about the session itself leaves the machine.
+
+## §11 Langfuse export
+
+(2026-10-24, Jira TS-245 contract, TS-246 exporter and scores; API.md v1.7.)
+The SDK can send each monitor event to the customer's own Langfuse (Cloud EU
+or US, or self-hosted v3.22+) as one OpenTelemetry span, and TryAii's
+recommendation for the call as three Langfuse scores. Everything is sent from
+the SDK, with the customer's Langfuse keys: api.tryaii.com never sees a
+Langfuse key and never talks to Langfuse. Code:
+`tryaii/monitor/langfuse.py` (the reference), `src/monitor/langfuse.ts`; the
+call-time capture in `tryaii/monitor/otel.py`, `src/monitor/otel.ts`.
+
+### §11.1 Settings
+
+| Variable | Meaning |
+|---|---|
+| `TRYAII_LANGFUSE` | the switch: `on`, `1` or `true` (trimmed, any case) turn the export on; anything else, or unset, is off (the default) |
+| `LANGFUSE_BASE_URL`, else `LANGFUSE_HOST` | the Langfuse host (trimmed, trailing `/` dropped, a blank value is skipped); neither → `https://cloud.langfuse.com` |
+| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | the project keys, sent as HTTP Basic auth `public:secret` |
+| `TRYAII_API_KEY` | must hold a TryAii app key (API.md §1 regex; no request is made to check it) |
+
+`settings(env)` → `{"enabled", "host", "reason"}` (that key order; never a
+key). `reason` is `null` when on, else the first that applies:
+`TRYAII_LANGFUSE is not on`, `TRYAII_API_KEY is not set`, `TRYAII_API_KEY is
+not an app key`, `LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY are needed`.
+When the switch is on but the export is off, the transport logs one warning
+per process, `tryaii monitor: the Langfuse export is off (<reason>)`, and the
+app is never affected. The export is independent of the upload switches of
+§9.1 (it sends to the customer's own system, not to TryAii); the upload batch
+says `"integrations": ["langfuse"]` while `settings` says on (the switch, an
+app key and both Langfuse keys; API.md v1.7). The switch itself is read by
+the one config helper, `config.langfuse_enabled` / `langfuseEnabled`; every
+other reader goes through `settings`.
+
+`tryaii monitor status` (text, not `--json`) prints one machine-wide line
+after the `catalog:` line, only when `TRYAII_LANGFUSE` is set to a non-blank
+value: `langfuse: on (<host>)`; `langfuse: off (<reason>)` while the switch is
+on but a key is missing; `langfuse: off` for any other switch value. It
+reads the environment of the `status` process. The `cli` fixture suite
+never inherits `TRYAII_LANGFUSE` (the `langfuse` suite freezes the line).
+
+### §11.2 The `otel` event field (API.md v1.7)
+
+`otel` = `{"trace_id": "<32 lowercase hex>", "span_id": "<16 lowercase
+hex>"[, "origin": "tryaii"]}`: the span the TryAii observation belongs to,
+fixed at call time (in `before()`, synchronously, in the caller's context).
+Key position: right after `vector`, before `cache` (which stays the last
+key); absent when none applies. Optional: readers and the server ignore it.
+The OpenTelemetry API and Langfuse are used only when they are loaded and are
+never a dependency; any failure records no `otel` and leaves the call as is.
+First rule that applies:
+
+1. **The TryAii parent (Python, `origin: "tryaii"`).** The Langfuse export is
+   on (§11.1), no span is active, and the class `create` the wrapper calls is
+   wrapped by Langfuse's OpenAI integration (`import langfuse.openai`: a wrapt
+   wrapper whose function is defined in a `langfuse` module; read without
+   importing langfuse). With `wrap()` both import orders work, since the
+   wrapper looks the class method up per call and stays outermost (TS-257).
+   With `install()` only `import langfuse.openai` first works: `install()`
+   run earlier is itself wrapped by Langfuse's patch, does not see it, and
+   the call gives two traces (a known gap, documented in
+   `docs/sdk/monitor.md`). The wrapper fixes the
+   event id at call time, sets `otel` = `{"trace_id": h[0:32], "span_id":
+   h[32:48], "origin": "tryaii"}` (`h` = sha256(event_id), §11.5) and, around
+   the provider call only, makes a non-recording span with those ids the
+   active span (`trace.set_span_in_context(NonRecordingSpan(SpanContext(...,
+   is_remote=True, trace_flags=SAMPLED)))` with `context.attach` /
+   `detach`). Langfuse's generation, started inside the call, becomes its
+   child; the exporter then sends the TryAii observation with exactly these
+   ids as the trace root. One trace: TryAii span → Langfuse generation. When
+   the context cannot be attached, no `otel` is recorded.
+2. **Langfuse's generation (Node).** `observeOpenAI` starts its generation
+   before it calls the `create` TryAii patched behind its proxy (TS-301),
+   reads no per-call parent and never activates the generation, so no parent
+   can be put around it. While the export is on, the wrapper watches, read
+   only, the tracer Langfuse starts its spans with (`getTracer("langfuse-sdk")`
+   on the OpenTelemetry global tracer provider, `Symbol.for("opentelemetry.js.api.1")`,
+   and on Langfuse's isolated provider, `Symbol.for("langfuse")`): every span
+   it starts is noted until the end of the synchronous tick. A call whose
+   `create` runs in that tick (observeOpenAI calls it right after
+   `startObservation`) records `otel` = that generation's ids (no `origin`):
+   the TryAii span becomes its child. One trace: Langfuse generation → TryAii
+   span; both wrap orders. Without a registered tracer provider (no
+   OpenTelemetry SDK such as NodeSDK with `LangfuseSpanProcessor`) Langfuse
+   records nothing anyway and the call falls through to the rules below.
+3. **The active span.** The OpenTelemetry span active at call time (for
+   example a Langfuse `@observe` / `start_as_current_observation` /
+   `startActiveObservation`, or any other instrumentation): Python
+   `opentelemetry.trace.get_current_span()`, Node `@opentelemetry/api`
+   `trace.getActiveSpan()` when it resolves, else the API's global context
+   manager (the span under `Symbol.for("OpenTelemetry Context Key SPAN")`).
+4. Otherwise no `otel`: the exporter creates the trace itself.
+
+An `origin` other than `"tryaii"` is ignored (rule 3 applies to the ids).
+In every case Langfuse shows one trace per call, and the call's cost once:
+on Langfuse's generation when its integration records the call, else on the
+TryAii generation (§11.5).
+
+### §11.3 The cursor (`langfuse.json`, `tryaii.monitor.langfuse-cursor/1`)
+
+```json
+{"schema": "tryaii.monitor.langfuse-cursor/1",
+ "host": "https://cloud.langfuse.com",
+ "files": {"events-2026-10-24.jsonl": 1675},
+ "last_ok": "2026-10-24T08:25:00.000Z", "last_error": null}
+```
+
+In the app directory (§3), next to `upload.json`; `indent=2` + `\n`, written
+atomically, that key order, `files` sorted by name. `files` = the bytes of
+each events file already exported. A missing cursor, or one whose `host` is
+not the current host, is created when the app directory is registered with
+the exporter, with **every existing events file at its current size**: the
+export covers the calls made from then on, never a backfill of older
+records. `langfuse.lock` (`O_CREAT|O_EXCL`, pid inside, taken over after 60 s)
+keeps one process per app directory exporting at a time. Local files are
+never deleted or rewritten. A file shorter than its cursor restarts at 0.
+
+### §11.4 Reading and batching
+
+The exporter is a second reader of the store, on its own daemon thread
+(Python) or async loop with unref'd timers and sockets (Node), started by the
+transport where the uploader starts (§3.4) when `settings` says on, and fed
+the same app directories. It is never in the LLM call path. One pass takes,
+per app directory, the unread whole `\n`-terminated lines of the oldest
+events file that has any (a trailing partial line waits), at most **100
+events**, and **skips** (never sends, but advances past) every line that is
+not a JSON object of schema `tryaii.monitor.event/1` with a uuid `event_id`
+and a parseable `ts`, or that carries a forbidden field (§3.4's hard rule).
+A line is written after the shadow route has finished (§2.4), so the
+recommendation of every line read is already known. After a sent batch the
+next one waits at least 1 s; an idle exporter looks again every 2 s. At
+process exit it gets passes until nothing is left, bounded by 2 s in all,
+after the uploader's; a batch cut short there is resent by the next process
+(§11.7).
+
+### §11.5 Event → OTLP span
+
+`POST <host>/api/public/otel/v1/traces`, `Content-Type: application/json`,
+`Authorization: Basic base64(public:secret)`; redirects are never followed.
+Body (minified, the store's line format, §1.2):
+
+```json
+{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"tryaii-monitor"}}]},
+ "scopeSpans":[{"scope":{"name":"tryaii.monitor","version":"<sdk version>"},"spans":[<span>, ...]}]}]}
+```
+
+**Ids.** `h = sha256(event_id as UTF-8)`, lowercase hex. Without a valid
+`otel` (lowercase hex of the right length, not all zeros): `traceId` =
+`h[0:32]`, `spanId` = `h[32:48]`, no parent: the exporter creates the trace.
+With `otel.origin == "tryaii"`: `traceId` = `otel.trace_id`, `spanId` =
+`otel.span_id` (the same values, fixed at call time), no parent: the trace
+root that Langfuse's generation already points at. With any other `otel`:
+`traceId` = `otel.trace_id`, `parentSpanId` = `otel.span_id`, `spanId` =
+`h[32:48]`: the TryAii span is a child of that span. Ids are hex strings
+(OTLP/JSON).
+
+**Span**, key order: `traceId`, `spanId`, `parentSpanId` (only for a child),
+`name` = `"tryaii " + process`, `kind` = `3` (client), `startTimeUnixNano` =
+`ts` in ns (string), `endTimeUnixNano` = start + `latency_ms` × 10⁶ (start
+when `latency_ms` is null), `attributes`, `status` = `{"code": 2}` with an
+`error`, else `{"code": 1}`. Every attribute value is a `stringValue`, in
+this order, each only when it applies:
+
+| Attribute | Value |
+|---|---|
+| `langfuse.observation.type` | `generation` without `otel`; `span` with any `otel` (no model, usage or cost, so Langfuse never counts the call twice next to its own generation) |
+| `langfuse.trace.name` | when the span has no parent (no `otel`, or `origin: "tryaii"`): the span name |
+| `langfuse.trace.metadata.tryaii_url` | when the span has no parent: `tryaii_url` |
+| `langfuse.observation.model.name` | without `otel`: `model_used` (the native id sent) |
+| `langfuse.observation.usage_details` | without `otel`: JSON (as Langfuse's own OpenAI integration splits it): `input` = `prompt_tokens − cached_tokens` (≥ 0; `prompt_tokens` when `cached_tokens` is not a number), `output` = `completion_tokens − reasoning_tokens` (same rule), `total` = `total_tokens`, `input_cached_tokens` = `cached_tokens`, `output_reasoning_tokens` = `usage.reasoning_tokens` — each only when it is an integer; absent when none is |
+| `langfuse.observation.cost_details` | without `otel`: JSON `{"total": est_cost_usd}` when it is a number: Langfuse shows TryAii's estimate, the base of the savings score |
+| `langfuse.observation.level` | `ERROR` with an `error` |
+| `langfuse.observation.status_message` | with an `error`: its `class` (`error` when empty), plus ` (HTTP <status>)` when `status` is an integer |
+| `langfuse.observation.metadata.<key>` | for each key below whose value is a scalar (null, objects and lists skipped): a string as is, any other value as JSON (`true`, `812`, `0.004213`) |
+
+Metadata keys, in order: `tryaii_url`, `event_id`, `app`, `process`, `mode`,
+`provider`, `model_requested`, `model_resolved`, `model_used`, `winner`,
+`winner_reachable`, `route_status`, `category` and `subcategory` (from
+`classification`), `prompt_tokens`, `completion_tokens`, `total_tokens`,
+`cached_tokens`, `reasoning_tokens` (from `usage`), `est_cost_usd`,
+`est_cost_winner_usd`, `est_cost_anchor_usd`, `latency_ms`, `stream`,
+`call_site` (`<file>:<line>`, or `<file>` without a line; an absolute path
+reduced to its base name, TS-226), `error_class`, `error_status`.
+
+**`tryaii_url`** = `https://tryaii.com/dashboard/monitor/<app_id>/features/<process>`
+(the web dashboard's sub-process deep link; both parts percent-encoded like
+`encodeURIComponent`). `app_id` is the server's app id from the app
+directory's `remote.json` (§3.3); without it (no remote config fetched yet)
+the URL is `https://tryaii.com/dashboard/monitor`, and with an empty process
+`.../monitor/<app_id>`.
+
+### §11.6 Scores
+
+After the batch's spans were accepted, one `POST <host>/api/public/scores`
+per score (same auth), at most 8 at a time; the scores of an event come in
+this order, each only when the event has its value:
+
+| Name (frozen) | `dataType` | `value` | Sent when |
+|---|---|---|---|
+| `tryaii.recommended_model` | `CATEGORICAL` | `winner`: the best-for-less model (§2.3), which is the anchor itself when the developer's model should stay | `winner` is a non-empty string |
+| `tryaii.est_savings_usd` | `NUMERIC` | `est_cost_usd − est_cost_winner_usd`, rounded to 6 dp (§1.3; integral values as integers) | both are numbers |
+| `tryaii.route_status` | `CATEGORICAL` | `route_status` (§3.1) | a non-empty string |
+
+Body, key order: `{"id", "traceId", "observationId", "name", "value",
+"dataType"}`; `id` = `<event_id>-<name without "tryaii.">` (for example
+`<event_id>-est_savings_usd`), `traceId` / `observationId` = the span's
+`traceId` / `spanId` (§11.5).
+
+### §11.7 Retries and failures
+
+Every id is derived from the event id, and Langfuse upserts observations by
+span id and scores by score id, so sending a batch again never duplicates a
+span or a score. The cursor advances only when the batch is done:
+
+- traces 2xx → the scores; every score 2xx (or 4xx, below) → the cursor
+  advances, `last_ok` = now, `last_error` = null (or the note of a refused
+  score), backoff reset;
+- traces `401` / `403`, or the same on a score → the export is off for the
+  process: `last_error` = `<traces|scores>: http <status> (check
+  LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY)`, one warning line `tryaii
+  monitor: Langfuse rejected the keys (HTTP <status>); the Langfuse export is
+  off for this process`;
+- traces any other 4xx except 408 / 429 → the batch is passed over (cursor
+  advances, no scores), `last_error` = `traces: http <status>`; a score 4xx
+  → that score is passed over, `last_error` = `scores: http <status>`;
+- 408, 429, 5xx, any other status or a network failure → the cursor stays,
+  `last_error` = `<traces|scores>: http <status>` or `<...>: network`,
+  backoff 5 s, doubling, capped at 5 min; the next attempt resends the whole
+  batch (spans and scores) with the same ids.
+
+Every failure is swallowed: the export never raises into the app, never
+blocks or slows a call, and never changes what is recorded locally or
+uploaded to TryAii.
+
+### §11.8 What is never sent
+
+The prompt or response text (the store has none), `prompt_hash` (plain or
+keyed), the vectors, the `cache` report, any API key (only the customer's
+own Langfuse keys, in the Authorization header to their own host), the
+TryAii app key, and absolute file paths. A line with a forbidden field
+(§3.4) is never exported.
+
+### §11.9 Fixtures
+
+`shared/monitor/fixtures/langfuse/cases.json`, generated from the Python
+reference by `scripts/gen-langfuse-fixtures.py` (`--check`: no writes, exit 1
+on drift). Case kinds: `export` (`app_id` + events → per-event ids,
+`tryaii_url`, the OTLP request body, the score bodies and the sha256 of each
+exact request body, which the Node SDK must reproduce byte for byte),
+`settings` (env → `settings` and the status line) and `exportable` (a store
+line → whether it is sent). Run by `tests/test_monitor_langfuse.py` and
+`tests/monitor-langfuse.test.ts`, which also cover the exporter against a
+fake HTTP layer. Clock-free and network-free.

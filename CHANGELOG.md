@@ -1,5 +1,82 @@
 # Changelog
 
+## 0.8.2 (2026-10-24)
+
+- **Monitor: cache writes and lifetimes on every event (TS-229, contract
+  `shared/monitor/API.md` v1.5).** The OpenAI wrapper (OpenAI, Azure
+  OpenAI, OpenRouter and other OpenAI-compatible hosts), in both SDKs, now
+  fills `usage.cache_write_tokens` and `usage.cache_writes` from the
+  provider's response, using `normalize_cache_usage` / `normalizeCacheUsage`.
+  It also fills `cache_ttl_policy` from the request: `prompt_cache_retention`
+  `24h`, or the longest explicit `cache_control.ttl`. Only reported values
+  are recorded. A field the provider does not send stays `null`, never `0`.
+  `in_memory` retention and a `cache_control` without a `ttl` record `null`.
+  OpenRouter's top-level `cached_tokens` is read now. A compatible host that
+  answers with Anthropic-shaped usage gets its 5m/1h write breakdown. New
+  helpers: `usage_from_provider` / `usageFromProvider` and
+  `cache_ttl_policy_from_request` / `cacheTtlPolicyFromRequest`.
+
+- **Monitor: Anthropic SDK wrapper** (TS-169). `tryaii.monitor.wrap(client)`
+  (Python) and `wrap(client)` from `tryaii/monitor` (Node) now also take an
+  `anthropic` / `@anthropic-ai/sdk` client (`Anthropic`, `AsyncAnthropic`,
+  `AnthropicBedrock`, `AnthropicVertex`) and monitor `messages.create`
+  (sync, async, `stream=True`) and `messages.stream()` with the same
+  call-site capture, sub-process naming, modes, privacy and upload rules as
+  the openai wrapper. Python `install()` also patches the anthropic
+  `Messages` classes once `anthropic` is imported (`install_anthropic()`
+  alone). The event's `usage` follows contract v1.5: `input_tokens` /
+  `output_tokens` as `prompt_tokens` / `completion_tokens` (input excludes
+  cache), and `cache_read_input_tokens`, `cache_creation_input_tokens` and
+  the `cache_creation` 5m / 1h breakdown as `cached_tokens`,
+  `cache_write_tokens` and `cache_writes`; only what the response reports.
+  Events carry `provider: "anthropic"` (Bedrock and Vertex clients too), so
+  the server counts cached and written tokens in the hit rate's input;
+  routing treats it like class `other`: monitored and shadow-routed, never
+  swapped. `cache_ttl_policy` is the longest explicit `cache_control.ttl`
+  of the request. Bedrock model ids resolve to their catalog
+  anchor. New optional extra `tryaii[anthropic]`.
+
+- **Monitor: works with Langfuse, TryAii's recommendation as Langfuse scores**
+  (TS-245, TS-246, TS-249; contract `shared/monitor/API.md` v1.7). Set
+  `TRYAII_LANGFUSE=on` (also `1`, `true`; off by default) next to
+  `TRYAII_API_KEY`, `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`, and the
+  wrapper exports each call to your own Langfuse (`LANGFUSE_BASE_URL`, else
+  `LANGFUSE_HOST`, else `https://cloud.langfuse.com`; Langfuse Cloud EU and
+  US and self-hosted v3.22+). The export is a second reader of the local
+  event lines with its own cursor (`langfuse.json`, which starts at the end
+  of the events already stored, so older calls are not exported):
+  background, batched, retried, never raising into the app and never in the
+  LLM call path. It posts OTLP/HTTP JSON to `/api/public/otel/v1/traces`.
+  Each call gives one trace. With an active OpenTelemetry span (for example
+  Langfuse's `@observe`) or, in Node, `observeOpenAI`, the TryAii span is a
+  child of that span; in Python with `langfuse.openai` and no active span,
+  the wrapper makes the TryAii span the trace root and Langfuse's generation
+  its child. In both cases it is typed `span` with no model cost, so the
+  call is not counted twice. Otherwise the export creates the trace itself
+  (ids derived from `event_id`) with a `generation` carrying the model,
+  usage and cost estimate. Known limits: in Python, call
+  `monitor.install()` after `import langfuse.openai` (or use `wrap()`),
+  else a call gives two traces; in Node, the app must register an
+  OpenTelemetry tracer provider, as in Langfuse's documented setup. After
+  the span it adds up to three scores to the trace: `tryaii.recommended_model` (the winner, or the
+  anchor when it should stay), `tryaii.est_savings_usd` (`est_cost_usd -
+  est_cost_winner_usd`) and `tryaii.route_status`, each with a fixed id per
+  event so a retry never duplicates. Metadata only, never prompt or response
+  text; the data goes from your app straight to your Langfuse, never through
+  TryAii. A missing app key or Langfuse key logs one warning and leaves the
+  export off. When `TRYAII_LANGFUSE` is set, `tryaii monitor status` ends
+  with `langfuse: on (<host>)`, `langfuse: off (<reason>)` or
+  `langfuse: off`. New in the event (v1.7): `usage.reasoning_tokens`, from
+  `usage.completion_tokens_details.reasoning_tokens` (already part of
+  `completion_tokens`, never added on top; `null` when not reported), and
+  `otel`, the span the call belongs to (`origin: "tryaii"` when the
+  wrapper made it; ignored by the server). Upload batches carry
+  `"integrations": ["langfuse"]` while the export is on, that is the switch,
+  an app key and both Langfuse keys (absent otherwise). Python and Node, with the new fixture
+  suite `shared/monitor/fixtures/langfuse`. Docs: "Works with Langfuse" in
+  `docs/sdk/monitor.md` and `docs/cli/monitor.md`; PRIVACY.md gains the
+  Langfuse line.
+
 ## 0.8.1 (2026-10-24)
 
 - **Catalog: AA-LCR, AA-Omniscience and Terminal-bench-Hard removed**

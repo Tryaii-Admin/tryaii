@@ -55,7 +55,8 @@ def test_cached_tokens_recorded_without_cachelint():
     [event] = events_of(monitor)
     assert event["usage"] == {"prompt_tokens": 1400, "completion_tokens": 10,
                               "total_tokens": 1410, "cached_tokens": 1280,
-                              "cache_write_tokens": None, "cache_writes": None}
+                              "cache_write_tokens": None, "cache_writes": None,
+                              "reasoning_tokens": None}
     assert "cache" not in event   # cachelint off: no cache block at all
 
 

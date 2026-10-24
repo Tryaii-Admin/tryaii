@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from tryaii.monitor import callsite, store
+from tryaii.monitor import otel as _otel
 from tryaii.monitor.cache import CacheTracker
 from tryaii.monitor.config import (
     env_from_os,
@@ -42,12 +43,14 @@ from tryaii.monitor.context import current_process
 from tryaii.monitor.events import (
     build_event,
     build_vector,
+    cache_ttl_policy_from_request,
     classification_from_wire,
     estimate_cost,
     format_ts,
-    usage_from_response,
+    usage_from_provider,
 )
 from tryaii.monitor.extract import routing_text
+from tryaii.monitor.otel import active_span_ids
 from tryaii.monitor.pins import (
     evaluate_pin,
     model_facts,
@@ -194,6 +197,14 @@ class CallPlan:
     lint_tools: Optional[list] = None
     #: Where ``mode`` came from (SPEC.md §2.6: env, remote, args, config, default).
     mode_source: Optional[str] = None
+    #: The cache lifetime the request asked for (SPEC.md §3.1b), or None.
+    cache_ttl_policy: Optional[str] = None
+    #: The active OpenTelemetry span at call time, ``{"trace_id", "span_id"}``
+    #: or None (SPEC.md "Langfuse export").
+    otel: Optional[dict] = None
+    #: The event id, fixed at call time when the wrapper makes the parent span
+    #: for Langfuse's integration (``otel.origin == "tryaii"``); else None.
+    event_id: Optional[str] = None
     extra: dict = field(default_factory=dict)
 
 
@@ -224,6 +235,12 @@ class Monitor:
         except Exception:  # noqa: BLE001 - fail-open
             logger.debug("monitor: register_app failed", exc_info=True)
         self._vectors = vectors_enabled() if vectors is None else bool(vectors)
+        try:
+            from tryaii.monitor.langfuse import settings as _lf_settings
+
+            self._langfuse_parent = bool(_lf_settings()["enabled"])
+        except Exception:  # noqa: BLE001 - fail-open
+            self._langfuse_parent = False
         self._hook = None
         self._cache: Optional[CacheTracker] = None
         if cachelint:
@@ -262,10 +279,34 @@ class Monitor:
                 policy=policy, mode_source=resolved["source"],
                 route_allowed=route_allowed(self.provider, ids, anchor, policy),
                 shadow_allowed=shadow_allowed(ids, policy),
+                cache_ttl_policy=cache_ttl_policy_from_request(kwargs),
+                otel=active_span_ids(),
             )
         except Exception:  # noqa: BLE001 - fail-open
             logger.debug("monitor: before() failed", exc_info=True)
             return None
+
+    def langfuse_parent(self, plan: Optional[CallPlan], target: Any) -> None:
+        """With the Langfuse export on, Langfuse's OpenAI integration on the
+        class ``create`` and no active span: fix the event id now and record
+        ``otel`` = the ids the exporter will give the TryAii span, marked
+        ``origin: "tryaii"``; :func:`_parent` makes that span the active parent
+        around the call, so Langfuse's generation lands in the same trace
+        (SPEC.md §11.2). Never raises."""
+        try:
+            if plan is None or plan.otel is not None or not self._langfuse_parent:
+                return
+            if not _otel.langfuse_wrapped(target):
+                return
+            from tryaii.monitor.events import new_event_id
+            from tryaii.monitor.langfuse import derived_ids
+
+            event_id = new_event_id()
+            trace_id, span_id = derived_ids(event_id)
+            plan.event_id = event_id
+            plan.otel = {"trace_id": trace_id, "span_id": span_id, "origin": _otel.ORIGIN_TRYAII}
+        except Exception:  # noqa: BLE001
+            logger.debug("monitor: langfuse parent failed", exc_info=True)
 
     # -- 1b. first-call remote config (SPEC.md §3.3, TS-296) --------------
 
@@ -410,13 +451,25 @@ class Monitor:
 
     # -- 4. record -------------------------------------------------------
 
+    def usage_shape(self) -> Any:
+        """The API shape(s) of this client's usage for
+        ``normalize_cache_usage`` (SPEC.md §3.1b): ``openai`` for OpenAI and
+        Azure, ``openrouter`` for OpenRouter; any other host is read as
+        ``openai`` and then as ``anthropic`` (OpenAI-compatible proxies in
+        front of Claude report ``cache_creation_input_tokens``)."""
+        if self.provider == PROVIDER_OPENROUTER:
+            return "openrouter"
+        if self.provider == PROVIDER_OPENAI:
+            return "openai"
+        return ("openai", "anthropic")
+
     def finish(self, plan: CallPlan, *, usage: Any, latency_ms: Optional[int],
                error: Optional[BaseException]) -> None:
         """Hand the finished call to the worker (never raises)."""
         try:
             if self._hook is not None and plan.lint_key and isinstance(usage, dict):
                 self._hook.verify(plan.lint_key, usage)
-            usage_dict = usage_from_response(usage)
+            usage_dict = usage_from_provider(self.usage_shape(), usage)
             error_dict = _error_dict(error)
             if error_dict is not None:
                 # A failed call is recorded right away and never routed:
@@ -487,7 +540,10 @@ class Monitor:
             latency_ms=latency_ms, stream=plan.stream, error=error,
             prompt_hash=plan.prompt_hash, vector=vector_written,
             taxonomy_version=self._transport.taxonomy_version(),
+            cache_ttl_policy=plan.cache_ttl_policy,
             cache=self._cache_block(plan),
+            otel=plan.otel,
+            event_id=plan.event_id,
         )
         store.append_event(self.dir, event)
 
@@ -682,6 +738,18 @@ def _class_create(resource: Any) -> Callable:
     raise AttributeError("create")
 
 
+def _parent(plan: Optional[CallPlan]):
+    """Attach the TryAii parent span for the call (see Monitor.langfuse_parent);
+    the token, or None. When it cannot be attached the event records no otel."""
+    otel = plan.otel if plan is not None else None
+    if not otel or otel.get("origin") != _otel.ORIGIN_TRYAII:
+        return None
+    token = _otel.attach_parent(otel["trace_id"], otel["span_id"])
+    if token is None:
+        plan.otel = None
+    return token
+
+
 def _run_sync(monitor: Monitor, original: Callable, plan: Optional[CallPlan],
               args: tuple, kwargs: dict) -> Any:
     if plan is not None:
@@ -690,12 +758,15 @@ def _run_sync(monitor: Monitor, original: Callable, plan: Optional[CallPlan],
         monitor.decide(plan)
         monitor.apply(plan, kwargs)
     t0 = time.perf_counter()
+    token = _parent(plan)
     try:
         response = original(*args, **kwargs)
     except Exception as exc:
         if plan is not None:
             monitor.finish(plan, usage=None, latency_ms=_elapsed_ms(t0), error=exc)
         raise
+    finally:
+        _otel.detach(token)
     if plan is None:
         return response
     if plan.stream:
@@ -723,12 +794,15 @@ async def _run_async(monitor: Monitor, original: Callable, plan: Optional[CallPl
             await loop.run_in_executor(None, monitor.decide, plan)
         monitor.apply(plan, kwargs)
     t0 = time.perf_counter()
+    token = _parent(plan)
     try:
         response = await original(*args, **kwargs)
     except Exception as exc:
         if plan is not None:
             monitor.finish(plan, usage=None, latency_ms=_elapsed_ms(t0), error=exc)
         raise
+    finally:
+        _otel.detach(token)
     if plan is None:
         return response
     if plan.stream:
@@ -769,6 +843,7 @@ def _make_create(monitor: Monitor, original: Callable, is_async: bool,
         per_call = kwargs.pop(PER_CALL_PROCESS_KW, None)
         stream = bool(kwargs.get("stream"))
         plan = monitor.before(kwargs, per_call, stream)
+        monitor.langfuse_parent(plan, target)
         if is_async:
             return _run_async(monitor, target, plan, args, kwargs)
         return _run_sync(monitor, target, plan, args, kwargs)
@@ -889,6 +964,7 @@ def install(*, app: Optional[str] = None, process: Optional[str] = None,
                 per_call = kwargs.pop(PER_CALL_PROCESS_KW, None)
                 stream = bool(kwargs.get("stream"))
                 plan = monitor.before(kwargs, per_call, stream)
+                monitor.langfuse_parent(plan, bound)
                 if is_async:
                     return _run_async(monitor, bound, plan, args, kwargs)
                 return _run_sync(monitor, bound, plan, args, kwargs)

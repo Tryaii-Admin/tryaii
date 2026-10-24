@@ -1,0 +1,3701 @@
+{
+  "suite": "langfuse",
+  "target": "tryaii.monitor.langfuse",
+  "description": "The Langfuse export (SPEC.md \"Langfuse export\"): event -> OTLP span and request body, event -> score payloads, settings -> status line, store line -> exportable. `expected` is generated from the Python reference by scripts/gen-langfuse-fixtures.py; `bodies_sha256` pins the exact request bytes, which the Node SDK must reproduce byte for byte.",
+  "version": "fixture",
+  "cases": [
+    {
+      "name": "own-trace-generation",
+      "description": "No active span at call time: the exporter creates the trace (ids from sha256(event_id)), a generation with model, usage (cached tokens split out) and TryAii's cost; all three scores.",
+      "input": {
+        "kind": "export",
+        "app_id": "app_k1a2b3c4d5e6",
+        "events": [
+          {
+            "schema": "tryaii.monitor.event/1",
+            "event_id": "00000000-0000-4000-8000-000000000001",
+            "ts": "2026-10-24T09:15:30.250Z",
+            "app": "shop",
+            "process": "purchase item",
+            "call_site": {
+              "file": "checkout.py",
+              "line": 42,
+              "function": "purchase_item"
+            },
+            "provider": "openai",
+            "model_requested": "gpt-5.5",
+            "model_resolved": "openai/gpt-5.5",
+            "model_used": "gpt-5.5",
+            "mode": "off",
+            "winner": "openai/gpt-5-mini",
+            "winner_reachable": true,
+            "route_status": "ok",
+            "classification": {
+              "category": "coding",
+              "subcategory": "debugging",
+              "confidence": 0.81
+            },
+            "taxonomy_version": null,
+            "usage": {
+              "prompt_tokens": 812,
+              "completion_tokens": 140,
+              "total_tokens": 952,
+              "cached_tokens": 512,
+              "cache_write_tokens": null,
+              "cache_writes": null
+            },
+            "cache_ttl_policy": null,
+            "est_cost_usd": 0.004213,
+            "est_cost_winner_usd": 0.000731,
+            "est_cost_anchor_usd": 0.004213,
+            "latency_ms": 1432,
+            "stream": false,
+            "error": null,
+            "prompt_hash": "9f2c000000000000000000000000000000000000000000000000000000000000",
+            "vector": true
+          }
+        ]
+      },
+      "expected": {
+        "ids": [
+          {
+            "trace_id": "11e594f481958c10e3015d0bf0447a22",
+            "span_id": "f068a8a647f475df",
+            "parent_span_id": null
+          }
+        ],
+        "tryaii_url": [
+          "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+        ],
+        "traces": {
+          "resourceSpans": [
+            {
+              "resource": {
+                "attributes": [
+                  {
+                    "key": "service.name",
+                    "value": {
+                      "stringValue": "tryaii-monitor"
+                    }
+                  }
+                ]
+              },
+              "scopeSpans": [
+                {
+                  "scope": {
+                    "name": "tryaii.monitor",
+                    "version": "fixture"
+                  },
+                  "spans": [
+                    {
+                      "traceId": "11e594f481958c10e3015d0bf0447a22",
+                      "spanId": "f068a8a647f475df",
+                      "name": "tryaii purchase item",
+                      "kind": 3,
+                      "startTimeUnixNano": "1792833330250000000",
+                      "endTimeUnixNano": "1792833331682000000",
+                      "attributes": [
+                        {
+                          "key": "langfuse.observation.type",
+                          "value": {
+                            "stringValue": "generation"
+                          }
+                        },
+                        {
+                          "key": "langfuse.trace.name",
+                          "value": {
+                            "stringValue": "tryaii purchase item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.trace.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.model.name",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.usage_details",
+                          "value": {
+                            "stringValue": "{\"input\":300,\"output\":140,\"total\":952,\"input_cached_tokens\":512}"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.cost_details",
+                          "value": {
+                            "stringValue": "{\"total\":0.004213}"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.event_id",
+                          "value": {
+                            "stringValue": "00000000-0000-4000-8000-000000000001"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.app",
+                          "value": {
+                            "stringValue": "shop"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.process",
+                          "value": {
+                            "stringValue": "purchase item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.mode",
+                          "value": {
+                            "stringValue": "off"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.provider",
+                          "value": {
+                            "stringValue": "openai"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_requested",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_resolved",
+                          "value": {
+                            "stringValue": "openai/gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_used",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner",
+                          "value": {
+                            "stringValue": "openai/gpt-5-mini"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner_reachable",
+                          "value": {
+                            "stringValue": "true"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.route_status",
+                          "value": {
+                            "stringValue": "ok"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.category",
+                          "value": {
+                            "stringValue": "coding"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.subcategory",
+                          "value": {
+                            "stringValue": "debugging"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.prompt_tokens",
+                          "value": {
+                            "stringValue": "812"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.completion_tokens",
+                          "value": {
+                            "stringValue": "140"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.total_tokens",
+                          "value": {
+                            "stringValue": "952"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.cached_tokens",
+                          "value": {
+                            "stringValue": "512"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_winner_usd",
+                          "value": {
+                            "stringValue": "0.000731"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_anchor_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.latency_ms",
+                          "value": {
+                            "stringValue": "1432"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.stream",
+                          "value": {
+                            "stringValue": "false"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.call_site",
+                          "value": {
+                            "stringValue": "checkout.py:42"
+                          }
+                        }
+                      ],
+                      "status": {
+                        "code": 1
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "scores": [
+          [
+            {
+              "id": "00000000-0000-4000-8000-000000000001-recommended_model",
+              "traceId": "11e594f481958c10e3015d0bf0447a22",
+              "observationId": "f068a8a647f475df",
+              "name": "tryaii.recommended_model",
+              "value": "openai/gpt-5-mini",
+              "dataType": "CATEGORICAL"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000001-est_savings_usd",
+              "traceId": "11e594f481958c10e3015d0bf0447a22",
+              "observationId": "f068a8a647f475df",
+              "name": "tryaii.est_savings_usd",
+              "value": 0.003482,
+              "dataType": "NUMERIC"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000001-route_status",
+              "traceId": "11e594f481958c10e3015d0bf0447a22",
+              "observationId": "f068a8a647f475df",
+              "name": "tryaii.route_status",
+              "value": "ok",
+              "dataType": "CATEGORICAL"
+            }
+          ]
+        ],
+        "bodies_sha256": {
+          "traces": "fefed43474ea439b89e178b5f0520542aeae4a96610b91432384766b5f84db2d",
+          "scores": [
+            [
+              "17f314ddbb7921e18f45f26582f820fe37360e32e94cfba04903001a05d4ff1b",
+              "b68159c33e6e344c979ab1738d56c683608ed5cb4728958b888090587ecc4932",
+              "63e64d0d477e4b57d9abc03fb57d06deddf5dd56c800c636995c4b7d86e44367"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "child-of-active-span",
+      "description": "otel recorded: the TryAii span is a child of that span in that trace, observation type span (no model, usage or cost: Langfuse's own generation carries them). Winner = anchor (stay) and zero savings.",
+      "input": {
+        "kind": "export",
+        "app_id": "app_k1a2b3c4d5e6",
+        "events": [
+          {
+            "schema": "tryaii.monitor.event/1",
+            "event_id": "00000000-0000-4000-8000-000000000002",
+            "ts": "2026-10-24T09:15:30.250Z",
+            "app": "shop",
+            "process": "purchase item",
+            "call_site": {
+              "file": "checkout.py",
+              "line": 42,
+              "function": "purchase_item"
+            },
+            "provider": "openai",
+            "model_requested": "gpt-5.5",
+            "model_resolved": "openai/gpt-5.5",
+            "model_used": "gpt-5.5",
+            "mode": "stable",
+            "winner": "openai/gpt-5.5",
+            "winner_reachable": true,
+            "route_status": "ok",
+            "classification": {
+              "category": "coding",
+              "subcategory": "debugging",
+              "confidence": 0.81
+            },
+            "taxonomy_version": null,
+            "usage": {
+              "prompt_tokens": 812,
+              "completion_tokens": 140,
+              "total_tokens": 952,
+              "cached_tokens": 512,
+              "cache_write_tokens": null,
+              "cache_writes": null
+            },
+            "cache_ttl_policy": null,
+            "est_cost_usd": 0.004213,
+            "est_cost_winner_usd": 0.004213,
+            "est_cost_anchor_usd": 0.004213,
+            "latency_ms": 1432,
+            "stream": false,
+            "error": null,
+            "prompt_hash": "9f2c000000000000000000000000000000000000000000000000000000000000",
+            "vector": true,
+            "otel": {
+              "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+              "span_id": "00f067aa0ba902b7"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "ids": [
+          {
+            "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "span_id": "a45195b6bac5961a",
+            "parent_span_id": "00f067aa0ba902b7"
+          }
+        ],
+        "tryaii_url": [
+          "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+        ],
+        "traces": {
+          "resourceSpans": [
+            {
+              "resource": {
+                "attributes": [
+                  {
+                    "key": "service.name",
+                    "value": {
+                      "stringValue": "tryaii-monitor"
+                    }
+                  }
+                ]
+              },
+              "scopeSpans": [
+                {
+                  "scope": {
+                    "name": "tryaii.monitor",
+                    "version": "fixture"
+                  },
+                  "spans": [
+                    {
+                      "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                      "spanId": "a45195b6bac5961a",
+                      "parentSpanId": "00f067aa0ba902b7",
+                      "name": "tryaii purchase item",
+                      "kind": 3,
+                      "startTimeUnixNano": "1792833330250000000",
+                      "endTimeUnixNano": "1792833331682000000",
+                      "attributes": [
+                        {
+                          "key": "langfuse.observation.type",
+                          "value": {
+                            "stringValue": "span"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.event_id",
+                          "value": {
+                            "stringValue": "00000000-0000-4000-8000-000000000002"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.app",
+                          "value": {
+                            "stringValue": "shop"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.process",
+                          "value": {
+                            "stringValue": "purchase item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.mode",
+                          "value": {
+                            "stringValue": "stable"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.provider",
+                          "value": {
+                            "stringValue": "openai"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_requested",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_resolved",
+                          "value": {
+                            "stringValue": "openai/gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_used",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner",
+                          "value": {
+                            "stringValue": "openai/gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner_reachable",
+                          "value": {
+                            "stringValue": "true"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.route_status",
+                          "value": {
+                            "stringValue": "ok"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.category",
+                          "value": {
+                            "stringValue": "coding"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.subcategory",
+                          "value": {
+                            "stringValue": "debugging"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.prompt_tokens",
+                          "value": {
+                            "stringValue": "812"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.completion_tokens",
+                          "value": {
+                            "stringValue": "140"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.total_tokens",
+                          "value": {
+                            "stringValue": "952"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.cached_tokens",
+                          "value": {
+                            "stringValue": "512"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_winner_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_anchor_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.latency_ms",
+                          "value": {
+                            "stringValue": "1432"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.stream",
+                          "value": {
+                            "stringValue": "false"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.call_site",
+                          "value": {
+                            "stringValue": "checkout.py:42"
+                          }
+                        }
+                      ],
+                      "status": {
+                        "code": 1
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "scores": [
+          [
+            {
+              "id": "00000000-0000-4000-8000-000000000002-recommended_model",
+              "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+              "observationId": "a45195b6bac5961a",
+              "name": "tryaii.recommended_model",
+              "value": "openai/gpt-5.5",
+              "dataType": "CATEGORICAL"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000002-est_savings_usd",
+              "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+              "observationId": "a45195b6bac5961a",
+              "name": "tryaii.est_savings_usd",
+              "value": 0,
+              "dataType": "NUMERIC"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000002-route_status",
+              "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+              "observationId": "a45195b6bac5961a",
+              "name": "tryaii.route_status",
+              "value": "ok",
+              "dataType": "CATEGORICAL"
+            }
+          ]
+        ],
+        "bodies_sha256": {
+          "traces": "7972d25387a23d930379a18b456a20a66babe9be015c1bc4a8d9660fbec32bee",
+          "scores": [
+            [
+              "dbbaba8013e5ea983b2b582eedc7a8e2cbf3ae45713e876f9d8df8aca31d9f6d",
+              "45798abd0e24da175f973d7fb3906bb78cb3334220df0c20ae5d89081344b3da",
+              "700997d91e30354b81bb5a75eb4d9f056f6a3a5b4cef6004949ad21a19d04549"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "error-no-recommendation",
+      "description": "A failed call: no usage, no costs, no winner (route skipped). Level ERROR with the error class and status; only the route_status score. Unknown app id: tryaii_url falls back to the monitor overview.",
+      "input": {
+        "kind": "export",
+        "app_id": null,
+        "events": [
+          {
+            "schema": "tryaii.monitor.event/1",
+            "event_id": "00000000-0000-4000-8000-000000000003",
+            "ts": "2026-10-24T09:15:30.250Z",
+            "app": "shop",
+            "process": "purchase item",
+            "call_site": {
+              "file": "checkout.py",
+              "line": 42,
+              "function": "purchase_item"
+            },
+            "provider": "openai",
+            "model_requested": "gpt-5.5",
+            "model_resolved": "openai/gpt-5.5",
+            "model_used": "gpt-5.5",
+            "mode": "off",
+            "winner": null,
+            "winner_reachable": false,
+            "route_status": "skipped",
+            "classification": null,
+            "taxonomy_version": null,
+            "usage": null,
+            "cache_ttl_policy": null,
+            "est_cost_usd": null,
+            "est_cost_winner_usd": null,
+            "est_cost_anchor_usd": null,
+            "latency_ms": 120,
+            "stream": false,
+            "error": {
+              "status": 429,
+              "class": "RateLimitError"
+            },
+            "prompt_hash": "9f2c000000000000000000000000000000000000000000000000000000000000",
+            "vector": false
+          }
+        ]
+      },
+      "expected": {
+        "ids": [
+          {
+            "trace_id": "993224b4fe85990df64db926ca5c0346",
+            "span_id": "75eb037399e2fcef",
+            "parent_span_id": null
+          }
+        ],
+        "tryaii_url": [
+          "https://tryaii.com/dashboard/monitor"
+        ],
+        "traces": {
+          "resourceSpans": [
+            {
+              "resource": {
+                "attributes": [
+                  {
+                    "key": "service.name",
+                    "value": {
+                      "stringValue": "tryaii-monitor"
+                    }
+                  }
+                ]
+              },
+              "scopeSpans": [
+                {
+                  "scope": {
+                    "name": "tryaii.monitor",
+                    "version": "fixture"
+                  },
+                  "spans": [
+                    {
+                      "traceId": "993224b4fe85990df64db926ca5c0346",
+                      "spanId": "75eb037399e2fcef",
+                      "name": "tryaii purchase item",
+                      "kind": 3,
+                      "startTimeUnixNano": "1792833330250000000",
+                      "endTimeUnixNano": "1792833330370000000",
+                      "attributes": [
+                        {
+                          "key": "langfuse.observation.type",
+                          "value": {
+                            "stringValue": "generation"
+                          }
+                        },
+                        {
+                          "key": "langfuse.trace.name",
+                          "value": {
+                            "stringValue": "tryaii purchase item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.trace.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.model.name",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.level",
+                          "value": {
+                            "stringValue": "ERROR"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.status_message",
+                          "value": {
+                            "stringValue": "RateLimitError (HTTP 429)"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.event_id",
+                          "value": {
+                            "stringValue": "00000000-0000-4000-8000-000000000003"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.app",
+                          "value": {
+                            "stringValue": "shop"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.process",
+                          "value": {
+                            "stringValue": "purchase item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.mode",
+                          "value": {
+                            "stringValue": "off"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.provider",
+                          "value": {
+                            "stringValue": "openai"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_requested",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_resolved",
+                          "value": {
+                            "stringValue": "openai/gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_used",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner_reachable",
+                          "value": {
+                            "stringValue": "false"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.route_status",
+                          "value": {
+                            "stringValue": "skipped"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.latency_ms",
+                          "value": {
+                            "stringValue": "120"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.stream",
+                          "value": {
+                            "stringValue": "false"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.call_site",
+                          "value": {
+                            "stringValue": "checkout.py:42"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.error_class",
+                          "value": {
+                            "stringValue": "RateLimitError"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.error_status",
+                          "value": {
+                            "stringValue": "429"
+                          }
+                        }
+                      ],
+                      "status": {
+                        "code": 2
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "scores": [
+          [
+            {
+              "id": "00000000-0000-4000-8000-000000000003-route_status",
+              "traceId": "993224b4fe85990df64db926ca5c0346",
+              "observationId": "75eb037399e2fcef",
+              "name": "tryaii.route_status",
+              "value": "skipped",
+              "dataType": "CATEGORICAL"
+            }
+          ]
+        ],
+        "bodies_sha256": {
+          "traces": "11fdb59c4d46d3077cab9a6af01a9a70dc53b40dae8040707b44c793e5b7e685",
+          "scores": [
+            [
+              "938164d7dcefeeb24783aa951f34120caa9574e8f3a961090079c0b5d001180b"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "reasoning-stream-absolute-path",
+      "description": "usage.reasoning_tokens (API v1.7) split from the output; a stream; an absolute Windows call_site path reduced to its base name; a process name with a space and non-ASCII text percent-encoded in tryaii_url.",
+      "input": {
+        "kind": "export",
+        "app_id": "app_k1a2b3c4d5e6",
+        "events": [
+          {
+            "schema": "tryaii.monitor.event/1",
+            "event_id": "00000000-0000-4000-8000-000000000004",
+            "ts": "2026-10-24T09:15:30.250Z",
+            "app": "shop",
+            "process": "résumé check ✓",
+            "call_site": {
+              "file": "C:\\Users\\dev\\shop\\agents\\review.py",
+              "line": 7,
+              "function": null
+            },
+            "provider": "openai",
+            "model_requested": "o4-mini",
+            "model_resolved": "openai/o4-mini",
+            "model_used": "o4-mini",
+            "mode": "off",
+            "winner": "openai/gpt-5-nano",
+            "winner_reachable": true,
+            "route_status": "ok",
+            "classification": {
+              "category": "coding",
+              "subcategory": "debugging",
+              "confidence": 0.81
+            },
+            "taxonomy_version": null,
+            "usage": {
+              "prompt_tokens": 300,
+              "completion_tokens": 900,
+              "total_tokens": 1200,
+              "reasoning_tokens": 640,
+              "cached_tokens": null,
+              "cache_write_tokens": null,
+              "cache_writes": null
+            },
+            "cache_ttl_policy": null,
+            "est_cost_usd": 0.004213,
+            "est_cost_winner_usd": 0.000731,
+            "est_cost_anchor_usd": 0.004213,
+            "latency_ms": 1432,
+            "stream": true,
+            "error": null,
+            "prompt_hash": "9f2c000000000000000000000000000000000000000000000000000000000000",
+            "vector": true
+          }
+        ]
+      },
+      "expected": {
+        "ids": [
+          {
+            "trace_id": "008bf60b9309e6141ae7eb98acb2a35d",
+            "span_id": "7b6c84c27d397356",
+            "parent_span_id": null
+          }
+        ],
+        "tryaii_url": [
+          "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/r%C3%A9sum%C3%A9%20check%20%E2%9C%93"
+        ],
+        "traces": {
+          "resourceSpans": [
+            {
+              "resource": {
+                "attributes": [
+                  {
+                    "key": "service.name",
+                    "value": {
+                      "stringValue": "tryaii-monitor"
+                    }
+                  }
+                ]
+              },
+              "scopeSpans": [
+                {
+                  "scope": {
+                    "name": "tryaii.monitor",
+                    "version": "fixture"
+                  },
+                  "spans": [
+                    {
+                      "traceId": "008bf60b9309e6141ae7eb98acb2a35d",
+                      "spanId": "7b6c84c27d397356",
+                      "name": "tryaii résumé check ✓",
+                      "kind": 3,
+                      "startTimeUnixNano": "1792833330250000000",
+                      "endTimeUnixNano": "1792833331682000000",
+                      "attributes": [
+                        {
+                          "key": "langfuse.observation.type",
+                          "value": {
+                            "stringValue": "generation"
+                          }
+                        },
+                        {
+                          "key": "langfuse.trace.name",
+                          "value": {
+                            "stringValue": "tryaii résumé check ✓"
+                          }
+                        },
+                        {
+                          "key": "langfuse.trace.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/r%C3%A9sum%C3%A9%20check%20%E2%9C%93"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.model.name",
+                          "value": {
+                            "stringValue": "o4-mini"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.usage_details",
+                          "value": {
+                            "stringValue": "{\"input\":300,\"output\":260,\"total\":1200,\"output_reasoning_tokens\":640}"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.cost_details",
+                          "value": {
+                            "stringValue": "{\"total\":0.004213}"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/r%C3%A9sum%C3%A9%20check%20%E2%9C%93"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.event_id",
+                          "value": {
+                            "stringValue": "00000000-0000-4000-8000-000000000004"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.app",
+                          "value": {
+                            "stringValue": "shop"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.process",
+                          "value": {
+                            "stringValue": "résumé check ✓"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.mode",
+                          "value": {
+                            "stringValue": "off"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.provider",
+                          "value": {
+                            "stringValue": "openai"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_requested",
+                          "value": {
+                            "stringValue": "o4-mini"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_resolved",
+                          "value": {
+                            "stringValue": "openai/o4-mini"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_used",
+                          "value": {
+                            "stringValue": "o4-mini"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner",
+                          "value": {
+                            "stringValue": "openai/gpt-5-nano"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner_reachable",
+                          "value": {
+                            "stringValue": "true"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.route_status",
+                          "value": {
+                            "stringValue": "ok"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.category",
+                          "value": {
+                            "stringValue": "coding"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.subcategory",
+                          "value": {
+                            "stringValue": "debugging"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.prompt_tokens",
+                          "value": {
+                            "stringValue": "300"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.completion_tokens",
+                          "value": {
+                            "stringValue": "900"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.total_tokens",
+                          "value": {
+                            "stringValue": "1200"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.reasoning_tokens",
+                          "value": {
+                            "stringValue": "640"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_winner_usd",
+                          "value": {
+                            "stringValue": "0.000731"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_anchor_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.latency_ms",
+                          "value": {
+                            "stringValue": "1432"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.stream",
+                          "value": {
+                            "stringValue": "true"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.call_site",
+                          "value": {
+                            "stringValue": "review.py:7"
+                          }
+                        }
+                      ],
+                      "status": {
+                        "code": 1
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "scores": [
+          [
+            {
+              "id": "00000000-0000-4000-8000-000000000004-recommended_model",
+              "traceId": "008bf60b9309e6141ae7eb98acb2a35d",
+              "observationId": "7b6c84c27d397356",
+              "name": "tryaii.recommended_model",
+              "value": "openai/gpt-5-nano",
+              "dataType": "CATEGORICAL"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000004-est_savings_usd",
+              "traceId": "008bf60b9309e6141ae7eb98acb2a35d",
+              "observationId": "7b6c84c27d397356",
+              "name": "tryaii.est_savings_usd",
+              "value": 0.003482,
+              "dataType": "NUMERIC"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000004-route_status",
+              "traceId": "008bf60b9309e6141ae7eb98acb2a35d",
+              "observationId": "7b6c84c27d397356",
+              "name": "tryaii.route_status",
+              "value": "ok",
+              "dataType": "CATEGORICAL"
+            }
+          ]
+        ],
+        "bodies_sha256": {
+          "traces": "d0274ead3b7ec47b404852a7b516124b1645a8fd169fea6d6c982495d32808df",
+          "scores": [
+            [
+              "2f59f3708cc80322137f4fac2ac584fd2dabf87adeab447fad78f243676fdfc9",
+              "1781813944ace48973f55f1aa420dfff0852e876b3efd52a53926672d1fec0d3",
+              "a8c5ead66486118338f3a22af15d50208725867879327f7f5bca2040e6d06d76"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid-otel-ignored",
+      "description": "An otel value that is not a valid span (all-zero span id; upper-case trace id) is ignored: the exporter creates its own trace.",
+      "input": {
+        "kind": "export",
+        "app_id": "app_k1a2b3c4d5e6",
+        "events": [
+          {
+            "schema": "tryaii.monitor.event/1",
+            "event_id": "00000000-0000-4000-8000-000000000005",
+            "ts": "2026-10-24T09:15:30.250Z",
+            "app": "shop",
+            "process": "purchase item",
+            "call_site": {
+              "file": "checkout.py",
+              "line": 42,
+              "function": "purchase_item"
+            },
+            "provider": "openai",
+            "model_requested": "gpt-5.5",
+            "model_resolved": "openai/gpt-5.5",
+            "model_used": "gpt-5.5",
+            "mode": "off",
+            "winner": "openai/gpt-5-mini",
+            "winner_reachable": true,
+            "route_status": "ok",
+            "classification": {
+              "category": "coding",
+              "subcategory": "debugging",
+              "confidence": 0.81
+            },
+            "taxonomy_version": null,
+            "usage": {
+              "prompt_tokens": 812,
+              "completion_tokens": 140,
+              "total_tokens": 952,
+              "cached_tokens": 512,
+              "cache_write_tokens": null,
+              "cache_writes": null
+            },
+            "cache_ttl_policy": null,
+            "est_cost_usd": 0.004213,
+            "est_cost_winner_usd": 0.000731,
+            "est_cost_anchor_usd": 0.004213,
+            "latency_ms": 1432,
+            "stream": false,
+            "error": null,
+            "prompt_hash": "9f2c000000000000000000000000000000000000000000000000000000000000",
+            "vector": true,
+            "otel": {
+              "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+              "span_id": "0000000000000000"
+            }
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "event_id": "00000000-0000-4000-8000-000000000006",
+            "ts": "2026-10-24T09:15:30.250Z",
+            "app": "shop",
+            "process": "purchase item",
+            "call_site": {
+              "file": "checkout.py",
+              "line": 42,
+              "function": "purchase_item"
+            },
+            "provider": "openai",
+            "model_requested": "gpt-5.5",
+            "model_resolved": "openai/gpt-5.5",
+            "model_used": "gpt-5.5",
+            "mode": "off",
+            "winner": "openai/gpt-5-mini",
+            "winner_reachable": true,
+            "route_status": "ok",
+            "classification": {
+              "category": "coding",
+              "subcategory": "debugging",
+              "confidence": 0.81
+            },
+            "taxonomy_version": null,
+            "usage": {
+              "prompt_tokens": 812,
+              "completion_tokens": 140,
+              "total_tokens": 952,
+              "cached_tokens": 512,
+              "cache_write_tokens": null,
+              "cache_writes": null
+            },
+            "cache_ttl_policy": null,
+            "est_cost_usd": 0.004213,
+            "est_cost_winner_usd": 0.000731,
+            "est_cost_anchor_usd": 0.004213,
+            "latency_ms": 1432,
+            "stream": false,
+            "error": null,
+            "prompt_hash": "9f2c000000000000000000000000000000000000000000000000000000000000",
+            "vector": true,
+            "otel": {
+              "trace_id": "4BF92F3577B34DA6A3CE929D0E0E4736",
+              "span_id": "00f067aa0ba902b7"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "ids": [
+          {
+            "trace_id": "3303f939347e9e00bf721ce8f25c84ea",
+            "span_id": "126b9f2db0421cfb",
+            "parent_span_id": null
+          },
+          {
+            "trace_id": "a8353ed0bde97e7845f0996d60267ea5",
+            "span_id": "4296fb327cae7ee7",
+            "parent_span_id": null
+          }
+        ],
+        "tryaii_url": [
+          "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item",
+          "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+        ],
+        "traces": {
+          "resourceSpans": [
+            {
+              "resource": {
+                "attributes": [
+                  {
+                    "key": "service.name",
+                    "value": {
+                      "stringValue": "tryaii-monitor"
+                    }
+                  }
+                ]
+              },
+              "scopeSpans": [
+                {
+                  "scope": {
+                    "name": "tryaii.monitor",
+                    "version": "fixture"
+                  },
+                  "spans": [
+                    {
+                      "traceId": "3303f939347e9e00bf721ce8f25c84ea",
+                      "spanId": "126b9f2db0421cfb",
+                      "name": "tryaii purchase item",
+                      "kind": 3,
+                      "startTimeUnixNano": "1792833330250000000",
+                      "endTimeUnixNano": "1792833331682000000",
+                      "attributes": [
+                        {
+                          "key": "langfuse.observation.type",
+                          "value": {
+                            "stringValue": "generation"
+                          }
+                        },
+                        {
+                          "key": "langfuse.trace.name",
+                          "value": {
+                            "stringValue": "tryaii purchase item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.trace.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.model.name",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.usage_details",
+                          "value": {
+                            "stringValue": "{\"input\":300,\"output\":140,\"total\":952,\"input_cached_tokens\":512}"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.cost_details",
+                          "value": {
+                            "stringValue": "{\"total\":0.004213}"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.event_id",
+                          "value": {
+                            "stringValue": "00000000-0000-4000-8000-000000000005"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.app",
+                          "value": {
+                            "stringValue": "shop"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.process",
+                          "value": {
+                            "stringValue": "purchase item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.mode",
+                          "value": {
+                            "stringValue": "off"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.provider",
+                          "value": {
+                            "stringValue": "openai"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_requested",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_resolved",
+                          "value": {
+                            "stringValue": "openai/gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_used",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner",
+                          "value": {
+                            "stringValue": "openai/gpt-5-mini"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner_reachable",
+                          "value": {
+                            "stringValue": "true"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.route_status",
+                          "value": {
+                            "stringValue": "ok"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.category",
+                          "value": {
+                            "stringValue": "coding"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.subcategory",
+                          "value": {
+                            "stringValue": "debugging"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.prompt_tokens",
+                          "value": {
+                            "stringValue": "812"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.completion_tokens",
+                          "value": {
+                            "stringValue": "140"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.total_tokens",
+                          "value": {
+                            "stringValue": "952"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.cached_tokens",
+                          "value": {
+                            "stringValue": "512"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_winner_usd",
+                          "value": {
+                            "stringValue": "0.000731"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_anchor_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.latency_ms",
+                          "value": {
+                            "stringValue": "1432"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.stream",
+                          "value": {
+                            "stringValue": "false"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.call_site",
+                          "value": {
+                            "stringValue": "checkout.py:42"
+                          }
+                        }
+                      ],
+                      "status": {
+                        "code": 1
+                      }
+                    },
+                    {
+                      "traceId": "a8353ed0bde97e7845f0996d60267ea5",
+                      "spanId": "4296fb327cae7ee7",
+                      "name": "tryaii purchase item",
+                      "kind": 3,
+                      "startTimeUnixNano": "1792833330250000000",
+                      "endTimeUnixNano": "1792833331682000000",
+                      "attributes": [
+                        {
+                          "key": "langfuse.observation.type",
+                          "value": {
+                            "stringValue": "generation"
+                          }
+                        },
+                        {
+                          "key": "langfuse.trace.name",
+                          "value": {
+                            "stringValue": "tryaii purchase item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.trace.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.model.name",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.usage_details",
+                          "value": {
+                            "stringValue": "{\"input\":300,\"output\":140,\"total\":952,\"input_cached_tokens\":512}"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.cost_details",
+                          "value": {
+                            "stringValue": "{\"total\":0.004213}"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.event_id",
+                          "value": {
+                            "stringValue": "00000000-0000-4000-8000-000000000006"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.app",
+                          "value": {
+                            "stringValue": "shop"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.process",
+                          "value": {
+                            "stringValue": "purchase item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.mode",
+                          "value": {
+                            "stringValue": "off"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.provider",
+                          "value": {
+                            "stringValue": "openai"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_requested",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_resolved",
+                          "value": {
+                            "stringValue": "openai/gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_used",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner",
+                          "value": {
+                            "stringValue": "openai/gpt-5-mini"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner_reachable",
+                          "value": {
+                            "stringValue": "true"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.route_status",
+                          "value": {
+                            "stringValue": "ok"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.category",
+                          "value": {
+                            "stringValue": "coding"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.subcategory",
+                          "value": {
+                            "stringValue": "debugging"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.prompt_tokens",
+                          "value": {
+                            "stringValue": "812"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.completion_tokens",
+                          "value": {
+                            "stringValue": "140"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.total_tokens",
+                          "value": {
+                            "stringValue": "952"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.cached_tokens",
+                          "value": {
+                            "stringValue": "512"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_winner_usd",
+                          "value": {
+                            "stringValue": "0.000731"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_anchor_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.latency_ms",
+                          "value": {
+                            "stringValue": "1432"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.stream",
+                          "value": {
+                            "stringValue": "false"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.call_site",
+                          "value": {
+                            "stringValue": "checkout.py:42"
+                          }
+                        }
+                      ],
+                      "status": {
+                        "code": 1
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "scores": [
+          [
+            {
+              "id": "00000000-0000-4000-8000-000000000005-recommended_model",
+              "traceId": "3303f939347e9e00bf721ce8f25c84ea",
+              "observationId": "126b9f2db0421cfb",
+              "name": "tryaii.recommended_model",
+              "value": "openai/gpt-5-mini",
+              "dataType": "CATEGORICAL"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000005-est_savings_usd",
+              "traceId": "3303f939347e9e00bf721ce8f25c84ea",
+              "observationId": "126b9f2db0421cfb",
+              "name": "tryaii.est_savings_usd",
+              "value": 0.003482,
+              "dataType": "NUMERIC"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000005-route_status",
+              "traceId": "3303f939347e9e00bf721ce8f25c84ea",
+              "observationId": "126b9f2db0421cfb",
+              "name": "tryaii.route_status",
+              "value": "ok",
+              "dataType": "CATEGORICAL"
+            }
+          ],
+          [
+            {
+              "id": "00000000-0000-4000-8000-000000000006-recommended_model",
+              "traceId": "a8353ed0bde97e7845f0996d60267ea5",
+              "observationId": "4296fb327cae7ee7",
+              "name": "tryaii.recommended_model",
+              "value": "openai/gpt-5-mini",
+              "dataType": "CATEGORICAL"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000006-est_savings_usd",
+              "traceId": "a8353ed0bde97e7845f0996d60267ea5",
+              "observationId": "4296fb327cae7ee7",
+              "name": "tryaii.est_savings_usd",
+              "value": 0.003482,
+              "dataType": "NUMERIC"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000006-route_status",
+              "traceId": "a8353ed0bde97e7845f0996d60267ea5",
+              "observationId": "4296fb327cae7ee7",
+              "name": "tryaii.route_status",
+              "value": "ok",
+              "dataType": "CATEGORICAL"
+            }
+          ]
+        ],
+        "bodies_sha256": {
+          "traces": "ba6f9d1c671abf77f4f1ec96bdab33a2a24bfbf991345dec22356ad366f3dc33",
+          "scores": [
+            [
+              "a9f442b66949302dbd08adde10f87e8210b74c8faa7f0c8dbfcc1af8be12cdd8",
+              "781072ba938df454dc9232c9e159239fe35f90a71c525afc62d18eca5bbf67b6",
+              "45d5fa40b56f0494a58ce30c1b3b14ad1699fd792aa1b65097a07375b62878f7"
+            ],
+            [
+              "9a4991bb93c664e1d488a65078fa2527ff9e08e735377a9419e7e07aa71b65d0",
+              "8ba60347c75da7d4bfb25bd37db22d746e0ec64395ef9a995fda04e7840384e1",
+              "6a25b86a6627084423736bf74dc1a8cd89c57cf051e4e1c193560cda5f88e12b"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "tiny-money-and-null-latency",
+      "description": "Money below 1e-4 keeps the Node number format in every JSON string (0.000001, not 1e-06); no latency: end time = start time; whole-second ts; mode dynamic after a swap.",
+      "input": {
+        "kind": "export",
+        "app_id": "app_k1a2b3c4d5e6",
+        "events": [
+          {
+            "schema": "tryaii.monitor.event/1",
+            "event_id": "00000000-0000-4000-8000-000000000007",
+            "ts": "2026-10-24T09:15:30Z",
+            "app": "shop",
+            "process": "purchase item",
+            "call_site": {
+              "file": "checkout.py",
+              "line": 42,
+              "function": "purchase_item"
+            },
+            "provider": "openai",
+            "model_requested": "gpt-5.5",
+            "model_resolved": "openai/gpt-5.5",
+            "model_used": "gpt-5-nano",
+            "mode": "dynamic",
+            "winner": "openai/gpt-5-mini",
+            "winner_reachable": true,
+            "route_status": "ok",
+            "classification": {
+              "category": "coding",
+              "subcategory": "debugging",
+              "confidence": 0.81
+            },
+            "taxonomy_version": null,
+            "usage": {
+              "prompt_tokens": 10,
+              "completion_tokens": 2,
+              "total_tokens": 12,
+              "cached_tokens": 0,
+              "cache_write_tokens": null,
+              "cache_writes": null
+            },
+            "cache_ttl_policy": null,
+            "est_cost_usd": 0.000002,
+            "est_cost_winner_usd": 0.000001,
+            "est_cost_anchor_usd": 0.00004,
+            "latency_ms": null,
+            "stream": false,
+            "error": null,
+            "prompt_hash": "9f2c000000000000000000000000000000000000000000000000000000000000",
+            "vector": true
+          }
+        ]
+      },
+      "expected": {
+        "ids": [
+          {
+            "trace_id": "6b7be92641aec20b00f9c40280433e0a",
+            "span_id": "fcf9a1f7a512d4cc",
+            "parent_span_id": null
+          }
+        ],
+        "tryaii_url": [
+          "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+        ],
+        "traces": {
+          "resourceSpans": [
+            {
+              "resource": {
+                "attributes": [
+                  {
+                    "key": "service.name",
+                    "value": {
+                      "stringValue": "tryaii-monitor"
+                    }
+                  }
+                ]
+              },
+              "scopeSpans": [
+                {
+                  "scope": {
+                    "name": "tryaii.monitor",
+                    "version": "fixture"
+                  },
+                  "spans": [
+                    {
+                      "traceId": "6b7be92641aec20b00f9c40280433e0a",
+                      "spanId": "fcf9a1f7a512d4cc",
+                      "name": "tryaii purchase item",
+                      "kind": 3,
+                      "startTimeUnixNano": "1792833330000000000",
+                      "endTimeUnixNano": "1792833330000000000",
+                      "attributes": [
+                        {
+                          "key": "langfuse.observation.type",
+                          "value": {
+                            "stringValue": "generation"
+                          }
+                        },
+                        {
+                          "key": "langfuse.trace.name",
+                          "value": {
+                            "stringValue": "tryaii purchase item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.trace.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.model.name",
+                          "value": {
+                            "stringValue": "gpt-5-nano"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.usage_details",
+                          "value": {
+                            "stringValue": "{\"input\":10,\"output\":2,\"total\":12,\"input_cached_tokens\":0}"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.cost_details",
+                          "value": {
+                            "stringValue": "{\"total\":0.000002}"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.event_id",
+                          "value": {
+                            "stringValue": "00000000-0000-4000-8000-000000000007"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.app",
+                          "value": {
+                            "stringValue": "shop"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.process",
+                          "value": {
+                            "stringValue": "purchase item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.mode",
+                          "value": {
+                            "stringValue": "dynamic"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.provider",
+                          "value": {
+                            "stringValue": "openai"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_requested",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_resolved",
+                          "value": {
+                            "stringValue": "openai/gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_used",
+                          "value": {
+                            "stringValue": "gpt-5-nano"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner",
+                          "value": {
+                            "stringValue": "openai/gpt-5-mini"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner_reachable",
+                          "value": {
+                            "stringValue": "true"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.route_status",
+                          "value": {
+                            "stringValue": "ok"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.category",
+                          "value": {
+                            "stringValue": "coding"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.subcategory",
+                          "value": {
+                            "stringValue": "debugging"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.prompt_tokens",
+                          "value": {
+                            "stringValue": "10"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.completion_tokens",
+                          "value": {
+                            "stringValue": "2"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.total_tokens",
+                          "value": {
+                            "stringValue": "12"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.cached_tokens",
+                          "value": {
+                            "stringValue": "0"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_usd",
+                          "value": {
+                            "stringValue": "0.000002"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_winner_usd",
+                          "value": {
+                            "stringValue": "0.000001"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_anchor_usd",
+                          "value": {
+                            "stringValue": "0.00004"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.stream",
+                          "value": {
+                            "stringValue": "false"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.call_site",
+                          "value": {
+                            "stringValue": "checkout.py:42"
+                          }
+                        }
+                      ],
+                      "status": {
+                        "code": 1
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "scores": [
+          [
+            {
+              "id": "00000000-0000-4000-8000-000000000007-recommended_model",
+              "traceId": "6b7be92641aec20b00f9c40280433e0a",
+              "observationId": "fcf9a1f7a512d4cc",
+              "name": "tryaii.recommended_model",
+              "value": "openai/gpt-5-mini",
+              "dataType": "CATEGORICAL"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000007-est_savings_usd",
+              "traceId": "6b7be92641aec20b00f9c40280433e0a",
+              "observationId": "fcf9a1f7a512d4cc",
+              "name": "tryaii.est_savings_usd",
+              "value": 0.000001,
+              "dataType": "NUMERIC"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000007-route_status",
+              "traceId": "6b7be92641aec20b00f9c40280433e0a",
+              "observationId": "fcf9a1f7a512d4cc",
+              "name": "tryaii.route_status",
+              "value": "ok",
+              "dataType": "CATEGORICAL"
+            }
+          ]
+        ],
+        "bodies_sha256": {
+          "traces": "8a54e06778c78bed4aa3b1d70ab40591272b9b36a514fb25e2751a24a50ff0f4",
+          "scores": [
+            [
+              "c13463080e35a18024e54024e495cb7586f8260d8c653286db6d7f6b708fdc1a",
+              "d71535a9b80773121ec275dc099f935ed081c7c846b27475207c77cbdacf399b",
+              "a1ca09191d52b5a8429782dd9ca5d9bde741f5b9374cae037a99f421d63dd875"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "tryaii-parent-for-langfuse",
+      "description": "Langfuse's OpenAI integration and no active span: the wrapper made the TryAii span the active parent (otel.origin = tryaii, ids from sha256(event_id)). The TryAii span is the trace root with exactly those ids, observation type span (Langfuse's generation, its child, carries model, usage and cost), trace name and tryaii_url set.",
+      "input": {
+        "kind": "export",
+        "app_id": "app_k1a2b3c4d5e6",
+        "events": [
+          {
+            "schema": "tryaii.monitor.event/1",
+            "event_id": "00000000-0000-4000-8000-00000000000a",
+            "ts": "2026-10-24T09:15:30.250Z",
+            "app": "shop",
+            "process": "purchase item",
+            "call_site": {
+              "file": "checkout.py",
+              "line": 42,
+              "function": "purchase_item"
+            },
+            "provider": "openai",
+            "model_requested": "gpt-5.5",
+            "model_resolved": "openai/gpt-5.5",
+            "model_used": "gpt-5.5",
+            "mode": "off",
+            "winner": "openai/gpt-5-mini",
+            "winner_reachable": true,
+            "route_status": "ok",
+            "classification": {
+              "category": "coding",
+              "subcategory": "debugging",
+              "confidence": 0.81
+            },
+            "taxonomy_version": null,
+            "usage": {
+              "prompt_tokens": 812,
+              "completion_tokens": 140,
+              "total_tokens": 952,
+              "cached_tokens": 512,
+              "cache_write_tokens": null,
+              "cache_writes": null
+            },
+            "cache_ttl_policy": null,
+            "est_cost_usd": 0.004213,
+            "est_cost_winner_usd": 0.000731,
+            "est_cost_anchor_usd": 0.004213,
+            "latency_ms": 1432,
+            "stream": false,
+            "error": null,
+            "prompt_hash": "9f2c000000000000000000000000000000000000000000000000000000000000",
+            "vector": true,
+            "otel": {
+              "trace_id": "1ad35d608dd7b52a115ee45d1330f5f6",
+              "span_id": "9327c1a3bd6dd5cc",
+              "origin": "tryaii"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "ids": [
+          {
+            "trace_id": "1ad35d608dd7b52a115ee45d1330f5f6",
+            "span_id": "9327c1a3bd6dd5cc",
+            "parent_span_id": null
+          }
+        ],
+        "tryaii_url": [
+          "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+        ],
+        "traces": {
+          "resourceSpans": [
+            {
+              "resource": {
+                "attributes": [
+                  {
+                    "key": "service.name",
+                    "value": {
+                      "stringValue": "tryaii-monitor"
+                    }
+                  }
+                ]
+              },
+              "scopeSpans": [
+                {
+                  "scope": {
+                    "name": "tryaii.monitor",
+                    "version": "fixture"
+                  },
+                  "spans": [
+                    {
+                      "traceId": "1ad35d608dd7b52a115ee45d1330f5f6",
+                      "spanId": "9327c1a3bd6dd5cc",
+                      "name": "tryaii purchase item",
+                      "kind": 3,
+                      "startTimeUnixNano": "1792833330250000000",
+                      "endTimeUnixNano": "1792833331682000000",
+                      "attributes": [
+                        {
+                          "key": "langfuse.observation.type",
+                          "value": {
+                            "stringValue": "span"
+                          }
+                        },
+                        {
+                          "key": "langfuse.trace.name",
+                          "value": {
+                            "stringValue": "tryaii purchase item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.trace.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.event_id",
+                          "value": {
+                            "stringValue": "00000000-0000-4000-8000-00000000000a"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.app",
+                          "value": {
+                            "stringValue": "shop"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.process",
+                          "value": {
+                            "stringValue": "purchase item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.mode",
+                          "value": {
+                            "stringValue": "off"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.provider",
+                          "value": {
+                            "stringValue": "openai"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_requested",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_resolved",
+                          "value": {
+                            "stringValue": "openai/gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_used",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner",
+                          "value": {
+                            "stringValue": "openai/gpt-5-mini"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner_reachable",
+                          "value": {
+                            "stringValue": "true"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.route_status",
+                          "value": {
+                            "stringValue": "ok"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.category",
+                          "value": {
+                            "stringValue": "coding"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.subcategory",
+                          "value": {
+                            "stringValue": "debugging"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.prompt_tokens",
+                          "value": {
+                            "stringValue": "812"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.completion_tokens",
+                          "value": {
+                            "stringValue": "140"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.total_tokens",
+                          "value": {
+                            "stringValue": "952"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.cached_tokens",
+                          "value": {
+                            "stringValue": "512"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_winner_usd",
+                          "value": {
+                            "stringValue": "0.000731"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_anchor_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.latency_ms",
+                          "value": {
+                            "stringValue": "1432"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.stream",
+                          "value": {
+                            "stringValue": "false"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.call_site",
+                          "value": {
+                            "stringValue": "checkout.py:42"
+                          }
+                        }
+                      ],
+                      "status": {
+                        "code": 1
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "scores": [
+          [
+            {
+              "id": "00000000-0000-4000-8000-00000000000a-recommended_model",
+              "traceId": "1ad35d608dd7b52a115ee45d1330f5f6",
+              "observationId": "9327c1a3bd6dd5cc",
+              "name": "tryaii.recommended_model",
+              "value": "openai/gpt-5-mini",
+              "dataType": "CATEGORICAL"
+            },
+            {
+              "id": "00000000-0000-4000-8000-00000000000a-est_savings_usd",
+              "traceId": "1ad35d608dd7b52a115ee45d1330f5f6",
+              "observationId": "9327c1a3bd6dd5cc",
+              "name": "tryaii.est_savings_usd",
+              "value": 0.003482,
+              "dataType": "NUMERIC"
+            },
+            {
+              "id": "00000000-0000-4000-8000-00000000000a-route_status",
+              "traceId": "1ad35d608dd7b52a115ee45d1330f5f6",
+              "observationId": "9327c1a3bd6dd5cc",
+              "name": "tryaii.route_status",
+              "value": "ok",
+              "dataType": "CATEGORICAL"
+            }
+          ]
+        ],
+        "bodies_sha256": {
+          "traces": "8ba739f84304a9c82925e0080e55c30a7b527aa4ad6a91da5e0f331f90e9a971",
+          "scores": [
+            [
+              "103c858a2b576cd41380b828284b856ac4446774eba07bd110646cffd3f8a5b8",
+              "32bb69d0fd36e5c1e61bda7363ec551105d8bcecf29db5c6cb4c6015ed900d55",
+              "c9f60de0e1a5bbd07a0aae1fc91a7697e402755734c1f3564db26feca7dad089"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "unknown-origin-is-a-child",
+      "description": "Any other origin value is ignored: an otel span is a parent as usual.",
+      "input": {
+        "kind": "export",
+        "app_id": "app_k1a2b3c4d5e6",
+        "events": [
+          {
+            "schema": "tryaii.monitor.event/1",
+            "event_id": "00000000-0000-4000-8000-00000000000b",
+            "ts": "2026-10-24T09:15:30.250Z",
+            "app": "shop",
+            "process": "purchase item",
+            "call_site": {
+              "file": "checkout.py",
+              "line": 42,
+              "function": "purchase_item"
+            },
+            "provider": "openai",
+            "model_requested": "gpt-5.5",
+            "model_resolved": "openai/gpt-5.5",
+            "model_used": "gpt-5.5",
+            "mode": "off",
+            "winner": "openai/gpt-5-mini",
+            "winner_reachable": true,
+            "route_status": "ok",
+            "classification": {
+              "category": "coding",
+              "subcategory": "debugging",
+              "confidence": 0.81
+            },
+            "taxonomy_version": null,
+            "usage": {
+              "prompt_tokens": 812,
+              "completion_tokens": 140,
+              "total_tokens": 952,
+              "cached_tokens": 512,
+              "cache_write_tokens": null,
+              "cache_writes": null
+            },
+            "cache_ttl_policy": null,
+            "est_cost_usd": 0.004213,
+            "est_cost_winner_usd": 0.000731,
+            "est_cost_anchor_usd": 0.004213,
+            "latency_ms": 1432,
+            "stream": false,
+            "error": null,
+            "prompt_hash": "9f2c000000000000000000000000000000000000000000000000000000000000",
+            "vector": true,
+            "otel": {
+              "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+              "span_id": "00f067aa0ba902b7",
+              "origin": "other"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "ids": [
+          {
+            "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "span_id": "5f01ba377dd683a8",
+            "parent_span_id": "00f067aa0ba902b7"
+          }
+        ],
+        "tryaii_url": [
+          "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+        ],
+        "traces": {
+          "resourceSpans": [
+            {
+              "resource": {
+                "attributes": [
+                  {
+                    "key": "service.name",
+                    "value": {
+                      "stringValue": "tryaii-monitor"
+                    }
+                  }
+                ]
+              },
+              "scopeSpans": [
+                {
+                  "scope": {
+                    "name": "tryaii.monitor",
+                    "version": "fixture"
+                  },
+                  "spans": [
+                    {
+                      "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                      "spanId": "5f01ba377dd683a8",
+                      "parentSpanId": "00f067aa0ba902b7",
+                      "name": "tryaii purchase item",
+                      "kind": 3,
+                      "startTimeUnixNano": "1792833330250000000",
+                      "endTimeUnixNano": "1792833331682000000",
+                      "attributes": [
+                        {
+                          "key": "langfuse.observation.type",
+                          "value": {
+                            "stringValue": "span"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.event_id",
+                          "value": {
+                            "stringValue": "00000000-0000-4000-8000-00000000000b"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.app",
+                          "value": {
+                            "stringValue": "shop"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.process",
+                          "value": {
+                            "stringValue": "purchase item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.mode",
+                          "value": {
+                            "stringValue": "off"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.provider",
+                          "value": {
+                            "stringValue": "openai"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_requested",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_resolved",
+                          "value": {
+                            "stringValue": "openai/gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_used",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner",
+                          "value": {
+                            "stringValue": "openai/gpt-5-mini"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner_reachable",
+                          "value": {
+                            "stringValue": "true"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.route_status",
+                          "value": {
+                            "stringValue": "ok"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.category",
+                          "value": {
+                            "stringValue": "coding"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.subcategory",
+                          "value": {
+                            "stringValue": "debugging"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.prompt_tokens",
+                          "value": {
+                            "stringValue": "812"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.completion_tokens",
+                          "value": {
+                            "stringValue": "140"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.total_tokens",
+                          "value": {
+                            "stringValue": "952"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.cached_tokens",
+                          "value": {
+                            "stringValue": "512"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_winner_usd",
+                          "value": {
+                            "stringValue": "0.000731"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_anchor_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.latency_ms",
+                          "value": {
+                            "stringValue": "1432"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.stream",
+                          "value": {
+                            "stringValue": "false"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.call_site",
+                          "value": {
+                            "stringValue": "checkout.py:42"
+                          }
+                        }
+                      ],
+                      "status": {
+                        "code": 1
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "scores": [
+          [
+            {
+              "id": "00000000-0000-4000-8000-00000000000b-recommended_model",
+              "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+              "observationId": "5f01ba377dd683a8",
+              "name": "tryaii.recommended_model",
+              "value": "openai/gpt-5-mini",
+              "dataType": "CATEGORICAL"
+            },
+            {
+              "id": "00000000-0000-4000-8000-00000000000b-est_savings_usd",
+              "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+              "observationId": "5f01ba377dd683a8",
+              "name": "tryaii.est_savings_usd",
+              "value": 0.003482,
+              "dataType": "NUMERIC"
+            },
+            {
+              "id": "00000000-0000-4000-8000-00000000000b-route_status",
+              "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+              "observationId": "5f01ba377dd683a8",
+              "name": "tryaii.route_status",
+              "value": "ok",
+              "dataType": "CATEGORICAL"
+            }
+          ]
+        ],
+        "bodies_sha256": {
+          "traces": "1f1ebf7ad5aebf3a8efd20f5308611a884d749e8974aede72c9dfdb7e897a9a0",
+          "scores": [
+            [
+              "a8f0e3807a79a12568f5101be0c8612939401d1d92bf1fc72fb447ed5d0c95b1",
+              "b608c0549b69c159b4acac8fd42fccef90bcfc5621ad8012e9ad2d4d6994c484",
+              "b43a87747b5a561c8e81b54b7f1561ffa5f363b47f4dc41781f0adac7e29fe6d"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "batch-of-two",
+      "description": "Two events in one OTLP request (one resourceSpans, one scope, spans in store order); scores per event.",
+      "input": {
+        "kind": "export",
+        "app_id": "app_k1a2b3c4d5e6",
+        "events": [
+          {
+            "schema": "tryaii.monitor.event/1",
+            "event_id": "00000000-0000-4000-8000-000000000008",
+            "ts": "2026-10-24T09:15:30.250Z",
+            "app": "shop",
+            "process": "purchase item",
+            "call_site": {
+              "file": "checkout.py",
+              "line": 42,
+              "function": "purchase_item"
+            },
+            "provider": "openai",
+            "model_requested": "gpt-5.5",
+            "model_resolved": "openai/gpt-5.5",
+            "model_used": "gpt-5.5",
+            "mode": "off",
+            "winner": "openai/gpt-5-mini",
+            "winner_reachable": true,
+            "route_status": "ok",
+            "classification": {
+              "category": "coding",
+              "subcategory": "debugging",
+              "confidence": 0.81
+            },
+            "taxonomy_version": null,
+            "usage": {
+              "prompt_tokens": 812,
+              "completion_tokens": 140,
+              "total_tokens": 952,
+              "cached_tokens": 512,
+              "cache_write_tokens": null,
+              "cache_writes": null
+            },
+            "cache_ttl_policy": null,
+            "est_cost_usd": 0.004213,
+            "est_cost_winner_usd": 0.000731,
+            "est_cost_anchor_usd": 0.004213,
+            "latency_ms": 1432,
+            "stream": false,
+            "error": null,
+            "prompt_hash": "9f2c000000000000000000000000000000000000000000000000000000000000",
+            "vector": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "event_id": "00000000-0000-4000-8000-000000000009",
+            "ts": "2026-10-24T09:15:30.250Z",
+            "app": "shop",
+            "process": "refund",
+            "call_site": null,
+            "provider": "openai",
+            "model_requested": "gpt-5.5",
+            "model_resolved": "openai/gpt-5.5",
+            "model_used": "gpt-5.5",
+            "mode": "off",
+            "winner": "openai/gpt-5-mini",
+            "winner_reachable": true,
+            "route_status": "ok",
+            "classification": null,
+            "taxonomy_version": null,
+            "usage": {
+              "prompt_tokens": 812,
+              "completion_tokens": 140,
+              "total_tokens": 952,
+              "cached_tokens": 512,
+              "cache_write_tokens": null,
+              "cache_writes": null
+            },
+            "cache_ttl_policy": null,
+            "est_cost_usd": 0.004213,
+            "est_cost_winner_usd": 0.000731,
+            "est_cost_anchor_usd": 0.004213,
+            "latency_ms": 1432,
+            "stream": false,
+            "error": null,
+            "prompt_hash": "9f2c000000000000000000000000000000000000000000000000000000000000",
+            "vector": true
+          }
+        ]
+      },
+      "expected": {
+        "ids": [
+          {
+            "trace_id": "fe9eeff554ea6c98aca483076d97614a",
+            "span_id": "9d0426aaf79de903",
+            "parent_span_id": null
+          },
+          {
+            "trace_id": "f3e028aaa6530055f01a5e1e849f6765",
+            "span_id": "8d0daaf9bc64c2f9",
+            "parent_span_id": null
+          }
+        ],
+        "tryaii_url": [
+          "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item",
+          "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/refund"
+        ],
+        "traces": {
+          "resourceSpans": [
+            {
+              "resource": {
+                "attributes": [
+                  {
+                    "key": "service.name",
+                    "value": {
+                      "stringValue": "tryaii-monitor"
+                    }
+                  }
+                ]
+              },
+              "scopeSpans": [
+                {
+                  "scope": {
+                    "name": "tryaii.monitor",
+                    "version": "fixture"
+                  },
+                  "spans": [
+                    {
+                      "traceId": "fe9eeff554ea6c98aca483076d97614a",
+                      "spanId": "9d0426aaf79de903",
+                      "name": "tryaii purchase item",
+                      "kind": 3,
+                      "startTimeUnixNano": "1792833330250000000",
+                      "endTimeUnixNano": "1792833331682000000",
+                      "attributes": [
+                        {
+                          "key": "langfuse.observation.type",
+                          "value": {
+                            "stringValue": "generation"
+                          }
+                        },
+                        {
+                          "key": "langfuse.trace.name",
+                          "value": {
+                            "stringValue": "tryaii purchase item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.trace.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.model.name",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.usage_details",
+                          "value": {
+                            "stringValue": "{\"input\":300,\"output\":140,\"total\":952,\"input_cached_tokens\":512}"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.cost_details",
+                          "value": {
+                            "stringValue": "{\"total\":0.004213}"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/purchase%20item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.event_id",
+                          "value": {
+                            "stringValue": "00000000-0000-4000-8000-000000000008"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.app",
+                          "value": {
+                            "stringValue": "shop"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.process",
+                          "value": {
+                            "stringValue": "purchase item"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.mode",
+                          "value": {
+                            "stringValue": "off"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.provider",
+                          "value": {
+                            "stringValue": "openai"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_requested",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_resolved",
+                          "value": {
+                            "stringValue": "openai/gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_used",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner",
+                          "value": {
+                            "stringValue": "openai/gpt-5-mini"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner_reachable",
+                          "value": {
+                            "stringValue": "true"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.route_status",
+                          "value": {
+                            "stringValue": "ok"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.category",
+                          "value": {
+                            "stringValue": "coding"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.subcategory",
+                          "value": {
+                            "stringValue": "debugging"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.prompt_tokens",
+                          "value": {
+                            "stringValue": "812"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.completion_tokens",
+                          "value": {
+                            "stringValue": "140"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.total_tokens",
+                          "value": {
+                            "stringValue": "952"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.cached_tokens",
+                          "value": {
+                            "stringValue": "512"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_winner_usd",
+                          "value": {
+                            "stringValue": "0.000731"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_anchor_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.latency_ms",
+                          "value": {
+                            "stringValue": "1432"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.stream",
+                          "value": {
+                            "stringValue": "false"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.call_site",
+                          "value": {
+                            "stringValue": "checkout.py:42"
+                          }
+                        }
+                      ],
+                      "status": {
+                        "code": 1
+                      }
+                    },
+                    {
+                      "traceId": "f3e028aaa6530055f01a5e1e849f6765",
+                      "spanId": "8d0daaf9bc64c2f9",
+                      "name": "tryaii refund",
+                      "kind": 3,
+                      "startTimeUnixNano": "1792833330250000000",
+                      "endTimeUnixNano": "1792833331682000000",
+                      "attributes": [
+                        {
+                          "key": "langfuse.observation.type",
+                          "value": {
+                            "stringValue": "generation"
+                          }
+                        },
+                        {
+                          "key": "langfuse.trace.name",
+                          "value": {
+                            "stringValue": "tryaii refund"
+                          }
+                        },
+                        {
+                          "key": "langfuse.trace.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/refund"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.model.name",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.usage_details",
+                          "value": {
+                            "stringValue": "{\"input\":300,\"output\":140,\"total\":952,\"input_cached_tokens\":512}"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.cost_details",
+                          "value": {
+                            "stringValue": "{\"total\":0.004213}"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.tryaii_url",
+                          "value": {
+                            "stringValue": "https://tryaii.com/dashboard/monitor/app_k1a2b3c4d5e6/features/refund"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.event_id",
+                          "value": {
+                            "stringValue": "00000000-0000-4000-8000-000000000009"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.app",
+                          "value": {
+                            "stringValue": "shop"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.process",
+                          "value": {
+                            "stringValue": "refund"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.mode",
+                          "value": {
+                            "stringValue": "off"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.provider",
+                          "value": {
+                            "stringValue": "openai"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_requested",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_resolved",
+                          "value": {
+                            "stringValue": "openai/gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.model_used",
+                          "value": {
+                            "stringValue": "gpt-5.5"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner",
+                          "value": {
+                            "stringValue": "openai/gpt-5-mini"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.winner_reachable",
+                          "value": {
+                            "stringValue": "true"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.route_status",
+                          "value": {
+                            "stringValue": "ok"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.prompt_tokens",
+                          "value": {
+                            "stringValue": "812"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.completion_tokens",
+                          "value": {
+                            "stringValue": "140"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.total_tokens",
+                          "value": {
+                            "stringValue": "952"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.cached_tokens",
+                          "value": {
+                            "stringValue": "512"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_winner_usd",
+                          "value": {
+                            "stringValue": "0.000731"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.est_cost_anchor_usd",
+                          "value": {
+                            "stringValue": "0.004213"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.latency_ms",
+                          "value": {
+                            "stringValue": "1432"
+                          }
+                        },
+                        {
+                          "key": "langfuse.observation.metadata.stream",
+                          "value": {
+                            "stringValue": "false"
+                          }
+                        }
+                      ],
+                      "status": {
+                        "code": 1
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "scores": [
+          [
+            {
+              "id": "00000000-0000-4000-8000-000000000008-recommended_model",
+              "traceId": "fe9eeff554ea6c98aca483076d97614a",
+              "observationId": "9d0426aaf79de903",
+              "name": "tryaii.recommended_model",
+              "value": "openai/gpt-5-mini",
+              "dataType": "CATEGORICAL"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000008-est_savings_usd",
+              "traceId": "fe9eeff554ea6c98aca483076d97614a",
+              "observationId": "9d0426aaf79de903",
+              "name": "tryaii.est_savings_usd",
+              "value": 0.003482,
+              "dataType": "NUMERIC"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000008-route_status",
+              "traceId": "fe9eeff554ea6c98aca483076d97614a",
+              "observationId": "9d0426aaf79de903",
+              "name": "tryaii.route_status",
+              "value": "ok",
+              "dataType": "CATEGORICAL"
+            }
+          ],
+          [
+            {
+              "id": "00000000-0000-4000-8000-000000000009-recommended_model",
+              "traceId": "f3e028aaa6530055f01a5e1e849f6765",
+              "observationId": "8d0daaf9bc64c2f9",
+              "name": "tryaii.recommended_model",
+              "value": "openai/gpt-5-mini",
+              "dataType": "CATEGORICAL"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000009-est_savings_usd",
+              "traceId": "f3e028aaa6530055f01a5e1e849f6765",
+              "observationId": "8d0daaf9bc64c2f9",
+              "name": "tryaii.est_savings_usd",
+              "value": 0.003482,
+              "dataType": "NUMERIC"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000009-route_status",
+              "traceId": "f3e028aaa6530055f01a5e1e849f6765",
+              "observationId": "8d0daaf9bc64c2f9",
+              "name": "tryaii.route_status",
+              "value": "ok",
+              "dataType": "CATEGORICAL"
+            }
+          ]
+        ],
+        "bodies_sha256": {
+          "traces": "ded06ed79069c4c7dcfb2572a1b12d24b8bbf581e5c6f81819f546a659a239be",
+          "scores": [
+            [
+              "7ac8bbbf3e7b1c1b0ea2e666ec07c8d271aca0a82d5bd5775fe87fffb75d0080",
+              "43ebc301832c305bcffb80f25ef971c80c8b338131aa08251d205f3a8877eae8",
+              "fdd02cc0eb311bfb81ac3736e8fecd373a85c41004a7b8e5c14b532fdcbdf557"
+            ],
+            [
+              "5f1c26cbae23dc10e126a30307088adc15bc39bc438291fe32857bc9360f08c4",
+              "b124e293fc5ec094f35dafad9dfa3e116dbaa43be7458e15f023963d1a99d0d2",
+              "69e00b310107a27e28d21bb407e2d6d851aac02604100f99710ebe7083ab28c5"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "unset",
+      "description": "No switch: off, and status prints no line.",
+      "input": {
+        "kind": "settings",
+        "env": {}
+      },
+      "expected": {
+        "settings": {
+          "enabled": false,
+          "host": "https://cloud.langfuse.com",
+          "reason": "TRYAII_LANGFUSE is not on"
+        },
+        "status_line": null
+      }
+    },
+    {
+      "name": "on-without-app-key",
+      "description": "Switch on, no TryAii app key.",
+      "input": {
+        "kind": "settings",
+        "env": {
+          "TRYAII_LANGFUSE": "on",
+          "LANGFUSE_PUBLIC_KEY": "pk-lf-1",
+          "LANGFUSE_SECRET_KEY": "sk-lf-1"
+        }
+      },
+      "expected": {
+        "settings": {
+          "enabled": false,
+          "host": "https://cloud.langfuse.com",
+          "reason": "TRYAII_API_KEY is not set"
+        },
+        "status_line": "langfuse: off (TRYAII_API_KEY is not set)"
+      }
+    },
+    {
+      "name": "on-bad-app-key",
+      "description": "Switch on, a value that is not an app key.",
+      "input": {
+        "kind": "settings",
+        "env": {
+          "TRYAII_LANGFUSE": "on",
+          "TRYAII_API_KEY": "sk-not-an-app-key",
+          "LANGFUSE_PUBLIC_KEY": "pk-lf-1",
+          "LANGFUSE_SECRET_KEY": "sk-lf-1"
+        }
+      },
+      "expected": {
+        "settings": {
+          "enabled": false,
+          "host": "https://cloud.langfuse.com",
+          "reason": "TRYAII_API_KEY is not an app key"
+        },
+        "status_line": "langfuse: off (TRYAII_API_KEY is not an app key)"
+      }
+    },
+    {
+      "name": "on-without-langfuse-keys",
+      "description": "Switch on, app key, Langfuse secret key missing.",
+      "input": {
+        "kind": "settings",
+        "env": {
+          "TRYAII_LANGFUSE": "1",
+          "TRYAII_API_KEY": "tryaii_k1a2b3c4d5e6_fixtureSecretfixtureSecretfixtureSecretfixt",
+          "LANGFUSE_PUBLIC_KEY": "pk-lf-1"
+        }
+      },
+      "expected": {
+        "settings": {
+          "enabled": false,
+          "host": "https://cloud.langfuse.com",
+          "reason": "LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY are needed"
+        },
+        "status_line": "langfuse: off (LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY are needed)"
+      }
+    },
+    {
+      "name": "on-default-host",
+      "description": "Everything set, no host: Langfuse Cloud (EU).",
+      "input": {
+        "kind": "settings",
+        "env": {
+          "TRYAII_LANGFUSE": "on",
+          "TRYAII_API_KEY": "tryaii_k1a2b3c4d5e6_fixtureSecretfixtureSecretfixtureSecretfixt",
+          "LANGFUSE_PUBLIC_KEY": "pk-lf-1",
+          "LANGFUSE_SECRET_KEY": "sk-lf-1"
+        }
+      },
+      "expected": {
+        "settings": {
+          "enabled": true,
+          "host": "https://cloud.langfuse.com",
+          "reason": null
+        },
+        "status_line": "langfuse: on (https://cloud.langfuse.com)"
+      }
+    },
+    {
+      "name": "on-host-trimmed",
+      "description": "Switch value trimmed and case-insensitive; LANGFUSE_HOST with a trailing slash.",
+      "input": {
+        "kind": "settings",
+        "env": {
+          "TRYAII_LANGFUSE": " TRUE ",
+          "TRYAII_API_KEY": "tryaii_k1a2b3c4d5e6_fixtureSecretfixtureSecretfixtureSecretfixt",
+          "LANGFUSE_PUBLIC_KEY": "pk-lf-1",
+          "LANGFUSE_SECRET_KEY": "sk-lf-1",
+          "LANGFUSE_HOST": "http://localhost:3100/"
+        }
+      },
+      "expected": {
+        "settings": {
+          "enabled": true,
+          "host": "http://localhost:3100",
+          "reason": null
+        },
+        "status_line": "langfuse: on (http://localhost:3100)"
+      }
+    },
+    {
+      "name": "base-url-wins",
+      "description": "LANGFUSE_BASE_URL wins over LANGFUSE_HOST.",
+      "input": {
+        "kind": "settings",
+        "env": {
+          "TRYAII_LANGFUSE": "on",
+          "TRYAII_API_KEY": "tryaii_k1a2b3c4d5e6_fixtureSecretfixtureSecretfixtureSecretfixt",
+          "LANGFUSE_PUBLIC_KEY": "pk-lf-1",
+          "LANGFUSE_SECRET_KEY": "sk-lf-1",
+          "LANGFUSE_BASE_URL": "https://us.cloud.langfuse.com",
+          "LANGFUSE_HOST": "https://cloud.langfuse.com"
+        }
+      },
+      "expected": {
+        "settings": {
+          "enabled": true,
+          "host": "https://us.cloud.langfuse.com",
+          "reason": null
+        },
+        "status_line": "langfuse: on (https://us.cloud.langfuse.com)"
+      }
+    },
+    {
+      "name": "empty-base-url-skipped",
+      "description": "A blank LANGFUSE_BASE_URL falls through to LANGFUSE_HOST.",
+      "input": {
+        "kind": "settings",
+        "env": {
+          "TRYAII_LANGFUSE": "on",
+          "TRYAII_API_KEY": "tryaii_k1a2b3c4d5e6_fixtureSecretfixtureSecretfixtureSecretfixt",
+          "LANGFUSE_PUBLIC_KEY": "pk-lf-1",
+          "LANGFUSE_SECRET_KEY": "sk-lf-1",
+          "LANGFUSE_BASE_URL": "  ",
+          "LANGFUSE_HOST": "https://langfuse.example.test"
+        }
+      },
+      "expected": {
+        "settings": {
+          "enabled": true,
+          "host": "https://langfuse.example.test",
+          "reason": null
+        },
+        "status_line": "langfuse: on (https://langfuse.example.test)"
+      }
+    },
+    {
+      "name": "switch-off-value",
+      "description": "Any other switch value is off; status says only 'langfuse: off'.",
+      "input": {
+        "kind": "settings",
+        "env": {
+          "TRYAII_LANGFUSE": "yes",
+          "TRYAII_API_KEY": "tryaii_k1a2b3c4d5e6_fixtureSecretfixtureSecretfixtureSecretfixt",
+          "LANGFUSE_PUBLIC_KEY": "pk-lf-1",
+          "LANGFUSE_SECRET_KEY": "sk-lf-1"
+        }
+      },
+      "expected": {
+        "settings": {
+          "enabled": false,
+          "host": "https://cloud.langfuse.com",
+          "reason": "TRYAII_LANGFUSE is not on"
+        },
+        "status_line": "langfuse: off"
+      }
+    },
+    {
+      "name": "exportable-event",
+      "description": "A v2 event line is exported.",
+      "input": {
+        "kind": "exportable",
+        "line": {
+          "schema": "tryaii.monitor.event/1",
+          "event_id": "00000000-0000-4000-8000-000000000001",
+          "ts": "2026-10-24T09:15:30.250Z",
+          "app": "shop",
+          "process": "purchase item",
+          "call_site": {
+            "file": "checkout.py",
+            "line": 42,
+            "function": "purchase_item"
+          },
+          "provider": "openai",
+          "model_requested": "gpt-5.5",
+          "model_resolved": "openai/gpt-5.5",
+          "model_used": "gpt-5.5",
+          "mode": "off",
+          "winner": "openai/gpt-5-mini",
+          "winner_reachable": true,
+          "route_status": "ok",
+          "classification": {
+            "category": "coding",
+            "subcategory": "debugging",
+            "confidence": 0.81
+          },
+          "taxonomy_version": null,
+          "usage": {
+            "prompt_tokens": 812,
+            "completion_tokens": 140,
+            "total_tokens": 952,
+            "cached_tokens": 512,
+            "cache_write_tokens": null,
+            "cache_writes": null
+          },
+          "cache_ttl_policy": null,
+          "est_cost_usd": 0.004213,
+          "est_cost_winner_usd": 0.000731,
+          "est_cost_anchor_usd": 0.004213,
+          "latency_ms": 1432,
+          "stream": false,
+          "error": null,
+          "prompt_hash": "9f2c000000000000000000000000000000000000000000000000000000000000",
+          "vector": true
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "slice-1-line-skipped",
+      "description": "A line without a uuid event_id (slice 1) is never exported.",
+      "input": {
+        "kind": "exportable",
+        "line": {
+          "schema": "tryaii.monitor.event/1",
+          "ts": "2026-10-24T09:15:30.250Z",
+          "app": "shop",
+          "process": "purchase item",
+          "call_site": {
+            "file": "checkout.py",
+            "line": 42,
+            "function": "purchase_item"
+          },
+          "provider": "openai",
+          "model_requested": "gpt-5.5",
+          "model_resolved": "openai/gpt-5.5",
+          "model_used": "gpt-5.5",
+          "mode": "off",
+          "winner": "openai/gpt-5-mini",
+          "winner_reachable": true,
+          "route_status": "ok",
+          "classification": {
+            "category": "coding",
+            "subcategory": "debugging",
+            "confidence": 0.81
+          },
+          "taxonomy_version": null,
+          "usage": {
+            "prompt_tokens": 812,
+            "completion_tokens": 140,
+            "total_tokens": 952,
+            "cached_tokens": 512,
+            "cache_write_tokens": null,
+            "cache_writes": null
+          },
+          "cache_ttl_policy": null,
+          "est_cost_usd": 0.004213,
+          "est_cost_winner_usd": 0.000731,
+          "est_cost_anchor_usd": 0.004213,
+          "latency_ms": 1432,
+          "stream": false,
+          "error": null,
+          "prompt_hash": "9f2c000000000000000000000000000000000000000000000000000000000000",
+          "vector": true
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "forbidden-field-skipped",
+      "description": "A line with a forbidden field (the uploader's hard rule) is never exported.",
+      "input": {
+        "kind": "exportable",
+        "line": {
+          "schema": "tryaii.monitor.event/1",
+          "event_id": "00000000-0000-4000-8000-000000000001",
+          "ts": "2026-10-24T09:15:30.250Z",
+          "app": "shop",
+          "process": "purchase item",
+          "call_site": {
+            "file": "checkout.py",
+            "line": 42,
+            "function": "purchase_item"
+          },
+          "provider": "openai",
+          "model_requested": "gpt-5.5",
+          "model_resolved": "openai/gpt-5.5",
+          "model_used": "gpt-5.5",
+          "mode": "off",
+          "winner": "openai/gpt-5-mini",
+          "winner_reachable": true,
+          "route_status": "ok",
+          "classification": {
+            "category": "coding",
+            "subcategory": "debugging",
+            "confidence": 0.81
+          },
+          "taxonomy_version": null,
+          "usage": {
+            "prompt_tokens": 812,
+            "completion_tokens": 140,
+            "total_tokens": 952,
+            "cached_tokens": 512,
+            "cache_write_tokens": null,
+            "cache_writes": null
+          },
+          "cache_ttl_policy": null,
+          "est_cost_usd": 0.004213,
+          "est_cost_winner_usd": 0.000731,
+          "est_cost_anchor_usd": 0.004213,
+          "latency_ms": 1432,
+          "stream": false,
+          "error": null,
+          "prompt_hash": "9f2c000000000000000000000000000000000000000000000000000000000000",
+          "vector": true,
+          "messages": [
+            {
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "other-schema-skipped",
+      "description": "A vector line is not an event.",
+      "input": {
+        "kind": "exportable",
+        "line": {
+          "schema": "tryaii.monitor.vector/1",
+          "prompt_hash": "x",
+          "ts": "2026-10-24T09:15:30.250Z"
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "bad-ts-skipped",
+      "description": "An event whose ts cannot be parsed has no span time and is skipped.",
+      "input": {
+        "kind": "exportable",
+        "line": {
+          "schema": "tryaii.monitor.event/1",
+          "event_id": "00000000-0000-4000-8000-000000000001",
+          "ts": "yesterday",
+          "app": "shop",
+          "process": "purchase item",
+          "call_site": {
+            "file": "checkout.py",
+            "line": 42,
+            "function": "purchase_item"
+          },
+          "provider": "openai",
+          "model_requested": "gpt-5.5",
+          "model_resolved": "openai/gpt-5.5",
+          "model_used": "gpt-5.5",
+          "mode": "off",
+          "winner": "openai/gpt-5-mini",
+          "winner_reachable": true,
+          "route_status": "ok",
+          "classification": {
+            "category": "coding",
+            "subcategory": "debugging",
+            "confidence": 0.81
+          },
+          "taxonomy_version": null,
+          "usage": {
+            "prompt_tokens": 812,
+            "completion_tokens": 140,
+            "total_tokens": 952,
+            "cached_tokens": 512,
+            "cache_write_tokens": null,
+            "cache_writes": null
+          },
+          "cache_ttl_policy": null,
+          "est_cost_usd": 0.004213,
+          "est_cost_winner_usd": 0.000731,
+          "est_cost_anchor_usd": 0.004213,
+          "latency_ms": 1432,
+          "stream": false,
+          "error": null,
+          "prompt_hash": "9f2c000000000000000000000000000000000000000000000000000000000000",
+          "vector": true
+        }
+      },
+      "expected": false
+    }
+  ]
+}

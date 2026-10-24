@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tryaii"
-version = "0.8.1"
+version = "0.8.2"
 description = "TryAii Diff Routing Engine -- Embedding-based AI model router. Understands your prompt semantically and routes to the best model based on benchmarks, cost, speed, and quality."
 readme = "README.md"
 license = "Apache-2.0"
@@ -44,6 +44,8 @@ dependencies = [
 
 [project.optional-dependencies]
 openai = ["openai>=1.0.0"]
+# The monitor's Anthropic wrapper (tryaii.monitor.wrap on an anthropic client).
+anthropic = ["anthropic>=0.40.0"]
 # sentence-transformers (and PyTorch): building fp32 centroids, and running any
 # embedding model other than the default ONNX build. Not needed to route.
 centroids = ["sentence-transformers>=2.2.0"]
@@ -55,6 +57,7 @@ cachelint = ["tiktoken>=0.5.0"]
 redis = ["redis>=5.0.0"]
 all = [
     "openai>=1.0.0",
+    "anthropic>=0.40.0",
     "httpx>=0.25.0",
     "tiktoken>=0.5.0",
     "redis>=5.0.0",

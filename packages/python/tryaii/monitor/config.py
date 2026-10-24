@@ -12,6 +12,9 @@ CONFIG_SCHEMA = "tryaii.monitor.config/1"
 REMOTE_SCHEMA = "tryaii.monitor.remote/1"
 ENV_MODE = "TRYAII_MONITOR_MODE"
 ENV_APP = "TRYAII_APP"
+#: The Langfuse export switch (SPEC.md "Langfuse export"; API.md v1.7).
+ENV_LANGFUSE = "TRYAII_LANGFUSE"
+LANGFUSE_ON_VALUES = ("on", "1", "true")
 DEFAULT_APP = "default"
 DEFAULT_PROCESS = "default"
 MSG_BAD_MODE = "mode must be off, stable, dynamic or managed"
@@ -166,6 +169,16 @@ def set_process_mode(config: Optional[dict], process: str, mode: str,
         "default_mode": _valid_mode(base.get("default_mode")) or "off",
         "processes": dict(sorted(processes.items())),
     }
+
+
+def langfuse_enabled(env: Optional[dict] = None) -> bool:
+    """True when ``TRYAII_LANGFUSE`` is ``on``, ``1`` or ``true`` (trimmed,
+    any case); off by default. ``env`` defaults to ``os.environ``. Only the
+    switch: whether the export is really on (the switch plus the keys) is
+    ``tryaii.monitor.langfuse.settings`` (SPEC.md §11.1)."""
+    source = os.environ if env is None else env
+    value = source.get(ENV_LANGFUSE)
+    return isinstance(value, str) and value.strip().lower() in LANGFUSE_ON_VALUES
 
 
 def env_from_os() -> dict:

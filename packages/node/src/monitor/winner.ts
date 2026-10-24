@@ -21,6 +21,15 @@ export const PROVIDER_OPENROUTER = 'openrouter';
 export const PROVIDER_OTHER = 'other';
 export const PROVIDERS = [PROVIDER_OPENAI, PROVIDER_OPENROUTER, PROVIDER_OTHER] as const;
 export type Provider = (typeof PROVIDERS)[number];
+/**
+ * The event `provider` of a Messages-API client (Anthropic, Bedrock, Vertex;
+ * SPEC.md §3.1). Not a §2.2 class: every routing rule treats it like `other`
+ * (only the anchor is reachable, never a swap). It tells the server that
+ * `usage.prompt_tokens` excludes the cached and written tokens (§3.1b).
+ */
+export const PROVIDER_ANTHROPIC = 'anthropic';
+/** A §2.2 provider class, or `anthropic` for a Messages-API client. */
+export type EventProvider = Provider | typeof PROVIDER_ANTHROPIC;
 
 export const MODE_OFF = 'off';
 export const MODE_STABLE = 'stable';

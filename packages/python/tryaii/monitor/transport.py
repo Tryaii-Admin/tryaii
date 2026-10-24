@@ -103,6 +103,8 @@ class Transport:
         self._policy_cache: Optional[tuple] = None
         self._uploader = None
         self._remote = None
+        #: The Langfuse exporter (SPEC.md "Langfuse export"), or None.
+        self._langfuse = None
         #: True once the first remote-config answer arrived or the bounded
         #: first-call wait ran out: calls never wait again.
         self._remote_settled = False
@@ -167,8 +169,8 @@ class Transport:
         with self._lock:
             if directory not in self._app_dirs:
                 self._app_dirs.append(directory)
-            uploader, remote = self._uploader, self._remote
-        for service in (uploader, remote):
+            uploader, remote, langfuse = self._uploader, self._remote, self._langfuse
+        for service in (uploader, remote, langfuse):
             if service is not None:
                 service.register(directory)
 
@@ -205,7 +207,9 @@ class Transport:
 
     def _start_services(self) -> None:
         """Start the uploader and the remote poller when TRYAII_API_KEY is
-        set (each unless disabled by its env switch). Never raises."""
+        set (each unless disabled by its env switch), and the Langfuse
+        exporter when its settings say on. Never raises."""
+        self._start_langfuse()
         try:
             from tryaii.monitor import api
             from tryaii.monitor.remote import RemotePoller, remote_enabled
@@ -228,6 +232,22 @@ class Transport:
                 service.start()
         except Exception:  # noqa: BLE001 - fail-open
             logger.debug("monitor: upload/remote services failed to start", exc_info=True)
+
+    def _start_langfuse(self) -> None:
+        try:
+            from tryaii.monitor.langfuse import Exporter
+
+            exporter = Exporter.from_env()
+            if exporter is None:
+                return
+            with self._lock:
+                self._langfuse = exporter
+                dirs = list(self._app_dirs)
+            for directory in dirs:
+                exporter.register(directory)
+            exporter.start()
+        except Exception:  # noqa: BLE001 - fail-open
+            logger.debug("monitor: the Langfuse exporter failed to start", exc_info=True)
 
     @property
     def data_dir(self):
@@ -297,12 +317,16 @@ class Transport:
     def _at_exit(self) -> None:
         """Process exit: finish queued records (<= 2 s); whatever is still
         queued (the worker may be inside a slow warm-up) is recorded now as
-        ``unavailable``; then one last upload pass (<= 2 s)."""
+        ``unavailable``; then one last upload pass (<= 2 s) and one last
+        Langfuse pass (<= 2 s)."""
         self.drain(DRAIN_TIMEOUT_S)
         self.flush_pending()
         uploader = self._uploader
         if uploader is not None:
             uploader.drain(DRAIN_TIMEOUT_S)
+        langfuse = self._langfuse
+        if langfuse is not None:
+            langfuse.drain(DRAIN_TIMEOUT_S)
 
     def flush_pending(self) -> None:
         """Run the queued jobs on the calling thread with routing switched

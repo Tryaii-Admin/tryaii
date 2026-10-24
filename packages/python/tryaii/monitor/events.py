@@ -88,7 +88,9 @@ def estimate_cost(registry, model_id: Optional[str], usage: Optional[dict]) -> O
 #: The event's ``usage`` keys, in contract order (SPEC.md §3.1, §3.1b).
 USAGE_TOKEN_KEYS = ("prompt_tokens", "completion_tokens", "total_tokens")
 USAGE_CACHE_KEYS = ("cached_tokens", "cache_write_tokens", "cache_writes")
-USAGE_KEYS = USAGE_TOKEN_KEYS + USAGE_CACHE_KEYS
+#: API.md v1.7: the reasoning share of ``completion_tokens`` (SPEC.md §3.1).
+USAGE_REASONING_KEYS = ("reasoning_tokens",)
+USAGE_KEYS = USAGE_TOKEN_KEYS + USAGE_CACHE_KEYS + USAGE_REASONING_KEYS
 #: Cache lifetimes a write or a request policy can name (SPEC.md §3.1b).
 CACHE_TTLS = ("5m", "1h", "30m", "24h", "explicit")
 #: Provider API shapes ``normalize_cache_usage`` knows (SPEC.md §3.1b).
@@ -220,8 +222,9 @@ def normalize_cache_usage(provider: Any, raw_usage: Any) -> dict:
 
 def normalize_usage(usage: Any) -> Optional[dict]:
     """The event's ``usage`` in contract key order from an event-shaped
-    dict (or object): the three token counts plus the §3.1b cache fields,
-    each None when absent or malformed; None when nothing is numeric."""
+    dict (or object): the three token counts, the §3.1b cache fields and
+    ``reasoning_tokens`` (API.md v1.7), each None when absent or malformed;
+    None when nothing is numeric."""
     if usage is None:
         return None
     out = {}
@@ -230,6 +233,7 @@ def normalize_usage(usage: Any) -> Optional[dict]:
     cache = _cache_fields(_get(usage, "cached_tokens"),
                           _get(usage, "cache_write_tokens"), _get(usage, "cache_writes"))
     out.update(cache)
+    out["reasoning_tokens"] = _count(_get(usage, "reasoning_tokens"))
     if all(v is None for v in out.values()):
         return None
     return out
@@ -246,12 +250,88 @@ def usage_from_response(usage: Any) -> Optional[dict]:
     ``prompt_tokens_details.cached_tokens`` or ``cache_read_input_tokens``)
     unless the input already carries it under its event name; the write
     columns pass through when the input carries them under their event
-    names (TS-229 merges ``normalize_cache_usage`` into the raw usage before
-    calling this) and are None otherwise."""
+    names and are None otherwise (the wrappers call
+    :func:`usage_from_provider`, which adds them from the raw usage).
+    ``reasoning_tokens`` (API.md v1.7) is read from
+    ``completion_tokens_details.reasoning_tokens`` unless the input carries
+    it under its event name; None when not reported. It is part of
+    ``completion_tokens``, never added on top."""
     out = normalize_usage(usage)
     if out is not None and out["cached_tokens"] is None:
         out["cached_tokens"] = cached_tokens_from_usage(usage)
+    if out is not None and out["reasoning_tokens"] is None:
+        out["reasoning_tokens"] = reasoning_tokens_from_usage(usage)
     return out
+
+
+def usage_from_provider(shape: Any, usage: Any) -> Optional[dict]:
+    """The event's ``usage`` from a provider's raw usage of API shape
+    ``shape`` (``CACHE_PROVIDERS``, SPEC.md §3.1b): the token counts as
+    :func:`usage_from_response` reads them, then every cache column
+    ``normalize_cache_usage`` finds in the raw usage. Only what the provider
+    reported is filled; the rest stays None. ``shape`` may be a tuple of
+    shapes, tried in order for the columns still None (an OpenAI-compatible
+    host that answers with Anthropic-shaped usage)."""
+    out = usage_from_response(usage)
+    if out is None:
+        return None
+    for one in shape if isinstance(shape, (list, tuple)) else (shape,):
+        cache = normalize_cache_usage(one, usage)
+        for key in USAGE_CACHE_KEYS:
+            if out[key] is None and cache[key] is not None:
+                out[key] = cache[key]
+    return out
+
+
+#: Request lifetimes longest first: a request naming several asked for the
+#: longest (Anthropic orders 1h breakpoints before 5m ones).
+_TTL_RANK = ("24h", "1h", "30m", "5m")
+#: OpenAI ``prompt_cache_retention`` values that name a lifetime
+#: (``in_memory`` is best-effort, no promised lifetime → None).
+_RETENTION_TTLS = {"24h": "24h"}
+
+
+def _cache_control_ttls(items: Any) -> list:
+    """Explicit ``cache_control.ttl`` values on messages / content parts /
+    tool schemas (OpenRouter and Anthropic-compatible hosts)."""
+    found = []
+    if not isinstance(items, (list, tuple)):
+        return found
+    for item in items:
+        ttl = _ttl(_get(_get(item, "cache_control"), "ttl"))
+        if ttl:
+            found.append(ttl)
+        content = _get(item, "content")
+        if isinstance(content, (list, tuple)):
+            found.extend(_cache_control_ttls(content))
+    return found
+
+
+def cache_ttl_policy_from_request(kwargs: Any) -> Optional[str]:
+    """``cache_ttl_policy`` (SPEC.md §3.1b) from an OpenAI-shaped request:
+    ``prompt_cache_retention`` (also inside ``extra_body``), else the
+    longest explicit ``cache_control.ttl`` on its messages or tools. None
+    when the request names no lifetime - a default is never assumed."""
+    if not isinstance(kwargs, dict):
+        return None
+    extra = kwargs.get("extra_body")
+    for source in (kwargs, extra if isinstance(extra, dict) else {}):
+        retention = source.get("prompt_cache_retention")
+        if isinstance(retention, str):
+            return _RETENTION_TTLS.get(retention.strip().lower())
+    found = set(_cache_control_ttls(kwargs.get("messages")))
+    found.update(_cache_control_ttls(kwargs.get("tools")))
+    for ttl in _TTL_RANK:
+        if ttl in found:
+            return ttl
+    return None
+
+
+def reasoning_tokens_from_usage(usage: Any) -> Optional[int]:
+    """``usage.completion_tokens_details.reasoning_tokens`` (OpenAI-compatible
+    chat completions, streamed or not); None when the provider does not
+    report it (API.md v1.7)."""
+    return _count(_get(_get(usage, "completion_tokens_details"), "reasoning_tokens"))
 
 
 def classification_from_wire(cls: Any) -> Optional[dict]:
@@ -287,7 +367,8 @@ def build_event(*, ts: str, app: str, process: str, call_site: Optional[dict],
                 est_cost_anchor_usd: Optional[float] = None,
                 cache_ttl_policy: Optional[str] = None,
                 cache: Optional[dict] = None,
-                cache_cold: Any = _OMIT) -> dict:
+                cache_cold: Any = _OMIT,
+                otel: Optional[dict] = None) -> dict:
     """One event line in contract key order (SPEC.md §3.1). ``event_id``
     defaults to a fresh uuid4; ``est_cost_anchor_usd`` is the usage priced
     at the anchor (equal to ``est_cost_usd`` when nothing was swapped);
@@ -337,6 +418,10 @@ def build_event(*, ts: str, app: str, process: str, call_site: Optional[dict],
         "prompt_hash": prompt_hash,
         "vector": bool(vector),
     })
+    if otel is not None:
+        event["otel"] = {"trace_id": otel.get("trace_id"), "span_id": otel.get("span_id")}
+        if otel.get("origin") is not None:
+            event["otel"]["origin"] = otel["origin"]
     if cache is not None:
         event["cache"] = cache
     return normalize_numbers(event)

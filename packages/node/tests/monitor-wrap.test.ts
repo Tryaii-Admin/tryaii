@@ -49,8 +49,10 @@ const SCORES_HAIKU_WINS = [
 
 // --- fakes ------------------------------------------------------------------
 
-function usage(prompt = 100, completion = 50) {
-  return { prompt_tokens: prompt, completion_tokens: completion, total_tokens: prompt + completion };
+function usage(prompt = 100, completion = 50, reasoning: number | null = null) {
+  const out: Record<string, unknown> = { prompt_tokens: prompt, completion_tokens: completion, total_tokens: prompt + completion };
+  if (reasoning !== null) out.completion_tokens_details = { reasoning_tokens: reasoning };
+  return out as { prompt_tokens: number; completion_tokens: number; total_tokens: number };
 }
 
 class RateLimitError extends Error {
@@ -59,7 +61,7 @@ class RateLimitError extends Error {
 
 interface Chunk {
   text: string;
-  usage?: ReturnType<typeof usage> | null;
+  usage?: Record<string, unknown> | null;
 }
 
 class FakeStream implements AsyncIterable<Chunk> {
@@ -78,7 +80,13 @@ class FakeStream implements AsyncIterable<Chunk> {
 class FakeCompletions {
   calls: Record<string, unknown>[] = [];
   constructor(
-    private readonly opts: { raise?: Error | null; usage?: boolean; sync?: boolean } = {},
+    private readonly opts: {
+      raise?: Error | null;
+      /** false = no usage; an object = a raw provider usage fixture. */
+      usage?: boolean | Record<string, unknown>;
+      sync?: boolean;
+      reasoning?: number | null;
+    } = {},
   ) {}
 
   create(body: Record<string, unknown>): unknown {
@@ -87,12 +95,13 @@ class FakeCompletions {
       if (this.opts.sync) throw this.opts.raise;
       return Promise.reject(this.opts.raise);
     }
-    const withUsage = this.opts.usage !== false;
+    const raw = this.opts.usage;
+    const u = typeof raw === 'object' ? raw : raw !== false ? usage(100, 50, this.opts.reasoning ?? null) : null;
     if (body.stream) {
-      const last: Chunk = { text: '', usage: withUsage ? usage() : null };
+      const last: Chunk = { text: '', usage: u };
       return Promise.resolve(new FakeStream([{ text: 'a' }, { text: 'b' }, last]));
     }
-    return Promise.resolve({ model: body.model, usage: withUsage ? usage() : null });
+    return Promise.resolve({ model: body.model, usage: u });
   }
 }
 
@@ -172,7 +181,7 @@ describe('off', () => {
       'est_cost_usd', 'est_cost_winner_usd', 'est_cost_anchor_usd', 'latency_ms',
       'stream', 'error', 'prompt_hash', 'vector',
     ]);
-    expect(event.cache_ttl_policy).toBeNull(); // TS-229 fills it from the request
+    expect(event.cache_ttl_policy).toBeNull(); // the request named no lifetime
     expect(event.event_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(event.taxonomy_version).toBeNull(); // no bundle carries one yet
     expect(event.ts).toBe('2026-10-11T12:00:00.123Z');
@@ -192,7 +201,7 @@ describe('off', () => {
     expect(event.classification).toEqual({ category: 'coding', subcategory: 'debugging', confidence: 0.8123 });
     expect(event.usage).toEqual({
       prompt_tokens: 100, completion_tokens: 50, total_tokens: 150,
-      cached_tokens: null, cache_write_tokens: null, cache_writes: null,
+      cached_tokens: null, cache_write_tokens: null, cache_writes: null, reasoning_tokens: null,
     });
     expect(event.est_cost_usd).toBe(0.002); // 100*0.005/1k + 50*0.03/1k
     expect(event.est_cost_winner_usd).toBe(0.000125);
@@ -502,8 +511,36 @@ describe('errors and streams', () => {
     expect(event.stream).toBe(true);
     expect(event.usage).toEqual({
       prompt_tokens: 100, completion_tokens: 50, total_tokens: 150,
-      cached_tokens: null, cache_write_tokens: null, cache_writes: null,
+      cached_tokens: null, cache_write_tokens: null, cache_writes: null, reasoning_tokens: null,
     });
+  });
+
+  it('records reasoning tokens for plain and streamed calls (API.md v1.7)', async () => {
+    const client = new FakeClient(undefined, new FakeCompletions({ reasoning: 30 }));
+    const monitor = wrap(client, { app: 'shop', routeFn: makeRouteFn(SCORES_MINI_WINS) });
+    await call(client, { model: 'gpt-5.5', messages: MESSAGES });
+    const stream = (await call(client, { model: 'gpt-5.5', messages: MESSAGES, stream: true })) as AsyncIterable<Chunk>;
+    for await (const c of stream) void c;
+    await monitor.drain();
+    const events = eventsOf(monitor);
+    expect(events.map((e) => e.stream)).toEqual([false, true]);
+    for (const e of events) {
+      const u = e.usage as Record<string, unknown>;
+      expect(u.reasoning_tokens).toBe(30);
+      // Part of completion_tokens, never added on top.
+      expect(u.completion_tokens).toBe(50);
+      expect(u.total_tokens).toBe(150);
+      expect(Object.keys(u).at(-1)).toBe('reasoning_tokens');
+    }
+  });
+
+  it('records a reported 0 reasoning tokens as 0', async () => {
+    const client = new FakeClient(undefined, new FakeCompletions({ reasoning: 0 }));
+    const monitor = wrap(client, { app: 'shop', routeFn: makeRouteFn(SCORES_MINI_WINS) });
+    await call(client, { model: 'gpt-5.5', messages: MESSAGES });
+    await monitor.drain();
+    const [event] = eventsOf(monitor);
+    expect((event.usage as Record<string, unknown>).reasoning_tokens).toBe(0);
   });
 
   it('records a stream left early', async () => {
@@ -934,5 +971,84 @@ describe('transport allowedModels', () => {
     expect(out.scores.map((s) => (s as { modelId: string }).modelId)).toEqual(['openai/gpt-5-mini']);
     const all = await transport.route('hi', { includeEmbedding: false });
     expect(all.scores).toHaveLength(2);
+  });
+});
+
+// --- prompt-cache usage (SPEC.md §3.1b, TS-229) -------------------------------
+
+describe('prompt-cache usage', () => {
+  const OPENAI_CACHE_USAGE = {
+    prompt_tokens: 2000, completion_tokens: 10, total_tokens: 2010,
+    prompt_tokens_details: { cached_tokens: 1024, cache_write_tokens: 512 },
+  };
+
+  async function cacheEvent(
+    baseURL: string,
+    raw: Record<string, unknown>,
+    extra: Record<string, unknown> = {},
+  ): Promise<Record<string, unknown>> {
+    const client = new FakeClient(baseURL, new FakeCompletions({ usage: raw }));
+    const monitor = wrap(client, { app: 'shop', routeFn: makeRouteFn(SCORES_MINI_WINS) });
+    const resp = await call(client, { model: 'gpt-5.5', messages: MESSAGES, ...extra });
+    if (extra.stream) for await (const c of resp as AsyncIterable<Chunk>) void c;
+    await monitor.drain();
+    const [event] = eventsOf(monitor);
+    return event;
+  }
+
+  it('records the OpenAI cache read and write and the requested retention', async () => {
+    const event = await cacheEvent('https://api.openai.com/v1', OPENAI_CACHE_USAGE, { prompt_cache_retention: '24h' });
+    expect(event.usage).toEqual({
+      prompt_tokens: 2000, completion_tokens: 10, total_tokens: 2010,
+      cached_tokens: 1024, cache_write_tokens: 512, cache_writes: null, reasoning_tokens: null,
+    });
+    expect(event.cache_ttl_policy).toBe('24h');
+  });
+
+  it('leaves an unreported write null, not 0', async () => {
+    const raw = { prompt_tokens: 2000, completion_tokens: 10, total_tokens: 2010, prompt_tokens_details: { cached_tokens: 0 } };
+    const event = await cacheEvent('https://api.openai.com/v1', raw, { extra_body: { prompt_cache_retention: 'in_memory' } });
+    const u = event.usage as Record<string, unknown>;
+    expect([u.cached_tokens, u.cache_write_tokens, u.cache_writes]).toEqual([0, null, null]);
+    expect(event.cache_ttl_policy).toBeNull(); // in_memory promises no lifetime
+  });
+
+  it('reads Azure as the OpenAI shape', async () => {
+    const event = await cacheEvent('https://shop.openai.azure.com/openai/deployments/x', OPENAI_CACHE_USAGE);
+    expect(event.provider).toBe('other');
+    const u = event.usage as Record<string, unknown>;
+    expect([u.cached_tokens, u.cache_write_tokens]).toEqual([1024, 512]);
+  });
+
+  it('reads OpenRouter top-level cache counts and the longest cache_control ttl', async () => {
+    const raw = { prompt_tokens: 3000, completion_tokens: 5, total_tokens: 3005, cached_tokens: 2048, cache_write_tokens: 900 };
+    const messages = [
+      { role: 'system', content: [{ type: 'text', text: 'rules', cache_control: { type: 'ephemeral', ttl: '1h' } }] },
+      { role: 'user', content: [{ type: 'text', text: 'q', cache_control: { type: 'ephemeral', ttl: '5m' } }] },
+    ];
+    const event = await cacheEvent('https://openrouter.ai/api/v1', raw, { messages });
+    const u = event.usage as Record<string, unknown>;
+    expect([u.cached_tokens, u.cache_write_tokens]).toEqual([2048, 900]);
+    expect(event.cache_ttl_policy).toBe('1h');
+  });
+
+  it('records the breakdown of Anthropic-shaped usage from a compatible host', async () => {
+    const raw = {
+      prompt_tokens: 40, completion_tokens: 7, total_tokens: 47,
+      cache_read_input_tokens: 1500, cache_creation_input_tokens: 300,
+      cache_creation: { ephemeral_5m_input_tokens: 100, ephemeral_1h_input_tokens: 200 },
+    };
+    const event = await cacheEvent('http://localhost:4000/v1', raw);
+    const u = event.usage as Record<string, unknown>;
+    expect(u.cached_tokens).toBe(1500);
+    expect(u.cache_write_tokens).toBe(300);
+    expect(u.cache_writes).toEqual([{ tokens: 100, ttl: '5m' }, { tokens: 200, ttl: '1h' }]);
+  });
+
+  it('records cache usage from the last stream chunk', async () => {
+    const event = await cacheEvent('https://api.openai.com/v1', OPENAI_CACHE_USAGE, { stream: true });
+    expect(event.stream).toBe(true);
+    const u = event.usage as Record<string, unknown>;
+    expect([u.cached_tokens, u.cache_write_tokens]).toEqual([1024, 512]);
   });
 });
