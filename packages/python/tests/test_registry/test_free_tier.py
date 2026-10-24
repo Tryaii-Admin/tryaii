@@ -53,12 +53,12 @@ class TestDefaultRegistryExcludesFree:
     def test_default_registry_count_is_paid_only(self, full_bundle, raw_models):
         paid = [m for m in raw_models if not is_free_tier(m["model_id"])]
         registry = ModelRegistry.from_bundle(full_bundle)
-        assert len(registry) == len(paid) == 322
+        assert len(registry) == len(paid) == 319
 
     def test_load_from_bundle_skips_free_by_default(self, full_bundle):
         registry = ModelRegistry()
         count = registry.load_from_bundle(full_bundle)
-        assert count == 322
+        assert count == 319
         assert not any(is_free_tier(i) for i in registry.model_ids)
 
     def test_load_preset_loads_the_default_catalog(self):
@@ -77,7 +77,7 @@ class TestFreeDataIsPreservedForOptIn:
 
     def test_include_free_opt_in_loads_everything(self, full_bundle, raw_models):
         registry = ModelRegistry.default(include_free=True, bundle=full_bundle)
-        assert len(registry) == len(raw_models) == 362
+        assert len(registry) == len(raw_models) == 358
         assert any(is_free_tier(i) for i in registry.model_ids)
 
     def test_opt_in_free_models_are_fully_usable_entries(self, full_bundle):

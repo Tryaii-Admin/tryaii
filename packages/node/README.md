@@ -36,10 +36,10 @@ console.log(response.content);
 
 ## Model catalog
 
-The package ships a **starter catalog**: 45 well-known models from OpenAI, Anthropic,
-Google, DeepSeek, xAI and Mistral, scored on 16 benchmarks. It works offline with no
+The package ships a **starter catalog**: 46 well-known models from OpenAI, Anthropic,
+Google, DeepSeek, xAI and Mistral, scored on 15 benchmarks. It works offline with no
 account. Log in (free, with your tryaii.com Google account) to route on the **full
-catalog of 322 models**:
+catalog of 319 models**:
 
 ```bash
 tryaii login     # device sign-in: open the printed URL in any browser and approve the code

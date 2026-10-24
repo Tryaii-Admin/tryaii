@@ -76,10 +76,10 @@ class TestLoader:
         assert bundle.kind == "starter"
         assert bundle.schema == SUPPORTED_SCHEMA == 1
         assert bundle.embedding_model == "all-MiniLM-L6-v2"
-        assert bundle.counts == {"models": 45, "benchmarks": 16}
+        assert bundle.counts == {"models": 46, "benchmarks": 15}
         assert bundle.full_counts["models"] > bundle.counts["models"]
-        assert len(bundle.model_entries()) == 45
-        assert len(bundle.benchmark_names) == 16
+        assert len(bundle.model_entries()) == 46
+        assert len(bundle.benchmark_names) == 15
         assert bundle.manifest["signature"] is None and bundle.manifest["key_id"] is None
 
     def test_starter_files_are_canonical_text(self):
@@ -214,20 +214,20 @@ class TestResolveBundle:
     def test_router_takes_all_of_its_data_from_the_bundle(self, bundle_copy):
         router = Router(bundle=bundle_copy)
         assert router.bundle.directory == bundle_copy
-        assert len(router.models) == 45
+        assert len(router.models) == 46
         assert router.benchmarks.names == starter_bundle().benchmark_names
         assert Router().bundle is starter_bundle()
 
     def test_registries_default_to_the_starter_and_accept_a_bundle(self, bundle_copy):
-        assert len(ModelRegistry.default()) == 45
-        assert len(ModelRegistry.default(bundle=bundle_copy)) == 45
+        assert len(ModelRegistry.default()) == 46
+        assert len(ModelRegistry.default(bundle=bundle_copy)) == 46
         assert BenchmarkRegistry.default().names == starter_bundle().benchmark_names
 
     def test_router_on_the_full_bundle(self, full_bundle):
         router = Router(bundle=full_bundle)
         assert router.bundle.kind == "full"
-        assert len(router.models) == 322
-        assert len(router.benchmarks) == 33
+        assert len(router.models) == 319
+        assert len(router.benchmarks) == 30
         normalizer = router.benchmarks.get_normalizer()
         assert normalizer.get_weight("SWE-bench-verified") == (
             full_bundle.benchmark_weights()["SWE-bench-verified"])
@@ -268,6 +268,8 @@ class TestStarterSelection:
         assert 10 <= len(report["kept"]) <= 16
         n = report["n_models"]
         for name in report["kept"]:
+            if name in report["coverage_exceptions"]:
+                continue  # kept below the rule on purpose (see the selection)
             assert report["coverage"][name] / n >= report["threshold"]
 
     def test_selection_starts_from_the_legacy_built_in_catalog(self):
@@ -384,7 +386,7 @@ def test_the_starter_prompt_set_matches_the_starter_benchmarks():
 # ---------------------------------------------- full-catalog regression
 def test_full_bundle_reproduces_the_pre_bundle_routing(full_bundle):
     """Routing the recorded similarities on the full bundle gives the same picks
-    (and scores) the pre-bundle engine produced on the same 362-model catalog."""
+    (and scores) the recorded engine produced on the same 358-model catalog."""
     path = PARITY / "full_baseline_routes.json"
     if not path.is_file():
         pytest.skip("full-catalog routing baseline not present")

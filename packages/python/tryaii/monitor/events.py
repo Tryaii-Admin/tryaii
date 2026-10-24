@@ -15,6 +15,8 @@ VECTOR_SCHEMA = "tryaii.monitor.vector/1"
 ROUTE_STATUSES = ("ok", "unavailable", "timeout", "disabled", "queue_full", "skipped",
                   "unreachable_managed")
 TAXONOMY_VERSION_KEY = "taxonomy_version"
+#: ``build_event``'s default for ``cache_cold``: the key is left out.
+_OMIT = object()
 
 
 def new_event_id() -> str:
@@ -284,14 +286,18 @@ def build_event(*, ts: str, app: str, process: str, call_site: Optional[dict],
                 taxonomy_version: Optional[str] = None,
                 est_cost_anchor_usd: Optional[float] = None,
                 cache_ttl_policy: Optional[str] = None,
-                cache: Optional[dict] = None) -> dict:
+                cache: Optional[dict] = None,
+                cache_cold: Any = _OMIT) -> dict:
     """One event line in contract key order (SPEC.md §3.1). ``event_id``
     defaults to a fresh uuid4; ``est_cost_anchor_usd`` is the usage priced
     at the anchor (equal to ``est_cost_usd`` when nothing was swapped);
     ``usage`` is re-emitted in contract order with every §3.1b cache key
     present and ``cache_ttl_policy`` must be a known lifetime or None;
     ``cache`` (API.md v1.4) is the last key, present only when the call ran
-    the runtime cache lint."""
+    the runtime cache lint. ``cache_cold`` (API.md v1.6, Claude Code imports
+    only) follows ``cache_ttl_policy`` when given: true / false for a
+    main-thread call (a cold cache restart or not), null otherwise; without
+    it the key is left out (a missing key reads as null)."""
     site = None
     if call_site:
         site = {
@@ -318,6 +324,10 @@ def build_event(*, ts: str, app: str, process: str, call_site: Optional[dict],
         "taxonomy_version": taxonomy_version,
         "usage": normalize_usage(usage),
         "cache_ttl_policy": normalize_cache_ttl_policy(cache_ttl_policy),
+    }
+    if cache_cold is not _OMIT:
+        event["cache_cold"] = cache_cold if isinstance(cache_cold, bool) else None
+    event.update({
         "est_cost_usd": round_cost(est_cost_usd),
         "est_cost_winner_usd": round_cost(est_cost_winner_usd),
         "est_cost_anchor_usd": round_cost(est_cost_anchor_usd),
@@ -326,7 +336,7 @@ def build_event(*, ts: str, app: str, process: str, call_site: Optional[dict],
         "error": error,
         "prompt_hash": prompt_hash,
         "vector": bool(vector),
-    }
+    })
     if cache is not None:
         event["cache"] = cache
     return normalize_numbers(event)

@@ -23,7 +23,7 @@ tryaii setup --model all-mpnet-base-v2
 Setting up TryAii with embedding model: all-MiniLM-L6-v2
 This will download the model and load benchmark centroids (one-time operation)...
 
-Setup complete! 16 benchmark centroids ready.
+Setup complete! 15 benchmark centroids ready.
 ```
 
 To force a rebuild of existing centroids, use [`regenerate`](regenerate.md).

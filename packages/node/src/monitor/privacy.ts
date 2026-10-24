@@ -21,7 +21,7 @@ import { join } from 'node:path';
 import { writeFileAtomic } from '../auth/store.js';
 
 /** The notice version: its publication date (API.md §7.1). */
-export const NOTICE_VERSION = '2026-10-18';
+export const NOTICE_VERSION = '2026-10-24';
 export const NOTICE_URL = 'https://tryaii.com/privacy-policy#cli-sdk';
 export const NOTICE_TEXT =
   '[tryaii] monitor records sync to your TryAii account.\n' +

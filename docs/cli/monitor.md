@@ -24,11 +24,19 @@ tryaii monitor events --app shop -n 50 --json          # the raw event lines
 
 ```bash
 pip install tryaii openai        # or: npm install tryaii openai
-tryaii login                     # optional, free: the full catalog (322 models)
+tryaii login                     # optional, free: the full catalog (319 models)
 ```
 
-Without login the starter catalog (45 models) is used; after `tryaii login`
+Without login the starter catalog (46 models) is used; after `tryaii login`
 the full catalog downloads automatically ([docs](login.md)).
+
+**On a server, the app key is enough.** With `TRYAII_API_KEY` set (an
+[app key](apps.md)), the SDK downloads and refreshes the same full catalog with
+the key; no personal `tryaii login` on the server. If the machine also has a
+login, the login is used (it is your own explicit choice there); if the key is
+rejected (revoked, deleted app), the starter catalog is used and nothing
+crashes. `tryaii monitor status` ends with the catalog in use: `catalog: full
+(app key)`, `catalog: full (login)` or `catalog: starter`.
 
 ```python
 from openai import OpenAI
@@ -62,6 +70,7 @@ totals: 25 calls, 1 errors, est cost 0.1908, at winner 0.0762, savings 0.1106
 realised: 1 swapped calls, saved -
 source: local
 upload: off
+catalog: starter
 ```
 
 `est cost` is what the calls cost at the model that answered (catalog

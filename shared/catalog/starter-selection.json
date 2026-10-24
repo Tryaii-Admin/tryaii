@@ -1,6 +1,7 @@
 {
-  "description": "Starter catalog selection (docs/catalog/CONTRACT-catalog-v1.md section 2). Models: the 39 models of the 0.5.x built-in catalog mapped to full-catalog ids (legacy_id = the 0.5.x model id), plus current frontier models (legacy_id = null). Benchmarks: every taxonomy benchmark reported by at least min_benchmark_coverage of these models; scripts/build-catalog-bundles.py warns when this list and the rule disagree.",
+  "description": "Starter catalog selection (docs/catalog/CONTRACT-catalog-v1.md section 2). Models: the 39 models of the 0.5.x built-in catalog mapped to full-catalog ids (legacy_id = the 0.5.x model id), plus current frontier models and claude-opus-5, which Claude Code users still run and the claude-code report prices from the catalog (legacy_id = null). Benchmarks: every taxonomy benchmark reported by at least min_benchmark_coverage of these models; scripts/build-catalog-bundles.py warns when this list and the rule disagree. coverage_exceptions lists benchmarks kept below the rule on purpose: SWE-bench-Pro is kept as the starter's agentic-coding benchmark since Terminal-bench-Hard left the taxonomy, so coding prompts still classify as TECHNICAL/CODE_TECHNICAL.",
   "min_benchmark_coverage": 0.6,
+  "coverage_exceptions": ["SWE-bench-Pro"],
   "models": [
     {"id": "openai/gpt-4o", "legacy_id": "gpt-4o"},
     {"id": "openai/gpt-4o-mini", "legacy_id": "gpt-4o-mini"},
@@ -44,6 +45,7 @@
     {"id": "anthropic/claude-opus-5.5", "legacy_id": null},
     {"id": "anthropic/claude-fable-5.1", "legacy_id": null},
     {"id": "anthropic/claude-sonnet-5.5", "legacy_id": null},
+    {"id": "anthropic/claude-opus-5", "legacy_id": null},
     {"id": "google/gemini-3.8-flash", "legacy_id": null},
     {"id": "openai/gpt-6-sol", "legacy_id": null},
     {"id": "openai/gpt-oss-120b", "legacy_id": null}
@@ -53,14 +55,13 @@
     "AIME-2025",
     "GPQA",
     "HLE",
-    "AA-LCR",
     "MMLU-Pro",
     "MMMU",
     "LegalBench",
     "LiveCodeBench",
     "SciCode",
+    "SWE-bench-Pro",
     "Tau2-bench",
-    "Terminal-bench-Hard",
     "IFBench",
     "Chatbot Arena Elo",
     "Chatbot Arena Elo (Code)",

@@ -15,6 +15,12 @@
  *
  * Node specifics: the loop's timers and the long-poll socket are unref'd, so
  * a pending poll never keeps the process alive (Python: a daemon thread).
+ *
+ * First answer (TS-296): the first poll asks with `wait=0` so the server
+ * answers at once (200 when the cached etag is stale or missing, else 304),
+ * and `firstAnswer` resolves when it returns, whatever the outcome. The
+ * transport lets the first call of the process wait for it, at most 500 ms,
+ * once.
  */
 
 import { performance } from 'node:perf_hooks';
@@ -41,8 +47,8 @@ export function pyQuote(text: string): string {
   return encodeURIComponent(text).replace(/[!'()*]/g, (ch) => '%' + ch.charCodeAt(0).toString(16).toUpperCase());
 }
 
-export function configUrl(baseUrl: string, etag: string | null | undefined): string {
-  return `${baseUrl.replace(/\/+$/, '')}/v1/monitor/config?etag=${pyQuote(etag || '')}&wait=${WAIT_S}`;
+export function configUrl(baseUrl: string, etag: string | null | undefined, wait: number = WAIT_S): string {
+  return `${baseUrl.replace(/\/+$/, '')}/v1/monitor/config?etag=${pyQuote(etag || '')}&wait=${wait}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -78,6 +84,11 @@ export class RemotePoller {
   private registered: Promise<void>;
   private markRegistered: () => void = () => undefined;
   private wakeFn: (() => void) | null = null;
+  /** True once the first poll returned (any outcome), or the poller cannot run. */
+  answered = false;
+  /** Resolves when `answered` becomes true; never rejects (TS-296). */
+  readonly firstAnswer: Promise<void>;
+  private markAnswered: () => void = () => undefined;
 
   constructor(key: string, baseUrl?: string | null, opts: RemotePollerOptions = {}) {
     this.key = key;
@@ -90,6 +101,13 @@ export class RemotePoller {
     this.registered = new Promise((resolve) => {
       this.markRegistered = resolve;
     });
+    this.firstAnswer = new Promise((resolve) => {
+      this.markAnswered = (): void => {
+        this.answered = true;
+        resolve();
+      };
+    });
+    if (this.disabled) this.markAnswered();
   }
 
   register(directory: string): void {
@@ -106,12 +124,15 @@ export class RemotePoller {
     return [...this.dirList];
   }
 
-  /** One long poll. Resolves to `changed`, `unchanged`, `error` or `disabled`. Never rejects. */
-  async pollOnce(opts: { unref?: boolean } = {}): Promise<PollOutcome> {
+  /**
+   * One long poll (`wait` seconds server-side, default 25). Resolves to
+   * `changed`, `unchanged`, `error` or `disabled`. Never rejects.
+   */
+  async pollOnce(opts: { unref?: boolean; wait?: number } = {}): Promise<PollOutcome> {
     if (this.disabled) return 'disabled';
     let resp: api.ApiResponse;
     try {
-      resp = await api.request('GET', configUrl(this.baseUrl, this.etag), null, {
+      resp = await api.request('GET', configUrl(this.baseUrl, this.etag, opts.wait ?? WAIT_S), null, {
         bearer: this.key,
         fetchFn: this.fetchFn,
         timeoutMs: HTTP_TIMEOUT_MS,
@@ -160,9 +181,16 @@ export class RemotePoller {
 
   private async loop(): Promise<void> {
     await this.registered;
+    let first = true;
     while (!this.stopped) {
       const started = this.clock();
-      const outcome = await this.pollOnce({ unref: true });
+      // The first poll is answered at once (wait=0): the first call of the
+      // process may be waiting for it.
+      const outcome = await this.pollOnce({ unref: true, wait: first ? 0 : WAIT_S });
+      if (first) {
+        first = false;
+        this.markAnswered();
+      }
       if (outcome === 'disabled') return;
       if (outcome === 'error') {
         await this.sleep(ERROR_WAIT_MS);
@@ -176,6 +204,7 @@ export class RemotePoller {
 
   stop(): void {
     this.stopped = true;
+    this.markAnswered();
     const fn = this.wakeFn;
     if (fn !== null) fn();
     this.markRegistered();

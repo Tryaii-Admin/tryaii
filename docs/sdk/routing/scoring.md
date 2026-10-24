@@ -137,7 +137,7 @@ n.normalize('GPQA', 80.2);                      // (80.2-59.3)/(96.3-59.3) → 0
 n.registerRange('MyBench', 0, 50, 'optional description');
 ```
 
-`NORMALIZATION_RANGES` is identical in both SDKs and covers the starter catalog's 16 benchmarks (`BenchmarkNormalizer.from_bundle(bundle)` / `fromBundle(bundle)` gives any other catalog's ranges). It is not a hand-written table of judgement calls — it is **catalog-derived headroom**, fitted to the full catalog and shipped unchanged in every catalog bundle, so a model scores the same on a benchmark both catalogs share:
+`NORMALIZATION_RANGES` is identical in both SDKs and covers the starter catalog's 15 benchmarks (`BenchmarkNormalizer.from_bundle(bundle)` / `fromBundle(bundle)` gives any other catalog's ranges). It is not a hand-written table of judgement calls — it is **catalog-derived headroom**, fitted to the full catalog and shipped unchanged in every catalog bundle, so a model scores the same on a benchmark both catalogs share:
 
 ```
 real_b = every non-null, finite raw score of benchmark b across the routable catalog

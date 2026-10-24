@@ -268,3 +268,136 @@ describe('the wrapper', () => {
     expect(client.calls.at(-1)?.model).toBe('gpt-5.5');
   });
 });
+
+// --- TS-296: the first calls honour the dashboard -------------------------------
+
+/** A fetch whose first request is held for `holdMs` (or until `release()`). */
+class GatedFetch extends FakeFetch {
+  private releaseFn: () => void = () => undefined;
+  private readonly gate: Promise<void>;
+  constructor(holdMs: number, ...answers: Answer[]) {
+    super(...answers);
+    this.gate = new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, holdMs);
+      this.releaseFn = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+    });
+    const inner = this.fetch;
+    (this as unknown as { fetch: typeof fetch }).fetch = (async (url: string, init?: RequestInit) => {
+      if (this.urls.length === 0) await this.gate;
+      return inner(url, init);
+    }) as unknown as typeof fetch;
+  }
+  release(): void {
+    this.releaseFn();
+  }
+}
+
+function livePoller(monitor: Monitor, fake: FakeFetch): remote.RemotePoller {
+  const p = new remote.RemotePoller(KEY, BASE, { fetchFn: fake.fetch, nowTs: () => FETCHED });
+  p.register(monitor.dir);
+  const t = monitor.transport as unknown as { remote: unknown; remoteSettled: boolean; remoteWait: unknown };
+  t.remote = p;
+  t.remoteSettled = false;
+  t.remoteWait = null;
+  p.start();
+  return p;
+}
+
+describe('TS-296: first calls and remote changes', () => {
+  it('a remote.json written in-process applies on the very next call (no forcing)', async () => {
+    const client = new FakeClient();
+    const monitor = wrap(client, { app: 'shop', process: 'checkout', routeFn });
+    await call(client, monitor);
+    expect(client.calls.at(-1)?.model).toBe('gpt-5.5');
+    const [p] = poller([[200, CONFIG_1]], [monitor.dir]);
+    expect(await p.pollOnce()).toBe('changed');
+    await call(client, monitor);
+    expect(client.calls.at(-1)?.model).toBe('gpt-5-mini');
+    expect(store.readRecentEvents(monitor.dir, 10).map((e) => e.mode)).toEqual(['off', 'managed']);
+  });
+
+  it('a same-mtime rewrite is still picked up', async () => {
+    const { statSync, utimesSync } = await import('node:fs');
+    const client = new FakeClient();
+    const monitor = wrap(client, { app: 'shop', process: 'checkout', routeFn });
+    store.writeRemote(monitor.dir, { ...CONFIG_1, etag: 'e0', processes: { checkout: { mode: 'off', model: null } } }, FETCHED);
+    await call(client, monitor);
+    expect(client.calls.at(-1)?.model).toBe('gpt-5.5');
+    const path = join(monitor.dir, 'remote.json');
+    const st = statSync(path);
+    store.writeRemote(monitor.dir, CONFIG_1, FETCHED);
+    utimesSync(path, st.atime, st.mtime);
+    await call(client, monitor);
+    expect(client.calls.at(-1)?.model).toBe('gpt-5-mini');
+  });
+
+  it('the first call waits for the first answer (wait=0) and uses it', async () => {
+    const client = new FakeClient();
+    const monitor = wrap(client, { app: 'shop', process: 'checkout', routeFn });
+    const fake = new GatedFetch(150, [200, CONFIG_1], [304, null]);
+    const p = livePoller(monitor, fake);
+    try {
+      const t0 = performance.now();
+      await call(client, monitor);
+      expect(performance.now() - t0).toBeLessThan(800);
+      expect(client.calls.at(-1)?.model).toBe('gpt-5-mini');
+      expect(fake.urls[0]).toBe(`${BASE}/v1/monitor/config?etag=&wait=0`);
+      expect((monitor.transport as unknown as { remoteGate(): unknown }).remoteGate()).toBeNull();
+    } finally {
+      p.stop();
+    }
+    expect(store.readRecentEvents(monitor.dir, 10).map((e) => e.mode)).toEqual(['managed']);
+  });
+
+  it('the first-call wait is bounded and happens once', async () => {
+    const client = new FakeClient();
+    const monitor = wrap(client, { app: 'shop', process: 'checkout', routeFn });
+    const fake = new GatedFetch(10_000, [200, CONFIG_1]); // a hanging server
+    const p = livePoller(monitor, fake);
+    try {
+      const t0 = performance.now();
+      await call(client, monitor);
+      const first = performance.now() - t0;
+      const t1 = performance.now();
+      await client.chat.completions.create({ model: 'gpt-5.5', messages: MESSAGES });
+      const second = performance.now() - t1;
+      expect(first).toBeGreaterThanOrEqual(400);
+      expect(first).toBeLessThan(900);
+      expect(second).toBeLessThan(200);
+      expect(client.calls.map((c) => c.model)).toEqual(['gpt-5.5', 'gpt-5.5']);
+    } finally {
+      p.stop();
+      fake.release();
+    }
+  });
+
+  it('no first-call wait when the env pins the mode', async () => {
+    process.env.TRYAII_MONITOR_MODE = 'off';
+    const client = new FakeClient();
+    const monitor = wrap(client, { app: 'shop', process: 'checkout', routeFn });
+    const fake = new GatedFetch(10_000, [200, CONFIG_1]);
+    const p = livePoller(monitor, fake);
+    try {
+      const t0 = performance.now();
+      await client.chat.completions.create({ model: 'gpt-5.5', messages: MESSAGES });
+      expect(performance.now() - t0).toBeLessThan(300);
+    } finally {
+      p.stop();
+      fake.release();
+    }
+  });
+
+  it('firstAnswer resolves on any outcome; a malformed key is answered at once', async () => {
+    const [p] = poller([new Error('down')], [dataDir]);
+    expect(p.answered).toBe(false);
+    p.start();
+    await p.firstAnswer;
+    expect(p.answered).toBe(true);
+    p.stop();
+    const bad = new remote.RemotePoller('not-a-key', BASE, { fetchFn: new FakeFetch([200, CONFIG_1]).fetch });
+    expect(bad.answered).toBe(true);
+  });
+});

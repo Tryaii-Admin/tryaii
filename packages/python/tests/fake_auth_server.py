@@ -14,7 +14,8 @@ Endpoints: POST /v1/auth/device/code, POST /v1/auth/token (device + refresh
 grants, rotation, reuse detection), POST /v1/auth/revoke, GET /v1/auth/me,
 GET /v1/catalog/live (docs/catalog/CONTRACT-catalog-v1.md section 4: serves
 the bundle directory given by ``--catalog-dir``, ETag / If-None-Match -> 304,
-gzip when accepted, entitlement ``catalog:full``), GET /healthz. Test-only
+gzip when accepted, entitlement ``catalog:full``; an app key from
+``--app-keys`` is accepted as well as an access token, contract v1.4), GET /healthz. Test-only
 endpoints: GET /_state (request log + counters), POST /_catalog
 (``{"mode": ..., "dir": ...}`` switches the catalog behaviour at runtime).
 
@@ -120,6 +121,13 @@ def make_full_bundle(dest, version="2026.10.04.1", *, extra_free=True, signed=Tr
     return dest
 
 
+#: The app key the fake accepts by default (shape of monitor API.md section 1;
+#: a test value, never a real key).
+FAKE_APP_KEY = "tryaii_fakeappkey01_" + "A" * 43
+#: Key-shaped but unknown to the fake: 401 invalid_token.
+FAKE_BAD_APP_KEY = "tryaii_fakeappkey02_" + "B" * 43
+
+
 class FakeAuthState:
     def __init__(self, *, outcome="approve", approve_after=2, interval=0,
                  expires_in=600, access_expires_in=3600,
@@ -127,7 +135,8 @@ class FakeAuthState:
                  me_outcome="ok", slow_down_first=False, rate_limit_at="none",
                  email="dev@example.com", name="Dev User",
                  user_id="google-sub-1", entitlements=("catalog:full",),
-                 web_url="https://tryaii.com", catalog_dir=None, catalog_mode="ok"):
+                 web_url="https://tryaii.com", catalog_dir=None, catalog_mode="ok",
+                 app_keys=(FAKE_APP_KEY,)):
         if outcome not in OUTCOMES:
             raise ValueError(f"unknown outcome {outcome!r}")
         if refresh_outcome not in REFRESH_OUTCOMES:
@@ -153,6 +162,9 @@ class FakeAuthState:
             raise ValueError(f"unknown catalog_mode {catalog_mode!r}")
         self.catalog_dir = catalog_dir
         self.catalog_mode = catalog_mode
+        # App keys GET /v1/catalog/live accepts (catalog contract v1.4); any
+        # other ``tryaii_...`` bearer is 401 invalid_token, like a bad token.
+        self.app_keys = set(app_keys)
         self.lock = threading.Lock()
         self.counter = 0
         self.grants = {}      # device_code -> grant dict
@@ -271,8 +283,12 @@ class FakeAuthState:
         """GET /v1/catalog/live -> (status, payload or None, headers)."""
         token = authorization[7:] if authorization and authorization.startswith("Bearer ") else None
         mode = self.catalog_mode
-        family = self.access.get(token)
-        if mode == "401" or family is None or family in self.revoked_families:
+        if token is not None and token.startswith("tryaii_"):
+            valid = token in self.app_keys
+        else:
+            family = self.access.get(token)
+            valid = family is not None and family not in self.revoked_families
+        if mode == "401" or not valid:
             return 401, {"error": "invalid_token"}, {}
         if mode == "403" or "catalog:full" not in self.entitlements:
             return 403, {"error": "insufficient_entitlement"}, {}
@@ -448,6 +464,9 @@ def main(argv=None) -> int:
                         help="comma-separated; empty for none")
     parser.add_argument("--catalog-dir", help="bundle directory GET /v1/catalog/live serves")
     parser.add_argument("--catalog-mode", choices=CATALOG_MODES, default="ok")
+    parser.add_argument("--app-keys", default=FAKE_APP_KEY,
+                        help="comma-separated app keys GET /v1/catalog/live accepts; "
+                             "empty for none")
     parser.add_argument("--make-full-bundle", metavar="DIR",
                         help="write a small valid full bundle to DIR and exit")
     parser.add_argument("--bundle-version", default="2026.10.04.1")
@@ -474,6 +493,7 @@ def main(argv=None) -> int:
         email=args.email, name=args.name,
         entitlements=[e for e in args.entitlements.split(",") if e],
         catalog_dir=args.catalog_dir, catalog_mode=args.catalog_mode,
+        app_keys=[k for k in args.app_keys.split(",") if k],
     )
     print(server.server_address[1], flush=True)
     try:

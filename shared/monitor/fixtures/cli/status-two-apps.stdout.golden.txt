@@ -23,3 +23,4 @@ totals: 1 calls, 1 errors, est cost 0.0001, at winner -, savings -
 realised: 0 swapped calls, saved -
 source: local
 upload: off
+catalog: starter

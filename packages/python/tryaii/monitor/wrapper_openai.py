@@ -48,7 +48,13 @@ from tryaii.monitor.events import (
     usage_from_response,
 )
 from tryaii.monitor.extract import routing_text
-from tryaii.monitor.pins import evaluate_pin, pin_from_first_call, pin_valid, set_pin
+from tryaii.monitor.pins import (
+    evaluate_pin,
+    model_facts,
+    pin_from_first_call,
+    pin_valid,
+    set_pin,
+)
 from tryaii.monitor.transport import (
     STATUS_QUEUE_FULL,
     STATUS_SKIPPED,
@@ -93,14 +99,22 @@ def vectors_enabled() -> bool:
 
 class _CachedDoc:
     """A JSON document re-read when its mtime changes, checked at most
-    every 5 s (so ``tryaii monitor set`` applies without a restart)."""
+    every 5 s (so ``tryaii monitor set`` applies without a restart).
 
-    def __init__(self, path: Path, reader: Callable[[Path], Optional[dict]]):
+    ``version`` (optional) is an in-process change counter: when it moves,
+    the document is re-read on the next ``get()`` regardless of the 5 s
+    window or the mtime. ``remote.json`` uses it, so an answer the long poll
+    just wrote applies on the very next call (TS-296)."""
+
+    def __init__(self, path: Path, reader: Callable[[Path], Optional[dict]],
+                 version: Optional[Callable[[], int]] = None):
         self._path = path
         self._reader = reader
+        self._version = version
         self._doc: Optional[dict] = None
         self._loaded = False
         self._mtime: Optional[float] = None
+        self._seen: Optional[int] = None
         self._checked_at = 0.0
 
     def _stat(self) -> Optional[float]:
@@ -110,20 +124,31 @@ class _CachedDoc:
             return None
 
     def get(self) -> Optional[dict]:
+        version = self._version() if self._version is not None else None
         now = time.monotonic()
-        if not self._loaded or now - self._checked_at >= DOC_RECHECK_S:
+        if not self._loaded or version != self._seen:
+            self._reload(now, version)
+        elif now - self._checked_at >= DOC_RECHECK_S:
             self._checked_at = now
-            mtime = self._stat()
-            if not self._loaded or mtime != self._mtime:
-                self._mtime = mtime
-                self._doc = self._reader(self._path.parent)
-                self._loaded = True
+            if self._stat() != self._mtime:
+                self._reload(now, version)
         return self._doc
+
+    def _reload(self, now: float, version: Optional[int]) -> None:
+        # Version and mtime are taken before the read: a write racing the
+        # read is picked up on the next call, never lost.
+        self._seen = version
+        self._checked_at = now
+        self._mtime = self._stat()
+        self._doc = self._reader(self._path.parent)
+        self._loaded = True
 
     def set(self, doc: dict) -> None:
         self._doc = doc
         self._loaded = True
         self._mtime = self._stat()
+        if self._version is not None:
+            self._seen = self._version()
         self._checked_at = time.monotonic()
 
 
@@ -167,6 +192,8 @@ class CallPlan:
     lint_model: Optional[str] = None
     lint_messages: Optional[list] = None
     lint_tools: Optional[list] = None
+    #: Where ``mode`` came from (SPEC.md §2.6: env, remote, args, config, default).
+    mode_source: Optional[str] = None
     extra: dict = field(default_factory=dict)
 
 
@@ -189,7 +216,8 @@ class Monitor:
         self._mode_arg = mode
         self.dir = store.app_dir(self._transport.data_dir, self.app)
         self._config = _CachedDoc(self.dir / store.CONFIG_FILE, store.read_config)
-        self._remote = _CachedDoc(self.dir / store.REMOTE_FILE, store.read_remote)
+        self._remote = _CachedDoc(self.dir / store.REMOTE_FILE, store.read_remote,
+                                  store.remote_generation)
         self._pins = _CachedDoc(self.dir / store.PINS_FILE, store.read_pins)
         try:
             self._transport.register_app(self.dir)
@@ -231,13 +259,40 @@ class Monitor:
                 model_requested=model_requested, anchor=anchor,
                 text=text, prompt_hash=digest, call_site=call_site, stream=bool(stream),
                 model_sent=model_requested, managed_model=resolved["model"],
-                policy=policy,
+                policy=policy, mode_source=resolved["source"],
                 route_allowed=route_allowed(self.provider, ids, anchor, policy),
                 shadow_allowed=shadow_allowed(ids, policy),
             )
         except Exception:  # noqa: BLE001 - fail-open
             logger.debug("monitor: before() failed", exc_info=True)
             return None
+
+    # -- 1b. first-call remote config (SPEC.md §3.3, TS-296) --------------
+
+    def remote_pending(self, plan: CallPlan) -> bool:
+        """True while this process has not yet had its first remote-config
+        answer (and its bounded first-call wait has not run out). Cheap: a
+        flag check once settled. Never when the env pins the mode."""
+        if plan.mode_source == "env":
+            return False
+        pending = getattr(self._transport, "remote_pending", None)
+        try:
+            return bool(pending()) if pending is not None else False
+        except Exception:  # noqa: BLE001 - fail-open
+            return False
+
+    def settle_mode(self, plan: CallPlan) -> None:
+        """Wait (bounded, once per process) for the first remote-config
+        answer, then re-resolve the plan's mode with it. Never raises."""
+        try:
+            self._transport.wait_remote_config()
+            resolved = resolve_mode(plan.process, env=env_from_os(), remote=self._remote.get(),
+                                    args=self._mode_arg, config=self._config.get())
+            plan.mode = resolved["mode"]
+            plan.managed_model = resolved["model"]
+            plan.mode_source = resolved["source"]
+        except Exception:  # noqa: BLE001 - fail-open: keep the mode from before()
+            logger.debug("monitor: settle_mode() failed", exc_info=True)
 
     # -- 2. decide -------------------------------------------------------
 
@@ -289,7 +344,7 @@ class Monitor:
             return routed_model(MODE_STABLE, plan.provider, plan.anchor, None, pin["model"],
                                 allowed=plan.policy)
         events = store.read_events(self.dir, plan.ts, PIN_HISTORY.total_seconds())
-        decision = evaluate_pin(events, pin, plan.ts, plan.process)
+        decision = evaluate_pin(events, pin, plan.ts, plan.process, self._model_facts())
         if decision["action"] == "pin":
             new_pin = decision["pin"]
         else:
@@ -303,6 +358,15 @@ class Monitor:
         self._pins.set(doc)
         return routed_model(MODE_STABLE, plan.provider, plan.anchor, None, new_pin["model"],
                             allowed=plan.policy)
+
+    def _model_facts(self) -> Optional[dict]:
+        """The catalog's benchmark score and price per model, the pin
+        tie-break inputs (SPEC.md §2.5); None (ids only) if unavailable."""
+        try:
+            return model_facts(self._transport.bundle())
+        except Exception:  # noqa: BLE001 - fail-open
+            logger.debug("monitor: catalog facts unavailable for the pin tie-break", exc_info=True)
+            return None
 
     def _route(self, plan: CallPlan, *, in_path: bool, allowed: Optional[list],
                include_embedding: Optional[bool] = None) -> RouteOutcome:
@@ -621,6 +685,8 @@ def _class_create(resource: Any) -> Callable:
 def _run_sync(monitor: Monitor, original: Callable, plan: Optional[CallPlan],
               args: tuple, kwargs: dict) -> Any:
     if plan is not None:
+        if monitor.remote_pending(plan):
+            monitor.settle_mode(plan)
         monitor.decide(plan)
         monitor.apply(plan, kwargs)
     t0 = time.perf_counter()
@@ -644,6 +710,12 @@ def _run_sync(monitor: Monitor, original: Callable, plan: Optional[CallPlan],
 async def _run_async(monitor: Monitor, original: Callable, plan: Optional[CallPlan],
                      args: tuple, kwargs: dict) -> Any:
     if plan is not None:
+        if monitor.remote_pending(plan):
+            import asyncio
+
+            # Off the event loop: the first call of the process may wait
+            # (bounded) for the first remote-config answer.
+            await asyncio.get_running_loop().run_in_executor(None, monitor.settle_mode, plan)
         if monitor.needs_decision(plan):
             import asyncio
 

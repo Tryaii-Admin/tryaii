@@ -1,0 +1,510 @@
+{
+  "suite": "cold-restarts",
+  "target": "tryaii.claude_code.sessions.cold_restarts (SDK, imported calls) and the server's mark_cold_restarts (live events)",
+  "description": "Synthetic calls (no real data) pinning the Claude Code cold cache restart rule. Within one session's main-thread calls in time order (process 'main'; every other process is a subagent and is excluded): the first main call is never cold; a call is cold when the gap since the previous main call of the same session is more than gap_minutes AND usage.cache_write_tokens >= max(min_write_tokens, usage.cached_tokens). ttl: the call's own cache_writes split ('1h' when the 1h part is larger, '5m' when only 5m is set); without a split the session's last split, else default_ttl. reason: 'expired' when gap >= ttl, else 'model_switch' when the model differs from the previous main call's, else 'other'. cost_usd = 5m part x (1.25 x input - cache read) + 1h part x (2 x input - cache read), with the prices below (synthetic, per million tokens), rounded to 6 dp; a write without a 5m/1h split is priced whole at the call's resolved ttl. default_ttl is passed explicitly: the SDK's default for imported calls is 5m, while the server defaults live main-thread calls to 1h, so its test must pass rule.default_ttl (every no-split cold call here resolves to 5m). cache_cold is null for subagent calls. Sessions are named only by ordinal of their first main call.",
+  "rule": {
+    "gap_minutes": 5,
+    "min_write_tokens": 1024,
+    "default_ttl": "5m",
+    "ttl_minutes": {
+      "5m": 5,
+      "1h": 60
+    },
+    "reasons": [
+      "expired",
+      "model_switch",
+      "other"
+    ],
+    "cache_write_factors": {
+      "5m": 1.25,
+      "1h": 2.0
+    }
+  },
+  "prices": {
+    "claude-opus-5-5": {
+      "input_per_mtok": 4.0,
+      "cache_read_per_mtok": 0.2
+    },
+    "claude-sonnet-5-5": {
+      "input_per_mtok": 2.0,
+      "cache_read_per_mtok": 0.2
+    }
+  },
+  "calls": [
+    {
+      "id": "a1",
+      "session": "sess-a",
+      "process": "main",
+      "ts": "2026-10-01T09:00:00.000Z",
+      "model": "claude-opus-5-5",
+      "usage": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 30000,
+        "cache_writes": [
+          {
+            "tokens": 30000,
+            "ttl": "1h"
+          }
+        ]
+      }
+    },
+    {
+      "id": "a2",
+      "session": "sess-a",
+      "process": "main",
+      "ts": "2026-10-01T09:02:00.000Z",
+      "model": "claude-opus-5-5",
+      "usage": {
+        "cached_tokens": 30000,
+        "cache_write_tokens": 500,
+        "cache_writes": [
+          {
+            "tokens": 500,
+            "ttl": "1h"
+          }
+        ]
+      }
+    },
+    {
+      "id": "b1",
+      "session": "sess-b",
+      "process": "main",
+      "ts": "2026-10-01T09:05:00.000Z",
+      "model": "claude-opus-5-5",
+      "usage": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 20000,
+        "cache_writes": [
+          {
+            "tokens": 20000,
+            "ttl": "5m"
+          }
+        ]
+      }
+    },
+    {
+      "id": "a3",
+      "session": "sess-a",
+      "process": "main",
+      "ts": "2026-10-01T09:07:00.000Z",
+      "model": "claude-opus-5-5",
+      "usage": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 31000,
+        "cache_writes": [
+          {
+            "tokens": 31000,
+            "ttl": "1h"
+          }
+        ]
+      }
+    },
+    {
+      "id": "b2",
+      "session": "sess-b",
+      "process": "main",
+      "ts": "2026-10-01T09:16:00.000Z",
+      "model": "claude-opus-5-5",
+      "usage": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 21000,
+        "cache_writes": [
+          {
+            "tokens": 21000,
+            "ttl": "5m"
+          }
+        ]
+      }
+    },
+    {
+      "id": "b3",
+      "session": "sess-b",
+      "process": "main",
+      "ts": "2026-10-01T09:18:00.000Z",
+      "model": "claude-opus-5-5",
+      "usage": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 22000,
+        "cache_writes": null
+      }
+    },
+    {
+      "id": "s1",
+      "session": "sess-a",
+      "process": "Explore",
+      "ts": "2026-10-01T09:20:00.000Z",
+      "model": "claude-opus-5-5",
+      "usage": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 20000,
+        "cache_writes": [
+          {
+            "tokens": 20000,
+            "ttl": "5m"
+          }
+        ]
+      }
+    },
+    {
+      "id": "a4",
+      "session": "sess-a",
+      "process": "main",
+      "ts": "2026-10-01T09:30:00.000Z",
+      "model": "claude-opus-5-5",
+      "usage": {
+        "cached_tokens": 31000,
+        "cache_write_tokens": 2000,
+        "cache_writes": [
+          {
+            "tokens": 2000,
+            "ttl": "1h"
+          }
+        ]
+      }
+    },
+    {
+      "id": "b4",
+      "session": "sess-b",
+      "process": "main",
+      "ts": "2026-10-01T09:40:00.000Z",
+      "model": "claude-opus-5-5",
+      "usage": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 23000,
+        "cache_writes": null
+      }
+    },
+    {
+      "id": "a5",
+      "session": "sess-a",
+      "process": "main",
+      "ts": "2026-10-01T10:45:00.000Z",
+      "model": "claude-opus-5-5",
+      "usage": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 33000,
+        "cache_writes": [
+          {
+            "tokens": 33000,
+            "ttl": "1h"
+          }
+        ]
+      }
+    },
+    {
+      "id": "a6",
+      "session": "sess-a",
+      "process": "main",
+      "ts": "2026-10-01T10:56:00.000Z",
+      "model": "claude-opus-5-5",
+      "usage": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 33500,
+        "cache_writes": [
+          {
+            "tokens": 33500,
+            "ttl": "1h"
+          }
+        ]
+      }
+    },
+    {
+      "id": "a7",
+      "session": "sess-a",
+      "process": "main",
+      "ts": "2026-10-01T11:10:00.000Z",
+      "model": "claude-sonnet-5-5",
+      "usage": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 34000,
+        "cache_writes": [
+          {
+            "tokens": 34000,
+            "ttl": "1h"
+          }
+        ]
+      }
+    },
+    {
+      "id": "a8",
+      "session": "sess-a",
+      "process": "main",
+      "ts": "2026-10-01T11:20:00.000Z",
+      "model": "claude-sonnet-5-5",
+      "usage": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 900,
+        "cache_writes": [
+          {
+            "tokens": 900,
+            "ttl": "1h"
+          }
+        ]
+      }
+    },
+    {
+      "id": "a9",
+      "session": "sess-a",
+      "process": "main",
+      "ts": "2026-10-01T11:30:00.000Z",
+      "model": "claude-sonnet-5-5",
+      "usage": {
+        "cached_tokens": 1024,
+        "cache_write_tokens": 1024,
+        "cache_writes": [
+          {
+            "tokens": 1024,
+            "ttl": "1h"
+          }
+        ]
+      }
+    },
+    {
+      "id": "c1",
+      "session": "sess-c",
+      "process": "main",
+      "ts": "2026-10-01T12:00:00.000Z",
+      "model": "claude-opus-5-5",
+      "usage": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 5000,
+        "cache_writes": null
+      }
+    },
+    {
+      "id": "c2",
+      "session": "sess-c",
+      "process": "main",
+      "ts": "2026-10-01T12:06:00.000Z",
+      "model": "claude-opus-5-5",
+      "usage": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 5000,
+        "cache_writes": null
+      }
+    },
+    {
+      "id": "c3",
+      "session": "sess-c",
+      "process": "main",
+      "ts": "2026-10-01T12:20:00.000Z",
+      "model": "claude-opus-5-5",
+      "usage": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 4000,
+        "cache_writes": [
+          {
+            "tokens": 1000,
+            "ttl": "5m"
+          },
+          {
+            "tokens": 3000,
+            "ttl": "1h"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d1",
+      "session": "sess-d",
+      "process": "general-purpose",
+      "ts": "2026-10-01T13:00:00.000Z",
+      "model": "claude-opus-5-5",
+      "usage": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 40000,
+        "cache_writes": [
+          {
+            "tokens": 40000,
+            "ttl": "5m"
+          }
+        ]
+      }
+    },
+    {
+      "id": "d2",
+      "session": "sess-d",
+      "process": "general-purpose",
+      "ts": "2026-10-01T14:00:00.000Z",
+      "model": "claude-opus-5-5",
+      "usage": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 41000,
+        "cache_writes": [
+          {
+            "tokens": 41000,
+            "ttl": "5m"
+          }
+        ]
+      }
+    }
+  ],
+  "expected": [
+    {
+      "id": "a1",
+      "cache_cold": false,
+      "reason": null,
+      "ttl": null,
+      "cost_usd": null,
+      "note": "first main call of a session: never cold"
+    },
+    {
+      "id": "a2",
+      "cache_cold": false,
+      "reason": null,
+      "ttl": null,
+      "cost_usd": null,
+      "note": "warm: 2 minutes, reads the cache"
+    },
+    {
+      "id": "b1",
+      "cache_cold": false,
+      "reason": null,
+      "ttl": null,
+      "cost_usd": null,
+      "note": "first call of another session, interleaved in time"
+    },
+    {
+      "id": "a3",
+      "cache_cold": false,
+      "reason": null,
+      "ttl": null,
+      "cost_usd": null,
+      "note": "gap of exactly 5 minutes is not more than 5 minutes"
+    },
+    {
+      "id": "b2",
+      "cache_cold": true,
+      "reason": "expired",
+      "ttl": "5m",
+      "cost_usd": 0.1008,
+      "note": "11 minutes after b1 (a3 is another session); 5m write split"
+    },
+    {
+      "id": "b3",
+      "cache_cold": false,
+      "reason": null,
+      "ttl": null,
+      "cost_usd": null,
+      "note": "2 minutes: gap too short"
+    },
+    {
+      "id": "s1",
+      "cache_cold": null,
+      "reason": null,
+      "ttl": null,
+      "cost_usd": null,
+      "note": "subagent call: never marked, and not a predecessor of main calls"
+    },
+    {
+      "id": "a4",
+      "cache_cold": false,
+      "reason": null,
+      "ttl": null,
+      "cost_usd": null,
+      "note": "23 minutes but writes less than it reads (still warm)"
+    },
+    {
+      "id": "b4",
+      "cache_cold": true,
+      "reason": "expired",
+      "ttl": "5m",
+      "cost_usd": 0.1104,
+      "note": "no write split: ttl from the session's last split (5m)"
+    },
+    {
+      "id": "a5",
+      "cache_cold": true,
+      "reason": "expired",
+      "ttl": "1h",
+      "cost_usd": 0.2574,
+      "note": "75 minutes after a4, past the 1h lifetime"
+    },
+    {
+      "id": "a6",
+      "cache_cold": true,
+      "reason": "other",
+      "ttl": "1h",
+      "cost_usd": 0.2613,
+      "note": "11 minutes, inside 1h, same model: cold for another reason"
+    },
+    {
+      "id": "a7",
+      "cache_cold": true,
+      "reason": "model_switch",
+      "ttl": "1h",
+      "cost_usd": 0.1292,
+      "note": "14 minutes, inside 1h, model changed"
+    },
+    {
+      "id": "a8",
+      "cache_cold": false,
+      "reason": null,
+      "ttl": null,
+      "cost_usd": null,
+      "note": "write below 1024 tokens"
+    },
+    {
+      "id": "a9",
+      "cache_cold": true,
+      "reason": "other",
+      "ttl": "1h",
+      "cost_usd": 0.003891,
+      "note": "write equal to max(1024, read) counts"
+    },
+    {
+      "id": "c1",
+      "cache_cold": false,
+      "reason": null,
+      "ttl": null,
+      "cost_usd": null,
+      "note": "first call; no split anywhere in this session"
+    },
+    {
+      "id": "c2",
+      "cache_cold": true,
+      "reason": "expired",
+      "ttl": "5m",
+      "cost_usd": 0.024,
+      "note": "no split in the session: default 5m"
+    },
+    {
+      "id": "c3",
+      "cache_cold": true,
+      "reason": "other",
+      "ttl": "1h",
+      "cost_usd": 0.0282,
+      "note": "mixed split, 1h part larger: ttl 1h; 14 minutes"
+    },
+    {
+      "id": "d1",
+      "cache_cold": null,
+      "reason": null,
+      "ttl": null,
+      "cost_usd": null,
+      "note": "a session with subagent calls only"
+    },
+    {
+      "id": "d2",
+      "cache_cold": null,
+      "reason": null,
+      "ttl": null,
+      "cost_usd": null,
+      "note": "subagent gap of an hour: still not marked"
+    }
+  ],
+  "expected_session_labels": {
+    "sess-a": "Session 1",
+    "sess-b": "Session 2",
+    "sess-c": "Session 3"
+  },
+  "expected_totals": {
+    "cold_restarts": 8,
+    "cost_usd": 0.915191,
+    "by_reason": {
+      "expired": 4,
+      "model_switch": 1,
+      "other": 3
+    }
+  }
+}

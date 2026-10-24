@@ -1,5 +1,148 @@
 # Changelog
 
+## 0.8.1 (2026-10-24)
+
+- **Catalog: AA-LCR, AA-Omniscience and Terminal-bench-Hard removed**
+  (Artificial Analysis licensing). The benchmark taxonomy, normalization
+  ranges, training queries and both embedding models' centroids drop the three
+  (centroid rows removed, no re-embedding); the full build data goes from 33 to
+  30 benchmarks and from 362 to 358 models (319 routable): four models scored
+  only on these benchmarks and leave the catalog
+  (`inception/mercury-2.5-preview`, `x-ai/grok-build-0.1`,
+  `google/gemini-3.1-flash-lite`, `apodex/apodex-1.1-mini:free`); no starter
+  model loses all its scores. `scripts/build_cache_shared.py` always excludes
+  the three (`EXCLUDED_BENCHMARKS`), whatever the allowlist says, and the new
+  `scripts/fetch_snapshot.py` fetches the bench snapshot it reads. Parity,
+  diagnose and monitor pin fixtures regenerated.
+- **Starter catalog 2026.10.23.3: Claude Opus 5 and SWE-bench-Pro.** The
+  packaged starter catalog now has 46 models and 15 benchmarks.
+  `anthropic/claude-opus-5` joins it (Claude Code users still run it, and
+  `tryaii claude-code report` now prices it from the catalog instead of the
+  list-price fallback). SWE-bench-Pro is kept as the starter's agentic-coding
+  benchmark although fewer than 60% of the starter models report it (a
+  documented `coverage_exceptions` entry in `shared/catalog/starter-selection.json`,
+  checked by `scripts/build-catalog-bundles.py`), so coding prompts still
+  classify as code now that Terminal-bench-Hard is gone. Starter training
+  queries: 217.
+- **`tryaii claude-code report` shows usage by day** (TS-287). A "By day
+  (UTC)" section lists every UTC date in the window with calls, cache hit
+  share and estimated cost (days without calls as 0); `--json` adds a `days`
+  array with the same rows plus unpriced, main and subagent call counts.
+  Counts and costs only, never message text.
+- **An app key alone unlocks the full model catalog** (TS-294, catalog
+  contract v1.4). On a server, set only `TRYAII_API_KEY`: when no
+  `tryaii login` session is stored, both SDKs download and refresh the full
+  signed catalog (319 models instead of the 46-model starter) from
+  `GET /v1/catalog/live` with the key, against `TRYAII_API_URL`. A stored
+  login still wins when present (unchanged behaviour for logged-in
+  machines). A rejected key (revoked, expired, deleted app) falls back to the
+  starter catalog without raising, and the CLI prints
+  `TRYAII_API_KEY was not accepted for the full catalog; using the starter catalog.`
+  `catalog/state.json` gains `"auth": "app_key"` after a key's check.
+  `tryaii monitor status` ends with `catalog: full (app key)`,
+  `catalog: full (login)` or `catalog: starter`. Needs the API change that
+  accepts app keys on the catalog endpoint (tryaii-backend-servers, same
+  ticket); against an older API a key is rejected and the starter catalog
+  is used, as before.
+- **Monitor: stable mode pins the same model the dashboard names (TS-295).**
+  When two models won a sub-process equally often over the pin window, the
+  pin used to go to the model id that sorts first, while the dashboard
+  recommended the model with the better benchmark score and price, so
+  "Pin X · stable" could pin Y. Both now use one rule: most wins, then the
+  higher catalog benchmark score, then the lower blended price, then the
+  model id (SPEC §2.5), and the server's summary reports that pick as
+  `pin_candidate`. The pin's `reason` says when a tie was broken and by what.
+  Python and Node, with shared fixtures for ties.
+- **Monitor: dashboard mode changes apply on the next call, and from the
+  first call** (TS-296). A `remote.json` the long poll just wrote was only
+  noticed on the wrapper's next 5 s re-check, so calls in the first seconds
+  after a fetch still used the old mode; the poll's own writes now apply on
+  the very next call (an in-process write counter, independent of mtime
+  resolution). The first poll of a process asks with `wait=0`, and the first
+  call of a process waits for that answer at most 500 ms, once, so a short
+  script honours the dashboard from its first call; a slow or unreachable
+  server costs at most 500 ms once and falls back to the cached/default
+  mode. Both SDKs (SPEC.md §3.3).
+- **New (Python only): `tryaii claude-code`, your own Claude Code usage**
+  (TS-286; CLI, 30-day log import and report: TS-287).
+  `report` reads the session logs Claude Code keeps on the machine
+  (`~/.claude/projects`) and shows calls, tokens, the cache hit share and the
+  cost split (input, cache write 5m / 1h, cache read, output) per model, main
+  conversation vs subagents, per subagent type and per project, plus where a
+  cheaper model may fit (subagents with short answers -> `model: haiku`, with
+  the upper-bound saving, measured per subagent run). Costs are an estimate at
+  API list prices from the TryAii catalog, with Anthropic's cache-read rates
+  per model and list prices for Claude models the catalog lacks (marked
+  "list price (fallback)") until the catalog carries them; any other model the
+  catalog does not price is shown as unpriced.
+  `connect` stores each call as a monitor event of the app `claude-code` and
+  uploads it with the monitor's uploader (`TRYAII_API_KEY`); re-running adds
+  only new calls, `--dry-run` writes nothing. `disconnect` removes what
+  `connect` stored. Only model ids, token counts, times, the subagent type and
+  the project folder's base name are read: never message text, tool inputs or
+  outputs, or file contents. Not in the Node CLI yet (a documented parity
+  exception, `shared/monitor/SPEC.md` §10). Docs: `docs/cli/claude-code.md`.
+  `analyze` (opt-in, TS-288) classifies your Claude Code tasks on the machine:
+  it reads the text of your own messages and of each subagent's instruction
+  (after asking; secrets are skipped), embeds it with the local embedding
+  model, and says per process (main, each subagent type, weighted by cost)
+  which Anthropic model is good enough and what switching would save. Main-
+  thread advice is marked low confidence. The text is never stored or sent;
+  `connect` uploads only the task profile and the recommendation.
+  Live telemetry (TS-291, v1.5, SPEC §10.8): with a separate yes, `connect` adds
+  Claude Code's OpenTelemetry settings to `~/.claude/settings.json` (backup
+  first, every other setting kept, another tool's telemetry never
+  overwritten) so each new API call is reported to
+  `/v1/otlp/claude-code/v1/logs`: model, tokens, cost, duration, time (the
+  request id only builds the de-duplication id and is not stored);
+  never prompts, code or tool inputs. `--no-live` / `--live-only` pick a part;
+  `otel-headers` is the headers helper, `status` shows what is connected and
+  warns when a Claude Code content switch is on, `disconnect` removes exactly
+  the added keys. Event ids now derive from the request id (shared with the
+  server), and after live telemetry is on the import stops at its cutoff.
+  Live telemetry sends logs only (metrics export stays off), to the OTLP
+  endpoint on `api.tryaii.com`, and needs the app key in `TRYAII_API_KEY`.
+- **Fix (Node): `wrap()` on a Langfuse `observeOpenAI` client no longer
+  produces two Langfuse traces per call.** `wrap(observeOpenAI(client))`
+  sent one request but Langfuse traced it twice, because `wrap()` read
+  `create` through Langfuse's proxy (getting Langfuse's tracing closure) and
+  the proxy then wrapped TryAii's `create` again. `wrap()` now recognises the
+  proxy and patches the real `chat.completions` behind it, so both orders
+  give one request, one Langfuse generation and one TryAii event per call,
+  streams included. Every other client (plain, Azure, OpenAI-compatible) is
+  patched exactly as before. Python already handled both orders.
+- **Claude Code: cold cache restarts, sessions and live advice (Python only,
+  TS-286 / TS-297, API.md v1.6).**
+  `report` gains a **cold cache restarts** section: main-conversation calls
+  after a pause of more than 5 minutes that wrote the whole context to the
+  prompt cache again, with the cost of that rewrite above reading the cache
+  (at API list prices), by reason (expired, model switch, other), per session
+  and the largest few. Sessions are grouped by their log file on the machine
+  and named only "Session N"; the session id is never printed, stored or
+  uploaded. Imported events carry the result as the optional field
+  `cache_cold` (true / false for main-thread calls, null for subagents). The
+  rule is pinned by the shared fixture
+  `shared/monitor/fixtures/claude-code/cold-restarts.json`, which the server
+  also runs for live calls.
+  `connect --no-session` adds `OTEL_METRICS_INCLUDE_SESSION_ID=false`, so
+  Claude Code sends no session id and the server keeps no session reference
+  (works on an existing setup: `connect --live-only --no-session`;
+  `disconnect` removes it); `status` shows whether the session id is sent.
+  New verb `sync [--background] [--quiet] [--days N]`: for calls that came
+  by live telemetry it sends the project folder name, the subagent type and,
+  after `analyze`, the task type and recommended model, plus the per-process
+  advice summary (never text) to `POST /v1/monitor/claude-code/annotations`.
+  The Claude Code plugin (0.2.0) runs it from a `SessionEnd` hook in the
+  background; the hook always exits 0.
+- **Data notice 2026-10-24.** `NOTICE_VERSION` is now `2026-10-24` in both
+  SDKs (sent as `notice_version` with every batch and by Claude Code's headers
+  helper), because Claude Code's live telemetry now also keeps the effort level
+  and a session reference: a keyed hash of Claude Code's session id made on
+  TryAii's server (per-app key, 64 bits), used only for the cache timer and
+  removed after 7 days; the raw session id is never stored. `PRIVACY.md`
+  has a new Claude Code section. The first upload after updating prints the
+  notice again (it is recorded per version).
+
 ## 0.8.0 (2026-10-21)
 
 Breaking: the default embedding model changes. Vectors and classifications

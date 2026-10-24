@@ -20,7 +20,7 @@
 
 ```python
 from tryaii import ModelRegistry
-registry = ModelRegistry.default()        # the default catalog: 45-model starter, or the full catalog after `tryaii login`
+registry = ModelRegistry.default()        # the default catalog: 46-model starter, or the full catalog after `tryaii login`
 registry = ModelRegistry()                # or start empty and add your own
 registry.add("gpt-4o-mini", provider="OpenAI",
              benchmarks={"LiveCodeBench": 62.0, "MMLU-Pro": 76.0},

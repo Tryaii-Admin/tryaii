@@ -21,6 +21,16 @@ human `events` line (§5.5). The wrappers start filling the write fields in
 TS-229; the cost estimate learns about them in TS-230; the server stores
 them in TS-231.
 
+§10 (2026-10-21, Python only) adds `tryaii claude-code`: a developer's own
+Claude Code usage read from its local logs, reported, and imported as events
+of the app `claude-code` (a documented exception to CLI parity, §10.6).
+
+§10 update (API.md v1.6, notice 2026-10-24, Python only): cold cache restarts
+worked out from the local session grouping and sent as the optional event field
+`cache_cold` (§10.5, §10.9; the session itself stays on the machine),
+`connect --no-session` (§10.8), and `tryaii claude-code sync` with the
+plugin's `SessionEnd` hook (§10.9). Node needs only the new notice version.
+
 This file freezes the behavior of `tryaii monitor` and the `tryaii.monitor`
 wrapper across both SDKs (`packages/python/tryaii/monitor` — the REFERENCE
 implementation — and `packages/node/src/monitor`). Any behavior change is a
@@ -168,7 +178,7 @@ ranking filtered to `route_allowed`), `routed`, `model_to_send` and
 with `pin = {"model", "pinned_at", "expires_at", "basis": {"window",
 "events", "counts"}}`; processes sorted by name.
 
-`evaluate_pin(events, pin, now, process)`:
+`evaluate_pin(events, pin, now, process, models)`:
 
 1. `pin_valid`: the pin has a `model` and `now < expires_at` → `action:
    "keep"`.
@@ -176,13 +186,39 @@ with `pin = {"model", "pinned_at", "expires_at", "basis": {"window",
    `winner_reachable` true) of `process` whose `ts` lies in
    `[now − 24h, now]`; when that holds fewer than **20**, use
    `[now − 7d, now]` instead (`basis.window` = `"24h"` / `"7d"`). `counts`
-   is ordered by count desc, then model id asc; `basis.events` = the sum.
+   is ordered by **the winner rule** below; `basis.events` = the sum.
 3. Counts non-empty → `action: "pin"`, the first entry wins,
-   `pinned_at = now`, `expires_at = now + 24h`.
+   `pinned_at = now`, `expires_at = now + 24h`. `reason` = `"most frequent
+   winner over <window>"`, plus `" (tie broken by benchmark score|price|model
+   id)"` when the first two entries have the same count (naming the first
+   key below on which they differ).
 4. Counts empty → `action: "none"`: the wrapper routes this call in-path and,
    when the winner is reachable, pins it with `pin_from_first_call` (`basis
    = {"window": "first_call", "events": 1, "counts": {winner: 1}}`);
    routing unavailable → no pin, the anchor is sent.
+
+**The winner rule (TS-295)** — "the winner of a sub-process", shared with the
+server's summary (API.md §3.4 `pin_candidate`, computed over the uploaded
+events with the same windows, so the dashboard's "Today that is X" is the
+model the SDK pins). Order the reachable winners by:
+
+1. count desc;
+2. catalog benchmark score (`quality`) desc;
+3. blended price (`blended_price_usd_per_m`) asc;
+4. model id asc (code-unit order).
+
+A null score or price sorts after every known one. Never list, event or
+insertion order. `models` = `model_facts(bundle)`: `{id: {"quality",
+"blended_price_usd_per_m"}}` for every model of the catalog bundle in use,
+defined exactly as `GET /v1/monitor/models`: `quality` = the mean over the
+model's raw `benchmark_scores` of `(score − lo) / (hi − lo)` clipped to
+0..1 (`lo`/`hi` from `normalization_ranges.json`; benchmarks without a
+range, non-numeric or boolean scores and ranges with `hi ≤ lo` skipped),
+half-even 4 dp, `null` without any ranged benchmark; price = `(input_per_1k
++ output_per_1k) / 2 × 1000`, 6 dp, `null` when either is missing.
+`models` absent/`null` (no catalog) → steps 2–3 compare equal. The `pin`
+fixture suite takes `models` inline or as `"starter"` (the starter catalog's
+facts) and freezes the facts themselves (`facts_of`).
 
 ### §2.6 Config, app and process names (`config`)
 
@@ -352,7 +388,7 @@ daemon state).
 | `vectors-YYYY-MM-DD.jsonl` | one vector line per **distinct** `prompt_hash` per day (§3.2); on by default, `TRYAII_MONITOR_VECTORS=0` disables; never uploaded in slice 1 |
 | `pins.json` | §2.5, written atomically |
 | `config.json` | §2.6, written atomically; re-read by the wrapper when its mtime changes (checked at most every 5 s) |
-| `remote.json` | §3.3, the dashboard config (written atomically by the long poll); read through the same 5 s mtime cache |
+| `remote.json` | §3.3, the dashboard config (written atomically by the long poll); read through the same 5 s mtime cache, plus an in-process write counter so the poll's own writes apply on the next call |
 | `upload.json` | §3.4, the upload cursor (written atomically by the uploader) |
 | `upload.lock` | §3.4, exists only while one process uploads this app directory |
 | `raw/` | reserved (a future local opt-in for raw prompts); never written |
@@ -399,7 +435,8 @@ unknown and tolerate missing keys, so slice-1 lines stay readable):
   absolute path names the developer's machine, not the app, and never leaves
   it: the uploader replaces an absolute `call_site.file` (drive letter, root
   slash or `~`) with the base name before the batch is built (TS-226).
-- `provider` ∈ `openai|openrouter|other` (§2.2).
+- `provider` ∈ `openai|openrouter|other` (§2.2); events imported from
+  Claude Code (§10, Python only) carry `anthropic`.
 - `model_requested` = the id as written in the call; `model_resolved` = the
   anchor catalog id or `null`; `model_used` = the native id actually sent.
 - `route_status` ∈ `ok|unavailable|timeout|disabled|queue_full|skipped|
@@ -416,6 +453,9 @@ unknown and tolerate missing keys, so slice-1 lines stay readable):
   since API v1.4, the last two since v2.2, §3.1b). A writer always emits all six keys; a reader
   treats a missing key as `null`.
 - `cache_ttl_policy` (v2.2, §3.1b) — right after `usage`.
+- `cache_cold` (API.md v1.6, optional) — right after `cache_ttl_policy`, only
+  in Claude Code import events (§10.5); the wrappers of both SDKs leave it
+  out, and a reader treats a missing key as `null`.
 - `est_cost_usd` = `estimate_generation_cost(model_used)` and
   `est_cost_winner_usd` the same usage priced at the winner; `null` for
   unknown/unpriced models or missing usage.
@@ -574,15 +614,35 @@ when `TRYAII_API_KEY` is set and `TRYAII_MONITOR_REMOTE` is not `"0"`:
 
 - `GET {TRYAII_API_URL}/v1/monitor/config?etag=<url-encoded etag>&wait=25`
   with `Authorization: Bearer <TRYAII_API_KEY>`, HTTP timeout 35 s. The
-  first etag is the cached file's (`""` without one).
+  first etag is the cached file's (`""` without one). The **first** poll of
+  the process sends `wait=0`, so the server answers at once (`200` when the
+  cached etag is stale or missing, else `304`); every later poll sends
+  `wait=25`.
 - `200` with a valid body → `remote.json` is written into **every** app
   directory this process records to, the etag is kept, poll again at once;
   `304` → poll again at once; a `401` → polling stops for the process (one
   log line shared with the uploader, §3.4); anything else (other status,
   invalid body, network) → wait 30 s. Polls are at least 1 s apart.
 - The wrapper reads `remote.json` through the same mtime cache as
-  `config.json` (checked at most every 5 s), so a change applies on a call
-  within ~5 s.
+  `config.json` (checked at most every 5 s) **plus** a per-process write
+  counter bumped by every `remote.json` write: an answer the poll of this
+  process wrote applies on the **next call**, with no 5 s delay and no
+  reliance on mtime resolution (TS-296). A `remote.json` written by another
+  process still applies within ~5 s.
+- **First call** (TS-296): while the poller's first answer has not come,
+  the first call(s) of the process wait for it — `200`, `304`, error or
+  `401`, whichever — but at most **500 ms**, once per process: the bound
+  starts with the first call that waits, concurrent first calls share it,
+  and after the first answer or the bound no call ever waits again (a flag
+  check). The mode is then resolved again with the fresh `remote.json`. No
+  wait without a poller (no key, `TRYAII_MONITOR_REMOTE=0`, a malformed key)
+  or when env `TRYAII_MONITOR_MODE` sets the mode. A slow or unreachable
+  server costs the first call at most 500 ms and it runs with the cached /
+  default mode. Python: the sync path blocks on a `threading.Event`; the
+  async path waits in the default executor (never on the event loop). Node:
+  the first call's `create` returns a plain `Promise` (as calls that route
+  in-path already do) and the bound timer is ref'd, so a script awaiting it
+  does not exit early.
 
 ### §3.4 Upload (`upload.json`, `tryaii.monitor.upload-cursor/1`)
 
@@ -620,9 +680,13 @@ when `TRYAII_API_KEY` is set and `TRYAII_MONITOR_REMOTE` is not `"0"`:
 - caps a batch at **500 events** and a **1 MiB** body; the body is the
   envelope `{"schema":"tryaii.monitor.upload/1","batch_id":"<uuid4>",
   "sdk":{"lang":"python"|"node","version":"<sdk version>"},
-  "notice_version":"2026-10-18","events":[` + the outgoing lines (§9.4),
+  "notice_version":"2026-10-24","events":[` + the outgoing lines (§9.4),
   comma-joined + `]}` (minified, that key order; `notice_version` =
-  the constant `NOTICE_VERSION`);
+  the constant `NOTICE_VERSION`); Python only, API.md v1.6: a directory
+  registered with a source (only the Claude Code importer's,
+  `register(dir, source="claude-code-import")`, §10.5) gets
+  `"sdk":{"lang":"python","version":"…","source":"claude-code-import"}`; every
+  other upload leaves `source` out;
 - POSTs `/v1/monitor/events` with `Authorization: Bearer <key>`, at most
   one batch every **5 s** per process:
   - 2xx (202) → cursor advanced, `last_ok` = now, `last_error` = null
@@ -734,6 +798,16 @@ After each process row its `files` follow as `    -> <file>` lines. A
 window with no events and no configured/pinned processes prints
 `no calls in this window` instead of the table and totals. The totals line
 uses the §2.7 totals with the same money formatting.
+
+TS-294 (catalog contract v1.4): after every block (and after the `classification: off ...`
+line when there is one) comes one machine-wide line naming the catalog this
+machine routes on and why: `catalog: full (login)`, `catalog: full (app key)`
+or `catalog: starter`. It is read from local files only (no network, no
+environment): `full (...)` when `<data dir>/catalog/state.json` names a
+`version` whose cached full bundle loads and verifies, `(app key)` when the
+state's `auth` is `app_key` and `(login)` otherwise; anything else is `starter`
+(docs/catalog/CONTRACT-catalog-v1.md v1.4, section 5). Not printed with
+`--json` or when there are no apps on disk.
 
 `--json`: with `--app` the §2.7 status document, otherwise a JSON list of
 documents (one per app, sorted), `indent=2`. With no apps on disk:
@@ -1027,3 +1101,441 @@ random bytes kept as 64 hex characters + `\n` in
 created on the first upload and never sent. Local files keep the plain
 sha256 (§2.1), so local tools and fixtures are unchanged; the server sees a
 hash it cannot test guesses against, stable for one installation.
+
+## §10 Claude Code import (Python)
+
+`tryaii claude-code` reads the developer's **own** Claude Code usage from the
+session logs Claude Code keeps on the machine, reports it, and can import it
+as monitor events of the app `claude-code`, which the uploader of §3.4 sends
+like any other app's. Python only for now (§10.6). Code:
+`packages/python/tryaii/claude_code/` and `tryaii/cli/claude_code.py`; docs:
+`docs/cli/claude-code.md`.
+
+### §10.1 Source and privacy (hard rule)
+
+- Logs: every `*.jsonl` under `~/.claude/projects` (`$CLAUDE_CONFIG_DIR/projects`
+  when set; `--projects-dir` overrides): `<project>/<session>.jsonl` and
+  subagents under `<project>/<session>/subagents/agent-<id>.jsonl`, each with an
+  optional sibling `agent-<id>.meta.json`.
+- From a log line only `type`, `timestamp`, `isSidechain`, `agentId`, `cwd`, `requestId`,
+  `message.id`, `message.model` and `message.usage` are read (a line is parsed
+  only when it can be an assistant line with usage, and dropped right after);
+  from a meta file only `agentType`. Message text, tool inputs and outputs, file
+  contents and the meta `description` are **never** printed, stored or uploaded.
+  The command never writes into Claude Code's directory. The only verb that
+  reads message text is the opt-in `analyze` (§10.7), on this machine only.
+- The **project label** is the base name of the call's `cwd` (`tryaii-dev`;
+  `unknown` without one), never a full path and never the encoded project folder
+  name, which contains the OS user name (TS-226). Paths in human output show the
+  home directory as `~`.
+- The **session** of a call is internal only: the stem of the main file
+  (`<session>.jsonl`; a subagent file under `<session>/subagents/` belongs to
+  it), read from the file path, never from a log line (`Call.session`). It is
+  a grouping key for cold cache restarts (§10.9) and nothing else: it is never
+  printed, stored, hashed or uploaded, and no event, report, `--json` document,
+  `sync` request or local state file carries it. Output names a session only by
+  its ordinal (`Session N`, numbered by its first main call in the window).
+
+### §10.2 Calls
+
+- A call = the `type: "assistant"` lines with one `message.id` (fallback
+  `requestId`), **across all files** (a resumed session copies earlier lines
+  into a new file); every usage field is the **maximum** over those lines
+  (`input_tokens`, `output_tokens`, `cache_creation_input_tokens`,
+  `cache_read_input_tokens`, `cache_creation.ephemeral_5m_input_tokens`,
+  `cache_creation.ephemeral_1h_input_tokens`,
+  `output_tokens_details.thinking_tokens`); its time is the earliest line's
+  `timestamp`. Model `<synthetic>` lines are skipped (no API call).
+- **Process**: `main` for the main conversation; for a subagent (a file under
+  `subagents/`, or a line with `isSidechain: true`) the meta file's
+  `agentType` (`Explore`, `general-purpose`, a custom agent's name), else
+  `subagent`.
+
+### §10.3 Cost (estimate at API list prices)
+
+The model id is resolved to a catalog id with the anchor resolver (§2.2,
+`claude-opus-5-5` → `anthropic/claude-opus-5.5`); the catalog is the one the CLI
+selects: the signed full catalog when it is cached after `tryaii login`, else the
+starter. Input and output prices come from the catalog. A Claude model the
+catalog does not price falls back to Anthropic's list price from a small table
+in `tryaii/claude_code/pricing.py` (`FALLBACK_LIST_PRICES`, USD per MTok:
+`claude-haiku-5-5` 0.10 / 0.50, and 0.50 / 2.50 when the
+call's prompt, input + cache write + cache read, exceeds 100K tokens), shown as
+"list price (fallback)". A model in neither is **unpriced**: cost `null`, listed
+as unpriced, never guessed.
+
+In USD: `input_tokens` × input + 5-minute cache writes × 1.25 × input + 1-hour
+cache writes × 2 × input + cache reads × the cache-read price + `output_tokens` ×
+output. The cache-read price is the catalog entry's `pricing.cache_read_per_1k`
+when present, else input × the model's multiplier in `CACHE_READ_MULTIPLIERS`
+(Anthropic list prices, 2026-10-06): `claude-opus-5-5` 0.05,
+`claude-fable-5-1` and `claude-mythos-5-1` 0.025, every other model 0.1. Both
+tables are a stopgap and go away once the catalog carries cache prices and these
+models (the cache-price-sync work under TS-227 in Tryaii-BT). A write without a
+lifetime breakdown (or the part of the total the breakdown does not cover) is
+priced as 5-minute. `output_tokens` already includes thinking. Labelled
+"estimate at API list prices" everywhere: a subscription does not bill per token.
+
+### §10.4 `report [--days N] [--json] [--projects-dir PATH]`
+
+Calls with `now − N days ≤ time ≤ now` (default 30). Totals (calls, unpriced
+calls, tokens: input, cache write 5m / 1h, cache read, output, thinking), the
+**cache hit share** = cache read / (input + cache write + cache read), the cost
+split (input, cache write 5m, cache write 1h, cache read, output), per model,
+main vs subagents, per process (with the median output per call), the top 10
+projects, `days` (one row per UTC date from the start date to the end date,
+including dates with no calls as zero rows; the edge dates are partial: calls,
+unpriced calls, main / subagent calls, cache hit share, est cost), the unpriced models, the subagent runs and "where a cheaper model may
+fit". A **run** is one subagent invocation: the calls of one subagent file, or of
+one `agentId` for sidechain lines elsewhere. Per subagent type the report gives
+runs, calls and the median and p90 (nearest rank) across runs of each run's total
+output and total cost. A type is suggested for Haiku when it has at least 3 runs,
+its median run output is below 2,000 tokens and its p90 below 8,000: the usage
+of its priced non-Haiku calls priced at the newest priced Haiku (catalog or
+fallback table) is the **upper bound** of what `model: haiku` in that subagent's
+definition saves (top 5 by saving). **Cold cache restarts** (`cold_restarts`,
+§10.9): the rule, main sessions, sessions with a restart, count, unpriced
+count, cost, by reason, the top 10 sessions by cost (as `Session N`) and the 5
+largest restarts (time, session ordinal, model, reason, ttl, pause, tokens
+written, cost). `--json` prints the document
+`tryaii.claude-code.report/1` (indent 2). Human output is not frozen by
+fixtures.
+
+### §10.5 `connect` and `disconnect`
+
+`connect [--dry-run] [--days N] [--yes] [--no-live | --live-only] [--no-session]
+[--projects-dir PATH] [--claude-dir PATH]` has two parts, each with its own `[y/N]` (`--yes` answers
+both): the backfill below, and live telemetry (§10.8). `--no-live` skips live
+telemetry, `--live-only` the backfill; `--no-session` (live part only, not with
+`--no-live`) is in §10.8. The backfill (N ≤ 90: the
+server skips events older than its 90-day retention, API.md §4) builds one
+event per call in §3.1 key order:
+
+| Field | Value |
+|---|---|
+| `event_id` | uuid5(`NAMESPACE_URL`, `"tryaii:claude-code:" + requestId`), the rule the server applies to live telemetry (§10.8); a call without `requestId` falls back to uuid5(`5b0f6a55-3c1e-4b8e-9d6c-2a7f1c0de001`, call key). Deterministic, so a re-run never duplicates (locally it is skipped, also under its pre-v1.5 fallback id; the server ignores a known `event_id`) |
+| `ts` | the call's time (§1.4 format) |
+| `app` / `process` | `claude-code` / §10.2 |
+| `call_site` | `{"file": <project label>, "line": null, "function": null}` |
+| `provider` | `anthropic` (outside the §2.2 classes; the server treats it as `other`) |
+| `model_requested`, `model_used` | the log's model id; `model_resolved` = the catalog id or `null` |
+| `mode`, `winner`, `winner_reachable`, `route_status`, `classification`, `taxonomy_version` | `off`, `null`, `false`, `skipped`, `null`, `null`; for a call with an `analyze` result (§10.7): `off`, the Anthropic answer (`null` when the task's model is not in the catalog), `true` when there is one, `ok`, the task profile `{category, subcategory, confidence}`, the catalog's taxonomy version |
+| `usage` | `prompt_tokens` = `input_tokens` (Anthropic: excludes cached and written tokens, §3.1b), `completion_tokens` = `output_tokens`, `total_tokens` = input + cache write + cache read + output; the cache columns from `normalize_cache_usage("anthropic", …)` |
+| `cache_ttl_policy` | `null` (the logs do not carry the request's `cache_control`) |
+| `cache_cold` | (API.md v1.6) right after `cache_ttl_policy`: `true` for a main-thread call that was a cold cache restart (§10.9), `false` for any other main-thread call, `null` for a subagent call. The session it was worked out from is not sent. Other SDK events leave the key out (a missing key reads as `null`) |
+| `est_cost_usd` = `est_cost_anchor_usd` | §10.3, 6 dp, `null` when unpriced; `est_cost_winner_usd` `null`, or with an `analyze` result the same usage priced at the Anthropic answer |
+| `latency_ms`, `stream`, `error`, `prompt_hash`, `vector` | `null`, `false`, `null`, `null` (no prompt text is ever seen), `false` |
+
+While live telemetry is on, only calls before its cutoff `live_since` (§10.8)
+are imported. New events (an `event_id` not yet in `<data_dir>/monitor/claude-code/`) are
+appended to the app's daily files (§3), `<data_dir>/claude-code/connect.json`
+(`tryaii.claude-code.connect/1`: `app`, `connected_at`, `last_import_at`,
+`imported_events`) is written, and, when `TRYAII_API_KEY` holds an app key and
+the upload decision (§9.1) is on, the §3.4 uploader sends the directory's
+unread lines (batches labelled `sdk.source` `"claude-code-import"`, API.md v1.6) in the foreground (one batch per 5 s, at most 10 minutes; the rest
+goes on the next run). Without a key the events stay local and the command
+says how to get one (`tryaii login`, `tryaii apps create claude-code`).
+`--dry-run` prints the counts, the date range, the field list and one event
+with `event_id` and `call_site.file` redacted, and writes nothing. Without
+`--yes` the command asks; with no terminal it refuses (exit 2).
+
+`disconnect [--yes]` removes the settings keys live telemetry added (§10.8),
+then `<data_dir>/monitor/claude-code/` and `<data_dir>/claude-code/` (nothing
+else; never Claude Code's logs). Uploaded
+events stay on the account until the app is deleted there. There is no
+background import: nothing imports between two `connect` runs. (`sync`,
+§10.9, which the plugin's `SessionEnd` hook starts, only annotates calls that
+came by live telemetry.)
+
+### §10.6 Parity exception
+
+`claude-code` exists in the Python CLI only, a documented exception to the
+byte-identical CLI rule: it is not in the shared `HELP` / `COMMAND_HELP`
+tables (`tests/test_parity.py`), its help text lives in
+`tryaii/cli/claude_code.py`, and `tryaii help claude-code` and
+`tryaii claude-code --help` print it. Its events are ordinary §3.1 lines, so
+the Node SDK's `tryaii monitor status --app claude-code` reads them as well.
+Tests: `packages/python/tests/test_claude_code.py` (synthetic logs; asserts no
+message text reaches any output, event, store file or upload body, `analyze`
+included).
+
+### §10.7 `analyze [--days N] [--json] [--yes] [--projects-dir PATH]` (opt-in, TS-288)
+
+Classifies the developer's Claude Code tasks **on this machine** and says which
+model is good enough for each kind. Code: `tryaii/claude_code/tasks.py`
+(text), `analysis.py` (classification and advice), `secret_scan.py`.
+
+**Consent.** The command first prints what it reads (to stderr with `--json`)
+and asks `[y/N]` unless `--yes` or a stored consent of the current
+`CONSENT_VERSION` exists; with no terminal it refuses (exit 2), and on a "no"
+it reads no text (exit 2). The consent is stored in
+`<data_dir>/claude-code/consent.json` (`tryaii.claude-code.consent/1`:
+`scope`, `version`, `granted_at`, `method` = `prompt` | `--yes`, `reads`) and
+copied into the result. `disconnect` removes it with the rest of
+`<data_dir>/claude-code/`.
+
+**What text is read** (and only for the call window of §10.4):
+
+- a **main-thread turn**: the text parts of a `type: "user"` line of a main
+  session file that is not a sidechain line. Not a turn (counted): a line with
+  any `tool_result` part; `isMeta` or `isCompactSummary`; an `origin.kind`
+  other than `human` (task notifications, agent messages); a line that is
+  empty or only injected context once `<system-reminder>` blocks are cut out
+  (it starts with a command / local-command / bash / task-notification wrapper
+  or `[Request interrupted`). `<system-reminder>` blocks are cut from the kept
+  text. The turn's calls are the main-thread assistant calls after it in the
+  same file up to the next turn (a call belongs to the first turn that claims
+  it);
+- a **subagent run**: the text of the run's first `type: "user"` line (the
+  instruction it was started with); its calls are the run's calls (§10.4).
+
+Never tool inputs or results, file contents or the full call context. The
+text is cut to `MAX_PROMPT_LENGTH` code points (§2.1). A text that matches a
+secret pattern (`secret_scan.SECRET_PATTERNS`: the cache linter's
+`secret-like` rule, provider key shapes, private-key blocks, password and
+token assignments, JWTs, credentials in URLs) is not embedded; the turn or run
+is skipped and counted (`skipped_secret`).
+
+**Classification.** Each text is routed in-process like a monitor route
+(`Router.route`, the CLI's catalog, every model, default priorities) with the
+local embedding model (`config.embedding_model`; no network beyond the SDK's
+own catalog selection). The task's model (the anchor) is the model its calls
+spent most on. Two answers per task:
+
+1. the **Anthropic answer**: the Anthropic models of the ranking (∩ the
+   data-save policy, §2.8) with `qualityScore ≥ anchor − 0.05` and a blended
+   price ≤ the anchor's (the §2.3 band) are the task's *good-enough set*; the
+   cheapest is the answer (`method: band`, or `anchor` when it is the task's
+   own model). An anchor that is not ranked or unpriced gives no answer
+   (`unranked`);
+2. the **overall winner**: §2.3 `pick_winner` over the policy-filtered
+   ranking, any provider. Informational only; it stays on the machine.
+
+The result is attached to every call of the task.
+
+**Advice** per process (`main`, each subagent type), every share weighted by
+the tasks' estimated cost (§10.3; by count when nothing is priced): the
+class shares (`category/subcategory`), for each Anthropic model the share of
+cost it is good enough for, and the advice: the cheapest model good enough for
+≥ 80 % of the cost (`ADVICE_SHARE`, at least 3 tasks), with the saving of
+pricing the analysed calls at it (per call `max(0, cost − cost at it)`; per
+month = × 30 / N days). Subagents get `model: <alias>` for the frontmatter,
+main gets `/model <alias>`. **Confidence**: `low` for `main` always and for a
+process with fewer than 9 tasks, else `medium`. Every output says that
+benchmarks fit subagent and simple tasks better than long agentic coding on
+the main thread.
+
+**Stored** in `<data_dir>/claude-code/analysis.json`
+(`tryaii.claude-code.analysis/1`): window, consent, catalog and embedding
+model, counts, the per-process advice, `duration_s`, and per call key
+(message id) the result (`task`, `category`, `subcategory`, `confidence`,
+`anchor`, `recommended`, `method`, `good_enough`, `overall_winner`,
+`overall_method`). Never task text, embeddings or hashes of the text.
+`--json` prints the document without the per-call map; `report` adds it as
+`analysis` and as a text section.
+
+**Uploaded** (by `connect`, §10.5, and for live calls by `sync`, §10.9): only
+the task profile and the Anthropic answer, in the event's existing fields, and
+(`sync` only) the structured per-process advice, never its sentence. Text, embeddings and hashes of the
+text never leave the machine (`prompt_hash` stays `null`, `vector` `false`);
+the vectors opt-in (TS-168) does not cover this command. Events already
+stored before `analyze` ran keep `classification: null` (event ids are
+deterministic and never rewritten).
+
+### §10.8 Live telemetry (v1.5, API.md §8)
+
+`connect` has a second part with its own consent: it sets up Claude Code's
+OpenTelemetry export so every **new** Claude Code API call is reported to
+TryAii, metadata only. Code: `tryaii/claude_code/telemetry.py`.
+
+**Settings.** The OpenTelemetry exporter variables take effect only from the
+**user** settings file (`~/.claude/settings.json`, `$CLAUDE_CONFIG_DIR/settings.json`;
+`--claude-dir` overrides) or managed settings; Claude Code ignores them in a
+project's `.claude/settings.json` and `.claude/settings.local.json` (except
+values that turn telemetry off). `connect` merges into the user file:
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+    "OTEL_LOGS_EXPORTER": "otlp",
+    "OTEL_METRICS_EXPORTER": "none",
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
+    "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "<TRYAII_API_URL>/v1/otlp/claude-code/v1/logs",
+    "OTEL_LOG_USER_PROMPTS": "0",
+    "OTEL_LOG_TOOL_DETAILS": "0"
+  },
+  "otelHeadersHelper": "tryaii claude-code otel-headers"
+}
+```
+
+The per-signal endpoint takes the full URL (the exporter appends `/v1/logs`
+only to the generic `OTEL_EXPORTER_OTLP_ENDPOINT`). `OTEL_LOG_RAW_API_BODIES`
+is documented only with the values `1` and `file:<dir>` and is off when unset,
+so `connect` leaves it unset (and refuses while it is on).
+
+**`--no-session`** adds `"OTEL_METRICS_INCLUDE_SESSION_ID": "false"` to the same
+`env` block: Claude Code's documented switch (default true) that leaves
+`session.id` (and `ccr.session.id`) out of its telemetry, so the server keeps
+no `session_ref` (API.md §8.3) and the cache timer shows no sessions. An off
+value already there is left alone; any other value is a conflict, never
+overwritten. It is recorded like every added key, so `disconnect` removes it;
+it works on an already connected setup (`connect --live-only --no-session`),
+and a later `connect` without the flag leaves it in place. It cannot be combined
+with `--no-live` (exit 2).
+
+**Merge rules.** Every other key stays as it was, in its order; the file's
+indent and line endings are reused. A timestamped copy
+(`settings.json.tryaii-backup-<yyyymmddThhmmssZ>`) is written next to the file
+first, then the new file atomically. A key that already holds the wanted value
+(or an off value for a content switch) is left alone and not recorded. `connect`
+stops (exit 1, nothing written, the backfill included) and lists the reason when:
+the file is not a JSON object; `OTEL_EXPORTER_OTLP_ENDPOINT`,
+`OTEL_EXPORTER_OTLP_HEADERS` or `OTEL_EXPORTER_OTLP_LOGS_HEADERS` is set in the
+file or the environment (another destination, or headers that would be sent to
+TryAii as well); `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`, `otelHeadersHelper` or an
+exporter variable holds another value; a content switch or
+`OTEL_LOG_RAW_API_BODIES` is on. It never overwrites another tool's telemetry.
+It needs an app key in `TRYAII_API_KEY` and the upload decision (§9.1) on;
+otherwise the live part is skipped (`--live-only`: exit 1).
+
+**Local state.** `<data_dir>/claude-code/telemetry.json`
+(`tryaii.claude-code.telemetry/1`: `settings_path`, `endpoint`, `env` and `top`
+= exactly the keys and values added, `created_env`, `connected_at`,
+`updated_at`, `live_since`, `backup`) and `telemetry-key.json` (the app key,
+0600 on POSIX; never in Claude Code's settings). A later `connect` may update a
+key whose value is still the one recorded (a new API URL or key).
+
+**Cutoff.** The server stores events under `(event_id, ts)`, and a live
+event's `ts` (Claude Code's event time) differs from the log line's by
+milliseconds, so the shared `event_id` alone does not deduplicate. `live_since`
+(UTC, the moment `connect` turned live telemetry on) is the cutoff: while it is
+recorded, the log import stores and uploads only calls whose time is **before**
+it; live telemetry covers everything from then on. Without live telemetry
+(`--no-live` on a machine where it was never turned on) there is no cutoff.
+`disconnect` clears it, so a later import covers the gap again. The event id
+rule of §10.5 still applies, so re-imports stay idempotent.
+
+**`otel-headers`.** Claude Code runs the helper at startup and every 29 minutes
+(`CLAUDE_CODE_OTEL_HEADERS_HELPER_DEBOUNCE_MS`) and expects a JSON object of
+string header values on stdout. It prints
+`{"Authorization": "Bearer <stored app key>", "X-Tryaii-Notice-Version": "<NOTICE_VERSION>"}`
+and nothing else; when live telemetry is not connected it prints nothing on
+stdout, an error on stderr, and exits 1 (Claude Code's exports then fail). The
+key is never logged.
+
+**`status [--json] [--claude-dir PATH]`.** Backfill (connected, last import,
+events imported) and live telemetry (connected or not working, endpoint,
+cutoff, settings file, the keys changed since connect, the key as
+`tryaii_<key_id>_...`, and whether Claude Code sends its session id:
+`session_id_sent`, the `OTEL_METRICS_INCLUDE_SESSION_ID` setting and where it is
+set, the settings file's `env` before the environment, unset meaning sent;
+`no_session_by_connect`). It warns loudly for each of `OTEL_LOG_USER_PROMPTS`,
+`OTEL_LOG_TOOL_DETAILS`, `OTEL_LOG_RAW_API_BODIES`,
+`OTEL_LOG_ASSISTANT_RESPONSES` and `OTEL_LOG_TOOL_CONTENT` that is on in the
+user settings or the environment, and says that the server drops such data
+before storage but that it still leaves the machine.
+
+**`disconnect`** removes exactly the recorded keys whose value is still the one
+`connect` wrote (a key the user changed stays and is named), the `env` object
+when `connect` created it and it is empty again, after a backup; then the local
+state as in §10.5. It restores nothing else.
+
+**What TryAii keeps.** Per API call: model, input and output tokens, cache read
+and cache write tokens (`events.cache_write_tokens` and the daily cache
+rollups), cost estimate, duration, time, the process (`main`, or the subagent
+type; a custom subagent arrives as `custom`), the effort level (`low` |
+`medium` | `high` | `xhigh` | `max`, else null) and a session reference
+(`session_ref`: the first 64 bits of an HMAC-SHA256 of `session.id` with a
+per-app key derived from a server secret; a value that is not a UUID gives
+null; API.md §8.3). The `session_ref` is used only for the cache timer and cold
+restarts (§10.9) and is cleared after 7 days; it is never returned by any API,
+and the dashboard names sessions `Session N`. The request id is used only to
+build the `event_id` and is not stored. Never sent with these settings:
+prompts, code, file contents, tool inputs and outputs. Claude Code also sends
+its standard attributes (`user.email`, `user.account_uuid`, `organization.id`,
+`session.id`, ...) and other event types; the server drops them before storage,
+and the raw `session.id` is hashed on arrival and never stored, queued or
+logged. With `--no-session` (or `OTEL_METRICS_INCLUDE_SESSION_ID=false`) there
+is no session id to hash. The project and the task profile of a live call come
+only from `sync` (§10.9).
+
+### §10.9 `sync`, the plugin hook and the cold-restart rule (v1.6, API.md §9)
+
+`sync [--background] [--quiet] [--days N] [--projects-dir PATH]` completes the
+live events of §10.8 with what only the local logs know. Code:
+`tryaii/claude_code/sync.py`.
+
+**Preconditions.** Live telemetry connected with an app key, the backfill
+connected (`connect.json`), and the upload decision (§9.1) on; otherwise it
+prints the reason and exits 0. At most one run per 5 minutes
+(`sync.json` `last_run_at`) and one at a time (`sync.lock`; a lock older than
+30 minutes is taken over).
+
+**What it reads and sends.** The calls of the local logs (§10.2) from
+max(`live_since`, now − N days) (N default 7, at most 90) to now, older than 2
+minutes and with a `requestId`. One **annotation** per call: `event_id` =
+uuid5 of the request id (the live event's id, §10.5), `ts` the log time,
+`project` the base name (§10.1; `null` for `unknown`, anything with `/`, `\`
+or `:`, a non-printable value or more than 256 characters), `process` (`main`
+or the real subagent type), and, only with a current `analyze` consent and a
+result for the call: `classification` (category, subcategory, confidence),
+`winner` (the Anthropic answer), `est_cost_winner_usd` and `taxonomy_version`;
+else those four are `null`. Per process of the analysis, one **advice**
+document: `process`, `thread`, `window_days`, `generated_at`, `tasks`,
+`calls`, `est_cost_usd`, `classes[]` (`class`, `share`),
+`good_enough_shares[]` (`model`, `share`), `recommendation` (`model`, `alias`,
+`good_enough_share`, `saving_usd`, `saving_usd_per_month`) or `null`, and
+`confidence`. Never text, the advice sentence, paths, a session id or an
+email. Body: `{"schema": "tryaii.claude-code.annotations/1", "sdk",
+"notice_version", "calls", "advice"}`, at most 500 calls and 50 advice
+documents per request, `POST /v1/monitor/claude-code/annotations` with the app
+key (API.md §9). Before sending, the payload is scanned for the uploader's
+forbidden field names (any case) and path-like projects; a hit refuses the
+request.
+
+**Analysis.** A stored `analysis.json` younger than a day under the current
+consent is reused; an older one is re-run first (on this machine, §10.7) when
+the consent is current; without a consent nothing of an analysis is used.
+
+**State.** `<data_dir>/claude-code/sync.json` (`tryaii.claude-code.sync/1`:
+`cursor`, `last_run_at`, `last_ok_at`, `last_error` (one short line),
+`applied`, `unmatched` (retried for 24 hours, then `dropped`), `dropped`,
+`advice_generated_at`). Ids before the read window are forgotten.
+`disconnect` removes it with the rest of `<data_dir>/claude-code/`.
+
+**Output.** One line (counts of calls annotated, matched, not found yet,
+advice documents, and where the task profiles came from); `--quiet` prints
+nothing and always exits 0; `--background` starts a detached `sync --quiet`
+(Windows `DETACHED_PROCESS`, POSIX a new session) and returns at once.
+
+**Plugin hook.** The Claude Code plugin (`integrations/claude-code-plugin`,
+0.2.0) has `hooks/hooks.json` with one `SessionEnd` command hook, `async`:
+`tryaii claude-code sync --background --quiet; exit 0`. It never blocks the
+end of a session and always exits 0, also when `tryaii` is missing or not
+connected.
+
+**Cold-restart rule** (`tryaii/claude_code/sessions.py`; pinned by
+`shared/monitor/fixtures/claude-code/cold-restarts.json`, which the server's
+`mark_cold_restarts` also runs for live events):
+
+- only the main thread (`process` `main`) of one session (§10.1), in time
+  order; subagent calls are excluded and are not predecessors;
+- the first main call of a session is never cold;
+- a call is cold when the gap since the previous main call of the same session
+  is **more than 5 minutes** and its cache write is at least
+  max(1024, its cache read tokens);
+- `ttl`: the call's own 5m/1h split (`1h` when the 1-hour part is larger, `5m`
+  when only the 5-minute part is set); without a split the session's last
+  split, else the default: `5m` for imported calls (the API's default), while
+  the server defaults live main-thread calls to `1h`, so the fixture passes its
+  `default_ttl` explicitly;
+- reason: `expired` when the gap ≥ ttl, else `model_switch` when the model
+  differs from the previous main call's, else `other`;
+- cost (at API list prices, unrounded, 6 dp in output): 5m part × (1.25 ×
+  input − cache read price) + 1h part × (2 × input − cache read price); a write
+  without a split is priced whole at the call's resolved ttl; `null` when
+  unpriced.
+
+Imported events carry the result as `cache_cold` (§10.5); the report shows it
+(§10.4). Nothing about the session itself leaves the machine.

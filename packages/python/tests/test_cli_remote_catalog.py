@@ -1,7 +1,7 @@
 """CLI behavior on the catalog the CLI routes on.
 
 `tryaii models` / `tryaii benchmarks` are the user-facing views of the active
-catalog -- the packaged starter catalog (45 models / 16 benchmarks) when no
+catalog -- the packaged starter catalog (46 models / 15 benchmarks) when no
 other catalog is selected; these tests pin that both commands surface exactly
 that catalog (and that provider filtering works with the OpenRouter-prefix
 provider names).
@@ -35,7 +35,7 @@ def _run(monkeypatch, *argv: str) -> None:
 def test_models_json_lists_the_starter_catalog(monkeypatch, capsys):
     _run(monkeypatch, "models", "--json")
     data = json.loads(capsys.readouterr().out)
-    assert len(data) == STARTER_MODELS == 45
+    assert len(data) == STARTER_MODELS == 46
     ids = {m["model_id"] for m in data}
     assert "openai/gpt-4o" in ids
     assert "anthropic/claude-opus-4.5" in ids
@@ -64,7 +64,7 @@ def test_models_text_output_reports_the_starter_count(monkeypatch, capsys):
 def test_benchmarks_json_lists_the_starter_benchmarks_with_ranges(monkeypatch, capsys):
     _run(monkeypatch, "benchmarks", "--json")
     data = json.loads(capsys.readouterr().out)
-    assert len(data) == STARTER_BENCHMARKS == 16
+    assert len(data) == STARTER_BENCHMARKS == 15
     assert [b["name"] for b in data] == starter_bundle().benchmark_names
     by_name = {b["name"]: b for b in data}
     assert set(by_name) == set(NORMALIZATION_RANGES)
@@ -89,5 +89,5 @@ def test_benchmarks_json_lists_the_starter_benchmarks_with_ranges(monkeypatch, c
 def test_benchmarks_text_output_mentions_remote_benchmarks(monkeypatch, capsys):
     _run(monkeypatch, "benchmarks")
     out = capsys.readouterr().out
-    for name in ("GPQA", "Terminal-bench-Hard", "LiveCodeBench", "Chatbot Arena Elo"):
+    for name in ("GPQA", "Tau2-bench", "LiveCodeBench", "Chatbot Arena Elo"):
         assert name in out

@@ -4,8 +4,8 @@
 
 | Catalog | Where it comes from | Size |
 |---|---|---|
-| **Starter** | Ships inside the package; no network, no account | **45 models from 6 providers, 16 benchmarks** |
-| **Full** | Downloaded after [`tryaii login`](../../cli/login.md) (free), refreshed at most once a day, signature-checked before use | **322 routable models** |
+| **Starter** | Ships inside the package; no network, no account | **46 models from 6 providers, 15 benchmarks** |
+| **Full** | Downloaded after [`tryaii login`](../../cli/login.md) (free), refreshed at most once a day, signature-checked before use | **319 routable models** |
 
 With the default `catalog="auto"`, the full catalog is used when you are logged in and the starter catalog otherwise. Pass `catalog="starter"` to always use the packaged catalog (no network), or `catalog="full"` to require the full one (raises `LoginRequiredError` when not logged in):
 
@@ -26,7 +26,7 @@ const router = new Router({ catalog: 'full' });
 | Provider | Models |
 |---|---:|
 | OpenAI | 16 |
-| Anthropic | 10 |
+| Anthropic | 11 |
 | Google | 8 |
 | DeepSeek | 4 |
 | xAI | 4 |

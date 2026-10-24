@@ -46,7 +46,16 @@ import {
 } from './events.js';
 import { routingText } from './extract.js';
 import { CacheTracker, type CacheBlock } from './cache.js';
-import { evaluatePin, pinFromFirstCall, pinValid, setPin, type Pin, type PinsDoc } from './pins.js';
+import {
+  evaluatePin,
+  modelFacts,
+  pinFromFirstCall,
+  pinValid,
+  setPin,
+  type ModelFactsMap,
+  type Pin,
+  type PinsDoc,
+} from './pins.js';
 import * as store from './store.js';
 import {
   STATUS_QUEUE_FULL,
@@ -108,39 +117,53 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 /**
  * A JSON document re-read when its mtime changes, checked at most every 5 s
- * (so `tryaii monitor set` and a remote.json update apply without a
- * restart). The reader may return null (remote.json absent or invalid).
+ * (so `tryaii monitor set` applies without a restart). The reader may
+ * return null (remote.json absent or invalid).
+ *
+ * `version` (optional) is an in-process change counter: when it moves, the
+ * document is re-read on the next `get()` regardless of the 5 s window or
+ * the mtime. remote.json uses it, so an answer the long poll just wrote
+ * applies on the very next call (TS-296).
  */
 class CachedDoc<T> {
   private doc: T | null = null;
   private loaded = false;
   private mtime: number | null = null;
+  private seen: number | null = null;
   private checkedAt = -Infinity;
 
   constructor(
     private readonly directory: string,
     private readonly reader: (directory: string) => T,
     private readonly stat: (directory: string) => number | null,
+    private readonly version: (() => number) | null = null,
   ) {}
 
   get(): T {
+    const version = this.version !== null ? this.version() : null;
     const now = performance.now();
-    if (!this.loaded || now - this.checkedAt >= DOC_RECHECK_MS) {
+    if (!this.loaded || version !== this.seen) {
+      this.reload(now, version);
+    } else if (now - this.checkedAt >= DOC_RECHECK_MS) {
       this.checkedAt = now;
-      const mtime = this.stat(this.directory);
-      if (!this.loaded || mtime !== this.mtime) {
-        this.mtime = mtime;
-        this.doc = this.reader(this.directory);
-        this.loaded = true;
-      }
+      if (this.stat(this.directory) !== this.mtime) this.reload(now, version);
     }
     return this.doc as T;
+  }
+
+  private reload(now: number, version: number | null): void {
+    this.seen = version;
+    this.checkedAt = now;
+    this.mtime = this.stat(this.directory);
+    this.doc = this.reader(this.directory);
+    this.loaded = true;
   }
 
   set(doc: T): void {
     this.doc = doc;
     this.loaded = true;
     this.mtime = this.stat(this.directory);
+    if (this.version !== null) this.seen = this.version();
     this.checkedAt = performance.now();
   }
 }
@@ -179,6 +202,8 @@ export interface CallPlan {
   routedOutcome: RouteOutcome | null;
   /** Managed model as configured (resolved in decide()). */
   managedModel: string | null;
+  /** Where `mode` came from (SPEC.md §2.6: env, remote, args, config, default). */
+  modeSource?: string | null;
   /** Overrides the route status in the event (`unreachable_managed`). */
   statusOverride: string | null;
   /**
@@ -256,7 +281,7 @@ export class Monitor {
     this.modeArg = opts.mode ?? null;
     this.dir = store.appDir(this.transportRef.dataDir, this.app);
     this.configDoc = new CachedDoc(this.dir, (d) => store.readConfig(d) as ConfigDoc & Record<string, unknown>, store.configMtime);
-    this.remoteDoc = new CachedDoc(this.dir, (d) => store.readRemote(d), store.remoteMtime);
+    this.remoteDoc = new CachedDoc(this.dir, (d) => store.readRemote(d), store.remoteMtime, store.remoteGeneration);
     this.pinsDoc = new CachedDoc(this.dir, (d) => store.readPins(d) as PinsDoc & Record<string, unknown>, pinsMtime);
     try {
       this.transportRef.registerApp(this.dir);
@@ -322,6 +347,7 @@ export class Monitor {
         outcome: null,
         routedOutcome: null,
         managedModel: resolved.model,
+        modeSource: resolved.source,
         statusOverride: null,
         policy,
         routeAllowed: routeAllowed(this.provider, ids, anchor, policy),
@@ -334,6 +360,40 @@ export class Monitor {
     } catch (err) {
       debug('before() failed', err);
       return null;
+    }
+  }
+
+  // -- 1b. first-call remote config (SPEC.md §3.3, TS-296) --------------
+
+  /**
+   * A promise to wait on before deciding this call, or null (the usual
+   * case: no poller, the first answer already came, the first-call wait
+   * ran out, or the env pins the mode). Cheap once settled.
+   */
+  remoteGate(plan: CallPlan): Promise<void> | null {
+    if (plan.modeSource === 'env') return null;
+    try {
+      const t = this.transportRef as Transport & { remoteGate?: () => Promise<void> | null };
+      return typeof t.remoteGate === 'function' ? t.remoteGate() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Re-resolve the plan's mode after the first remote-config answer. Never throws. */
+  settleMode(plan: CallPlan): void {
+    try {
+      const resolved = resolveMode(plan.process, {
+        env: envFromOs(),
+        remote: this.remoteDoc.get(),
+        args: this.modeArg,
+        config: this.configDoc.get(),
+      });
+      plan.mode = resolved.mode;
+      plan.managedModel = resolved.model;
+      plan.modeSource = resolved.source;
+    } catch (err) {
+      debug('settleMode() failed', err);
     }
   }
 
@@ -396,7 +456,13 @@ export class Monitor {
       return routedModel(MODE_STABLE, plan.provider, plan.anchor, null, pin.model, plan.policy);
     }
     const events = store.readEvents(this.dir, plan.ts, PIN_HISTORY_S);
-    const decision = evaluatePin(events as Parameters<typeof evaluatePin>[0], pin, plan.ts, plan.process);
+    const decision = evaluatePin(
+      events as Parameters<typeof evaluatePin>[0],
+      pin,
+      plan.ts,
+      plan.process,
+      this.modelFacts(),
+    );
     let newPin: Pin;
     if (decision.action === 'pin') {
       newPin = decision.pin as Pin;
@@ -410,6 +476,15 @@ export class Monitor {
     store.writePins(this.dir, doc);
     this.pinsDoc.set(doc as PinsDoc & Record<string, unknown>);
     return routedModel(MODE_STABLE, plan.provider, plan.anchor, null, newPin.model, plan.policy);
+  }
+
+  /** The catalog's benchmark score and price per model, the pin tie-break inputs (SPEC.md §2.5); null if unavailable. */
+  private modelFacts(): ModelFactsMap | null {
+    try {
+      return modelFacts(this.transportRef.bundleInUse());
+    } catch {
+      return null;
+    }
   }
 
   private route(
@@ -734,6 +809,18 @@ export function makeCreate(monitor: Monitor, original: CreateFn): WrappedCreate 
     const stream = Boolean(params.stream);
     const plan = monitor.before(params, perCall, stream);
     if (plan === null) return original.call(this, isObject(body) ? params : body, options);
+    const gate = monitor.remoteGate(plan);
+    if (gate !== null) {
+      // The first call of the process: wait (bounded, once) for the first
+      // remote-config answer, then decide with it (SPEC.md §3.3, TS-296).
+      return gate.then(() => {
+        monitor.settleMode(plan);
+        if (monitor.needsDecision(plan)) {
+          return monitor.decide(plan).then(() => runCall(monitor, original, this, plan, params, options));
+        }
+        return runCall(monitor, original, this, plan, params, options);
+      });
+    }
     if (monitor.needsDecision(plan)) {
       return monitor.decide(plan).then(() => runCall(monitor, original, this, plan, params, options));
     }
@@ -784,6 +871,42 @@ function clientProvider(client: ClientLike): Provider {
   return providerClass(baseUrl === null || baseUrl === undefined ? null : String(baseUrl));
 }
 
+/** The own data property `key` of `obj`, read without running a getter or a Proxy `get` trap. */
+function ownValue(obj: unknown, key: string): unknown {
+  if (!isObject(obj)) return undefined;
+  const d = Object.getOwnPropertyDescriptor(obj, key);
+  return d && 'value' in d ? d.value : undefined;
+}
+
+/**
+ * The real `chat.completions` object behind a Langfuse `observeOpenAI(client)`
+ * proxy, or null for any other client.
+ *
+ * `observeOpenAI` (@langfuse/openai) returns a Proxy with only a `get` trap:
+ * every read of a nested object returns a NEW proxy and every read of a
+ * method returns a NEW tracing closure. Patching through it would hand
+ * `makeCreate` a tracing closure as `original`, and Langfuse would wrap our
+ * `create` again on the next read: two Langfuse generations per call.
+ * Langfuse sets no marker, so the proxy is recognised by that shape: `chat`
+ * read through the client differs from the client's own `chat` property and
+ * changes on every read, and so does `completions.create`. The proxy has no
+ * `getOwnPropertyDescriptor` trap, so the own properties are the target's.
+ * A plain (or Azure, or any OpenAI-compatible) client returns its own
+ * `chat` object and is rejected by the first check.
+ */
+function langfuseCompletions(c: ClientLike, chat: unknown): ClientLike['chat']['completions'] | null {
+  const rawChat = ownValue(c, 'chat');
+  if (rawChat === undefined || rawChat === chat || !isObject(rawChat)) return null;
+  if (c.chat === chat) return null; // a stable wrapper object, not observeOpenAI
+  const raw = ownValue(rawChat, 'completions');
+  if (!isObject(raw)) return null;
+  const proxied = (chat as ClientLike['chat']).completions;
+  if (proxied === raw) return null;
+  const first = proxied.create;
+  if (typeof first !== 'function' || first === proxied.create || first === raw.create) return null;
+  return raw as ClientLike['chat']['completions'];
+}
+
 /**
  * Monitor every `client.chat.completions.create` call of `client`.
  *
@@ -795,7 +918,11 @@ function clientProvider(client: ClientLike): Provider {
  */
 export function wrap(client: unknown, opts: WrapOptions = {}): Monitor {
   const c = client as ClientLike;
-  const completions = c.chat.completions;
+  const chat = c.chat;
+  // A Langfuse `observeOpenAI` client: patch the real `completions` behind
+  // the proxy so Langfuse traces each call once. Every other client takes
+  // `chat.completions` exactly as before.
+  const completions = langfuseCompletions(c, chat) ?? chat.completions;
   let original = completions.create as WrappedCreate;
   if (original.__wrapped__ && original.__tryaii_monitor__) {
     original = original.__wrapped__ as WrappedCreate; // re-wrapping replaces the earlier monitor

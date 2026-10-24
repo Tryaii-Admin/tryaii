@@ -245,9 +245,23 @@ def gen_winner(inp):
     }
 
 
+def _pin_models(spec):
+    """A pin case's ``models`` (tie-break facts): inline, or ``"starter"`` =
+    model_facts() of the starter catalog; absent = None (ids only)."""
+    if spec == "starter":
+        from tryaii.catalog.bundle import starter_bundle
+        from tryaii.monitor.pins import model_facts
+
+        return model_facts(starter_bundle())
+    return spec
+
+
 def gen_pin(inp):
     from tryaii.monitor.pins import evaluate_pin, pin_from_first_call
 
+    if "facts_of" in inp:
+        facts = _pin_models("starter")
+        return {mid: facts.get(mid) for mid in inp["facts_of"]}
     if "first_call_winner" in inp:
         return pin_from_first_call(inp["first_call_winner"], inp["now"])
     events = inp.get("events")
@@ -256,7 +270,7 @@ def gen_pin(inp):
     pin = inp.get("pin")
     if pin == "from_store":
         pin = _store_pins(inp["store"])["processes"].get(inp["process"])
-    return evaluate_pin(events, pin, inp["now"], inp["process"])
+    return evaluate_pin(events, pin, inp["now"], inp["process"], _pin_models(inp.get("models")))
 
 
 def gen_config(inp):

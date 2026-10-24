@@ -15,7 +15,7 @@ tryaii regenerate --model all-mpnet-base-v2
 
 ## Behavior
 
-Embeds the catalog's training queries with the chosen model and writes the centroid file. The starter catalog has 232 training queries across 16 benchmarks; after [`tryaii login`](login.md) the full catalog's queries are used instead.
+Embeds the catalog's training queries with the chosen model and writes the centroid file. The starter catalog has 217 training queries across 15 benchmarks; after [`tryaii login`](login.md) the full catalog's queries are used instead.
 
 ```
 Regenerating centroids for: all-MiniLM-L6-v2

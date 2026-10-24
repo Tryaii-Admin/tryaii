@@ -143,13 +143,13 @@ def test_a_non_finite_score_does_not_count_as_real_coverage(registry):
 
 def test_default_registry_coverage_has_one_entry_per_shipped_benchmark():
     coverage = ModelRegistry.default().benchmark_coverage()
-    assert len(coverage) == 16  # the packaged starter catalog
+    assert len(coverage) == 15  # the packaged starter catalog
     assert all(0.0 <= value <= 1.0 for value in coverage.values())
 
 
 def test_full_registry_coverage_has_one_entry_per_full_benchmark(full_bundle):
     coverage = ModelRegistry.from_bundle(full_bundle).benchmark_coverage()
-    assert len(coverage) == 33
+    assert len(coverage) == 30
     assert all(0.0 <= value <= 1.0 for value in coverage.values())
     # The motivating fact: the saturated 2021-era benchmarks are reported by a
     # small minority of the catalog, the modern coding benchmark by a third.

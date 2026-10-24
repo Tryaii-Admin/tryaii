@@ -51,6 +51,13 @@ SDK's own `APIPromise` untouched (`.withResponse()` keeps working); in
 `Promise` of the same value. Streams are forwarded chunk by chunk and
 recorded on completion (`tee()` is not supported on a monitored stream).
 
+With Langfuse (`observeOpenAI` from `@langfuse/openai`), call order does not
+matter: `wrap(client)` then `observeOpenAI(client)`, or
+`wrap(observeOpenAI(client))`, each give one Langfuse generation and one
+TryAii event per call. On a Langfuse proxy, `wrap()` patches the client behind
+the proxy so Langfuse traces each call once. Langfuse's proxy returns a plain
+`Promise`, so `.withResponse()` is not available through it in either order.
+
 ## `install(...)`
 
 **Python**
@@ -266,6 +273,8 @@ and the wrapper, on background threads that never touch your calls:
   one warning line. At exit it gets one last pass of at most 2 seconds.
 - **follows the dashboard**: a long poll of `GET {TRYAII_API_URL}/v1/monitor/config`
   keeps `remote.json` current; the next call uses it (precedence above).
+  The first call of a process waits up to 0.5 s, once, for the first
+  answer, so even a short script follows the dashboard from its first call.
   A failed poll keeps the last config in force; with no `remote.json` the
   wrapper behaves exactly as without a key.
 
@@ -311,7 +320,7 @@ with `cachelint` on, the `cache` block ([above](#cache-fields): an outcome
 and now and then a report whose finding excerpts are masked, never prompt
 text). Every batch carries `notice_version` — the version of the data
 notice built into this SDK, `tryaii.monitor.NOTICE_VERSION` (currently
-`"2026-10-18"`, the date it was published) — and the SDK language and version.
+`"2026-10-24"`, the date it was published) — and the SDK language and version.
 
 **How long it is kept and how to delete it.** Call records: 90 days. Daily
 totals per app: while the app exists. Deleting an app on the dashboard hides

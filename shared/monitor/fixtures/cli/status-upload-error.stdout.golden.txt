@@ -3,3 +3,4 @@ tryaii monitor -- app: flaky (last 24h)
 no calls in this window
 source: local
 upload: error http 503
+catalog: starter

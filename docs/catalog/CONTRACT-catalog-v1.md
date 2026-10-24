@@ -1,4 +1,4 @@
-# tryaii model catalog — contract v1.3
+# tryaii model catalog — contract v1.4
 
 This is the client-side specification of the model catalog: the bundle format
 both SDKs (Python and Node) route on, how a logged-in client downloads, verifies,
@@ -7,7 +7,12 @@ caches and refreshes the full catalog, and the exact CLI behaviour. It builds on
 byte-identical across the two SDKs.
 
 User-facing text calls the two catalogs **starter** (ships in the package) and
-**full** (after `tryaii login`).
+**full** (after `tryaii login`, or with an app key in `TRYAII_API_KEY`).
+
+v1.4 (2026-10-21, Jira TS-294): an app key alone unlocks the full catalog, so a
+server needs no personal `tryaii login`. `GET /v1/catalog/live` accepts an app key
+as well as the access token (section 4) and the SDKs use it when no login session
+is stored (section 5, "Which catalog"). Same signed bundle, same rate limit.
 
 ## 1. Bundle format (same for starter and full)
 
@@ -27,8 +32,8 @@ A bundle is a directory (on disk) or a `files` map (on the wire) with exactly:
 ```json
 {"schema": 1, "kind": "starter", "version": "2026.10.07.1",
  "embedding_model": "all-MiniLM-L6-v2", "created_at": "2026-10-07T12:00:00Z",
- "counts": {"models": 45, "benchmarks": 16},
- "full_counts": {"models": 322, "benchmarks": "..."},
+ "counts": {"models": 46, "benchmarks": 14},
+ "full_counts": {"models": 319, "benchmarks": "..."},
  "files": {"models.json": "<sha256 hex>", "benchmarks.json": "...",
            "normalization_ranges.json": "...", "centroids.json": "...",
            "training_queries.json": "..."},
@@ -53,8 +58,8 @@ A bundle is a directory (on disk) or a `files` map (on the wire) with exactly:
 ## 2. Starter and full catalogs
 
 - The **starter** bundle ships in both packages as package data (identical bytes
-  in each) and is the package's built-in routing data. It holds about 45
-  well-known models and only the benchmarks with good coverage among them (16 in
+  in each) and is the package's built-in routing data. It holds about 46
+  well-known models and only the benchmarks with good coverage among them (14 in
   this release).
 - The **full** bundle is published by the tryaii team and downloaded by logged-in
   clients (sections 4 and 5). It is never shipped in a package.
@@ -73,9 +78,15 @@ A bundle is a directory (on disk) or a `files` map (on the wire) with exactly:
 
 ## 4. `GET /v1/catalog/live`
 
-- `Authorization: Bearer <access token>` (auth contract). 401 `invalid_token` as /me.
+- `Authorization: Bearer <access token>` (auth contract), or (v1.4)
+  `Authorization: Bearer tryaii_<key_id>_<secret>`, an app key
+  (`shared/monitor/API.md` section 1), validated exactly as for the monitor
+  endpoints. Missing, invalid, expired or revoked token or key, a key of a
+  deleted app, or a key whose owner is inactive -> 401 `invalid_token` as /me
+  (a bad key gets exactly the answer a missing token gets).
 - Requires the entitlement `catalog:full` (auth contract, section 2), checked
-  on every request. Missing -> 403 `{"error": "insufficient_entitlement"}`.
+  on every request: the user's own, or for an app key the app owner's.
+  Missing -> 403 `{"error": "insufficient_entitlement"}`.
 - No live release -> 404 `{"error": "no_live_release"}`.
 - `If-None-Match: "<version>"` equal to the live version -> 304, empty body.
 - 200 body:
@@ -89,14 +100,19 @@ A bundle is a directory (on disk) or a `files` map (on the wire) with exactly:
   gzip-compressed when the client accepts it. The server checks each hash before
   serving; a mismatch -> 500 `{"error": "release_corrupt"}`.
 - Too many requests -> 429 `slow_down` with a `Retry-After` header. Clients check
-  at most once a day (section 5), far below the limit.
+  at most once a day (section 5), far below the limit. The limit is the same for
+  both credentials: per user for an access token, per `key_id` for an app key
+  (a fleet of servers sharing one key never uses up its owner's own budget).
 
 ## 5. SDK behaviour
 
 ### Cache (under the data dir, `TRYAII_DRE_DATA_DIR` or `~/.tryaii`)
 - `catalog/full/<version>/` — the six bundle files exactly as received (manifest
   written as received JSON, files as the canonical text).
-- `catalog/state.json` — `{"version": "<live version or null>", "checked_at": "<ISO Z>"}`.
+- `catalog/state.json` — `{"version": "<live version or null>", "checked_at": "<ISO Z>"}`,
+  plus (v1.4) `"auth": "app_key"` as a third key when an app key made the check.
+  A login's check writes no `auth` (the pre-v1.4 bytes); a missing `auth` means
+  `login`.
 - `catalog/nudge.json` — `{"last_shown": "<YYYY-MM-DD local date>"}`.
 - Writes are atomic (temp + rename, same helper as credentials). Only the newest
   version directory is kept.
@@ -105,7 +121,16 @@ A bundle is a directory (on disk) or a `files` map (on the wire) with exactly:
 
 ### Which catalog (library + CLI), `catalog="auto"` (default)
 Library: `Router(..., catalog="auto" | "starter" | "full")`, same option name in Node.
-1. No credentials file -> **starter** (+ nudge in the CLI).
+
+Credential precedence (v1.4): a stored login session (credentials file) wins;
+without one, the app key in `TRYAII_API_KEY`; without either, the starter
+catalog. The login wins because it is the user's own explicit choice on that
+machine and keeps every pre-v1.4 behaviour unchanged for logged-in users (on a
+laptop that also exports a key, nothing changes); a server simply has no
+credentials file, so the key is used there. The key path never deletes a
+session and never raises in `auto`.
+
+1. No credentials file and no `TRYAII_API_KEY` -> **starter** (+ nudge in the CLI).
 2. Credentials present:
    - If `state.checked_at` is missing or older than 24 h: refresh the access token if
      needed (auth contract rules), then `GET /v1/catalog/live` with `If-None-Match` of the
@@ -121,8 +146,26 @@ Library: `Router(..., catalog="auto" | "starter" | "full")`, same option name in
      new -> use the cached full catalog if one exists; otherwise starter with CLI
      stderr `Could not download the full catalog; using the starter catalog for now.`
      (schema too new instead prints `The full catalog needs a newer tryaii version; using the starter catalog.`)
+2a. (v1.4) No credentials file, `TRYAII_API_KEY` set:
+   - Not key-shaped (`^tryaii_[a-z0-9]{12}_[A-Za-z0-9_-]{43}$`) -> starter, never sent.
+   - Otherwise the same daily check as rule 2, with `Authorization: Bearer <key>`
+     sent to `TRYAII_API_URL` (default `https://api.tryaii.com`, the monitor's API
+     base), no token refresh. The check is also due at once when `state.auth` is
+     not `app_key` (the last check was a login's), and a login's check is due at
+     once when `state.auth` is `app_key`.
+   - 200 / 304 / 403 / failures exactly as rule 2, with `"auth": "app_key"`
+     written to `state.json`.
+   - 401 (invalid, expired or revoked key, deleted app) -> **key rejected**:
+     delete the full cache and `state.json` (not the credentials file, there is
+     none), use the starter catalog, CLI stderr
+     `TRYAII_API_KEY was not accepted for the full catalog; using the starter catalog.`
+     No exception in `auto`; no nudge.
+   - Library memo (once per process, 24 h): keyed by mode, data dir and the
+     key's `tryaii_<key_id>` prefix (never the secret); a key-rejected selection
+     is a final answer like a 403.
 3. `catalog="starter"`: always starter, no network, no nudge.
-4. `catalog="full"`: like auto, but if not logged in -> fail with
+4. `catalog="full"`: like auto, but with no login session and no accepted app
+   key (none set, not key-shaped, or 401) -> fail with
    `Not logged in. Run: tryaii login` (library: `LoginRequiredError`).
 The check never blocks longer than one request (10 s timeout, auth contract transport).
 

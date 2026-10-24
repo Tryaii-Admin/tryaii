@@ -183,7 +183,7 @@
             }
           }
         },
-        "reason": "most frequent winner over 7d"
+        "reason": "most frequent winner over 7d (tie broken by model id)"
       }
     },
     {
@@ -234,6 +234,413 @@
             "openai/gpt-5.4": 1
           }
         }
+      }
+    },
+    {
+      "name": "tie-breaks-by-benchmark-score",
+      "description": "TS-295: a 3-3 tie over 7d between MiMo (benchmark score 0.51, $1.13/1M) and GLM-5.3 Flash (0.75, $0.33/1M). The higher catalog benchmark score wins the tie, never the list order; the server's summary pin_candidate uses the same rule.",
+      "input": {
+        "process": "summarize",
+        "now": "2026-10-21T10:00:00.000Z",
+        "pin": null,
+        "events": [
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:00:00.000Z",
+            "process": "summarize",
+            "winner": "xiaomi/mimo-v2.6-pro",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:05:00.000Z",
+            "process": "summarize",
+            "winner": "z-ai/glm-5.3-flash",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:10:00.000Z",
+            "process": "summarize",
+            "winner": "xiaomi/mimo-v2.6-pro",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:15:00.000Z",
+            "process": "summarize",
+            "winner": "z-ai/glm-5.3-flash",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:20:00.000Z",
+            "process": "summarize",
+            "winner": "xiaomi/mimo-v2.6-pro",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:25:00.000Z",
+            "process": "summarize",
+            "winner": "z-ai/glm-5.3-flash",
+            "winner_reachable": true
+          }
+        ],
+        "models": {
+          "xiaomi/mimo-v2.6-pro": {
+            "quality": 0.51,
+            "blended_price_usd_per_m": 1.13
+          },
+          "z-ai/glm-5.3-flash": {
+            "quality": 0.75,
+            "blended_price_usd_per_m": 0.33
+          }
+        }
+      },
+      "expected": {
+        "action": "pin",
+        "pin": {
+          "model": "z-ai/glm-5.3-flash",
+          "pinned_at": "2026-10-21T10:00:00.000Z",
+          "expires_at": "2026-10-22T10:00:00.000Z",
+          "basis": {
+            "window": "7d",
+            "events": 6,
+            "counts": {
+              "z-ai/glm-5.3-flash": 3,
+              "xiaomi/mimo-v2.6-pro": 3
+            }
+          }
+        },
+        "reason": "most frequent winner over 7d (tie broken by benchmark score)"
+      }
+    },
+    {
+      "name": "tie-same-score-breaks-by-price",
+      "description": "Equal counts and equal benchmark scores: the lower blended price wins.",
+      "input": {
+        "process": "summarize",
+        "now": "2026-10-21T10:00:00.000Z",
+        "pin": null,
+        "events": [
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:00:00.000Z",
+            "process": "summarize",
+            "winner": "xiaomi/mimo-v2.6-pro",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:05:00.000Z",
+            "process": "summarize",
+            "winner": "z-ai/glm-5.3-flash",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:10:00.000Z",
+            "process": "summarize",
+            "winner": "xiaomi/mimo-v2.6-pro",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:15:00.000Z",
+            "process": "summarize",
+            "winner": "z-ai/glm-5.3-flash",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:20:00.000Z",
+            "process": "summarize",
+            "winner": "xiaomi/mimo-v2.6-pro",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:25:00.000Z",
+            "process": "summarize",
+            "winner": "z-ai/glm-5.3-flash",
+            "winner_reachable": true
+          }
+        ],
+        "models": {
+          "xiaomi/mimo-v2.6-pro": {
+            "quality": 0.6,
+            "blended_price_usd_per_m": 0.33
+          },
+          "z-ai/glm-5.3-flash": {
+            "quality": 0.6,
+            "blended_price_usd_per_m": 1.13
+          }
+        }
+      },
+      "expected": {
+        "action": "pin",
+        "pin": {
+          "model": "xiaomi/mimo-v2.6-pro",
+          "pinned_at": "2026-10-21T10:00:00.000Z",
+          "expires_at": "2026-10-22T10:00:00.000Z",
+          "basis": {
+            "window": "7d",
+            "events": 6,
+            "counts": {
+              "xiaomi/mimo-v2.6-pro": 3,
+              "z-ai/glm-5.3-flash": 3
+            }
+          }
+        },
+        "reason": "most frequent winner over 7d (tie broken by price)"
+      }
+    },
+    {
+      "name": "tie-unknown-score-sorts-last",
+      "description": "A model the catalog has no benchmark score for loses a tie to one it has a score for, whatever the ids.",
+      "input": {
+        "process": "summarize",
+        "now": "2026-10-21T10:00:00.000Z",
+        "pin": null,
+        "events": [
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:00:00.000Z",
+            "process": "summarize",
+            "winner": "xiaomi/mimo-v2.6-pro",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:05:00.000Z",
+            "process": "summarize",
+            "winner": "z-ai/glm-5.3-flash",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:10:00.000Z",
+            "process": "summarize",
+            "winner": "xiaomi/mimo-v2.6-pro",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:15:00.000Z",
+            "process": "summarize",
+            "winner": "z-ai/glm-5.3-flash",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:20:00.000Z",
+            "process": "summarize",
+            "winner": "xiaomi/mimo-v2.6-pro",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:25:00.000Z",
+            "process": "summarize",
+            "winner": "z-ai/glm-5.3-flash",
+            "winner_reachable": true
+          }
+        ],
+        "models": {
+          "xiaomi/mimo-v2.6-pro": {
+            "quality": 0.2,
+            "blended_price_usd_per_m": 5.0
+          },
+          "z-ai/glm-5.3-flash": {
+            "quality": null,
+            "blended_price_usd_per_m": 0.1
+          }
+        }
+      },
+      "expected": {
+        "action": "pin",
+        "pin": {
+          "model": "xiaomi/mimo-v2.6-pro",
+          "pinned_at": "2026-10-21T10:00:00.000Z",
+          "expires_at": "2026-10-22T10:00:00.000Z",
+          "basis": {
+            "window": "7d",
+            "events": 6,
+            "counts": {
+              "xiaomi/mimo-v2.6-pro": 3,
+              "z-ai/glm-5.3-flash": 3
+            }
+          }
+        },
+        "reason": "most frequent winner over 7d (tie broken by benchmark score)"
+      }
+    },
+    {
+      "name": "more-wins-beat-a-better-score",
+      "description": "The tie-break never overrides the count: 3 wins beat 2 wins of a model with a higher score and a lower price.",
+      "input": {
+        "process": "summarize",
+        "now": "2026-10-21T10:00:00.000Z",
+        "pin": null,
+        "events": [
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:00:00.000Z",
+            "process": "summarize",
+            "winner": "xiaomi/mimo-v2.6-pro",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:05:00.000Z",
+            "process": "summarize",
+            "winner": "z-ai/glm-5.3-flash",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:10:00.000Z",
+            "process": "summarize",
+            "winner": "xiaomi/mimo-v2.6-pro",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:15:00.000Z",
+            "process": "summarize",
+            "winner": "z-ai/glm-5.3-flash",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-20T09:20:00.000Z",
+            "process": "summarize",
+            "winner": "xiaomi/mimo-v2.6-pro",
+            "winner_reachable": true
+          }
+        ],
+        "models": {
+          "xiaomi/mimo-v2.6-pro": {
+            "quality": 0.51,
+            "blended_price_usd_per_m": 1.13
+          },
+          "z-ai/glm-5.3-flash": {
+            "quality": 0.75,
+            "blended_price_usd_per_m": 0.33
+          }
+        }
+      },
+      "expected": {
+        "action": "pin",
+        "pin": {
+          "model": "xiaomi/mimo-v2.6-pro",
+          "pinned_at": "2026-10-21T10:00:00.000Z",
+          "expires_at": "2026-10-22T10:00:00.000Z",
+          "basis": {
+            "window": "7d",
+            "events": 5,
+            "counts": {
+              "xiaomi/mimo-v2.6-pro": 3,
+              "z-ai/glm-5.3-flash": 2
+            }
+          }
+        },
+        "reason": "most frequent winner over 7d"
+      }
+    },
+    {
+      "name": "tie-with-starter-catalog-facts",
+      "description": "`models: \"starter\"` = model_facts() of the starter catalog (quality = mean clipped normalized benchmark score, 4 dp; price = blended USD per 1M, 6 dp). openai/gpt-5.4-mini and x-ai/grok-4 tie 2-2; gpt-5.4-mini has the higher catalog benchmark score.",
+      "input": {
+        "process": "p",
+        "now": "2026-10-11T12:00:00.000Z",
+        "pin": null,
+        "events": [
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-11T11:00:00.000Z",
+            "process": "p",
+            "winner": "x-ai/grok-4",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-11T11:01:00.000Z",
+            "process": "p",
+            "winner": "openai/gpt-5.4-mini",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-11T11:02:00.000Z",
+            "process": "p",
+            "winner": "x-ai/grok-4",
+            "winner_reachable": true
+          },
+          {
+            "schema": "tryaii.monitor.event/1",
+            "ts": "2026-10-11T11:03:00.000Z",
+            "process": "p",
+            "winner": "openai/gpt-5.4-mini",
+            "winner_reachable": true
+          }
+        ],
+        "models": "starter"
+      },
+      "expected": {
+        "action": "pin",
+        "pin": {
+          "model": "x-ai/grok-4",
+          "pinned_at": "2026-10-11T12:00:00.000Z",
+          "expires_at": "2026-10-12T12:00:00.000Z",
+          "basis": {
+            "window": "7d",
+            "events": 4,
+            "counts": {
+              "x-ai/grok-4": 2,
+              "openai/gpt-5.4-mini": 2
+            }
+          }
+        },
+        "reason": "most frequent winner over 7d (tie broken by benchmark score)"
+      }
+    },
+    {
+      "name": "starter-catalog-model-facts",
+      "description": "model_facts() of the starter catalog for a few ids: the tie-break inputs, defined exactly as the server's GET /v1/monitor/models quality and blended_price_usd_per_m.",
+      "input": {
+        "facts_of": [
+          "openai/gpt-5.4-mini",
+          "x-ai/grok-4",
+          "deepseek/deepseek-v4-pro",
+          "openai/gpt-oss-120b",
+          "anthropic/claude-sonnet-4.5",
+          "not/in-catalog"
+        ]
+      },
+      "expected": {
+        "openai/gpt-5.4-mini": {
+          "quality": 0.6368,
+          "blended_price_usd_per_m": 2.625
+        },
+        "x-ai/grok-4": {
+          "quality": 0.6499,
+          "blended_price_usd_per_m": 9.0
+        },
+        "deepseek/deepseek-v4-pro": {
+          "quality": 0.6654,
+          "blended_price_usd_per_m": 0.3135
+        },
+        "openai/gpt-oss-120b": {
+          "quality": 0.4816,
+          "blended_price_usd_per_m": 0.1035
+        },
+        "anthropic/claude-sonnet-4.5": {
+          "quality": 0.6588,
+          "blended_price_usd_per_m": 9.0
+        },
+        "not/in-catalog": null
       }
     }
   ]

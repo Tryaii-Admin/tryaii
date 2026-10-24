@@ -28,8 +28,8 @@ V1 = "2026.10.04.1"
 V2 = "2026.10.05.1"
 DEAD = "http://127.0.0.1:9"  # nothing listens on the discard port
 
-NUDGE = ("Routing on the starter catalog (45 models). Log in for free to use the "
-         "full catalog (322 models): tryaii login\n")
+NUDGE = ("Routing on the starter catalog (46 models). Log in for free to use the "
+         "full catalog (319 models): tryaii login\n")
 
 
 @pytest.fixture(autouse=True)
@@ -39,6 +39,8 @@ def _env(tmp_path, monkeypatch):
     monkeypatch.setenv("TRYAII_API_URL", DEAD)
     monkeypatch.delenv("TRYAII_NO_BANNER", raising=False)
     monkeypatch.delenv("TRYAII_TOKEN", raising=False)
+    # An app key in the caller's shell would change "not logged in" (contract v1.4).
+    monkeypatch.delenv("TRYAII_API_KEY", raising=False)
     monkeypatch.setenv("TRYAII_NO_DAEMON", "1")
     clock = {"now": NOW}
     monkeypatch.setattr(flow, "clock", lambda: clock["now"])
@@ -384,14 +386,14 @@ def test_routable_count_skips_free_variants(bundles):
     from tryaii.catalog import load_bundle
 
     full = load_bundle(bundles[V1])
-    assert full.counts["models"] == 46
-    assert client.routable_count(full) == 45
-    assert client.routable_count(starter_bundle()) == 45
+    assert full.counts["models"] == 47
+    assert client.routable_count(full) == 46
+    assert client.routable_count(starter_bundle()) == 46
 
 
 def test_starter_manifest_full_counts_are_routable():
     # Contract section 1: full_counts.models = the full catalog's ROUTABLE count.
-    assert starter_bundle().full_counts == {"models": 322, "benchmarks": 33}
+    assert starter_bundle().full_counts == {"models": 319, "benchmarks": 30}
 
 
 def test_nudge_once_per_local_day(_env):
@@ -454,7 +456,7 @@ def test_library_checks_once_per_process(server):
     state, url = server()
     login_to(state, url)
     Router()
-    assert len(ModelRegistry.default().all_models) == 45
+    assert len(ModelRegistry.default().all_models) == 46
     BenchmarkRegistry.default()
     Router(catalog="full")
     # auto and full are memoized separately; each checked the server at most once.
@@ -496,7 +498,7 @@ def _run(monkeypatch, capsys, *argv):
 def test_cli_models_nudges_once_a_day(monkeypatch, capsys):
     code, out, err = _run(monkeypatch, capsys, "models")
     assert (code, err) == (0, NUDGE)
-    assert out.startswith("\nAvailable Models (45):")
+    assert out.startswith("\nAvailable Models (46):")
     assert _run(monkeypatch, capsys, "models")[2] == ""
 
 
@@ -515,7 +517,7 @@ def test_cli_models_lists_the_full_catalog_when_logged_in(server, monkeypatch, c
     code, out, err = _run(monkeypatch, capsys, "models", "--json")
     assert (code, err) == (0, "")
     ids = [m["model_id"] for m in json.loads(out)]
-    assert len(ids) == 45 and not any(i.endswith(":free") for i in ids)
+    assert len(ids) == 46 and not any(i.endswith(":free") for i in ids)
 
 
 @pytest.mark.parametrize("options, line", [
@@ -531,7 +533,7 @@ def test_cli_fallback_lines(server, monkeypatch, capsys, options, line):
     login_to(state, url)
     code, out, err = _run(monkeypatch, capsys, "models")
     assert (code, err) == (0, line)
-    assert "Available Models (45)" in out
+    assert "Available Models (46)" in out
 
 
 def test_cli_session_ended(server, monkeypatch, capsys):
@@ -547,7 +549,7 @@ def test_cli_login_downloads(server, monkeypatch, capsys):
     monkeypatch.setenv("TRYAII_API_URL", url)
     code, out, err = _run(monkeypatch, capsys, "login")
     assert (code, err) == (0, "")
-    assert out.endswith("Logged in as dev@example.com.\nDownloaded the full catalog (45 models).\n")
+    assert out.endswith("Logged in as dev@example.com.\nDownloaded the full catalog (46 models).\n")
     assert cache_versions() == [V1]
 
 
@@ -571,7 +573,7 @@ def test_cli_whoami_catalog_line(server, monkeypatch, capsys):
     code, out, err = _run(monkeypatch, capsys, "whoami")
     assert (code, err) == (0, "")
     assert out == ("Logged in as dev@example.com (Dev User)\nEntitlements: catalog:full\n"
-                   f"Catalog: full, release {V1} (45 models)\n")
+                   f"Catalog: full, release {V1} (46 models)\n")
     # --json unchanged: the server's JSON only
     assert "Catalog" not in _run(monkeypatch, capsys, "whoami", "--json")[1]
 
@@ -1082,7 +1084,7 @@ def test_cli_untrusted_signature_lines(server, monkeypatch, capsys, mode):
     code, out, err = _run(monkeypatch, capsys, "models")
     assert (code, err) == (0, "Could not download the full catalog; using the starter catalog "
                               "for now.\n")
-    assert "Available Models (45)" in out
+    assert "Available Models (46)" in out
 
 
 @pytest.mark.parametrize("mode", SIGNATURE_FAILURES)

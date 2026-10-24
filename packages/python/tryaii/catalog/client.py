@@ -7,7 +7,8 @@ for the bundle and wire formats). Mirrors ``packages/node/src/catalog/client.ts`
 Cache layout under the data dir (``TRYAII_DRE_DATA_DIR`` or ``~/.tryaii``)::
 
     catalog/full/<version>/   the six bundle files exactly as received
-    catalog/state.json        {"version": "<live version or null>", "checked_at": "<ISO Z>"}
+    catalog/state.json        {"version": "<live version or null>", "checked_at": "<ISO Z>",
+                               "auth": "app_key" only after an app key's check}
     catalog/nudge.json        {"last_shown": "<YYYY-MM-DD local date>"}
 
 Every write goes through the credentials file's atomic helper
@@ -19,6 +20,12 @@ signature or schema problems) never touch ``state.json`` -- the next use
 retries. A full catalog is accepted only with a valid signature from a
 trusted key (contract section 6, :mod:`tryaii.catalog.signing`), both when it
 is downloaded (before the cache is written) and when the cache is loaded.
+
+Credentials (contract section 5, "Which catalog", v1.4 / TS-294): a stored
+``tryaii login`` session wins; without one, an app key in ``TRYAII_API_KEY``
+fetches the same signed full catalog (a server needs no personal login);
+without either, the starter catalog. ``state.auth`` records which credential
+made the last check, so switching credentials re-checks at once.
 
 The library never prints. :func:`select_catalog` returns a
 :class:`CatalogSelection` whose ``notice`` tells the CLI what to print
@@ -93,14 +100,23 @@ MSG_SCHEMA_TOO_NEW = (
 MSG_LOGIN_DOWNLOAD_FAILED = (
     "Could not download the full catalog now; it will be fetched on next use."
 )
+MSG_KEY_REJECTED = (
+    "TRYAII_API_KEY was not accepted for the full catalog; using the starter catalog."
+)
+
+#: Which credential fetched the full catalog (``state.auth``, ``CatalogSelection.source``).
+AUTH_LOGIN = "login"
+AUTH_APP_KEY = "app_key"
 
 #: Why a selection landed on the starter catalog (None = nothing to say).
 NOTICE_NOT_LOGGED_IN = "not_logged_in"
 NOTICE_NO_ENTITLEMENT = "no_entitlement"
 NOTICE_DOWNLOAD_FAILED = "download_failed"
 NOTICE_SCHEMA_TOO_NEW = "schema_too_new"
+NOTICE_KEY_REJECTED = "key_rejected"
 
 _NOTICE_MESSAGES = {
+    NOTICE_KEY_REJECTED: MSG_KEY_REJECTED,
     NOTICE_NO_ENTITLEMENT: MSG_NO_ENTITLEMENT,
     NOTICE_DOWNLOAD_FAILED: MSG_DOWNLOAD_FAILED,
     NOTICE_SCHEMA_TOO_NEW: MSG_SCHEMA_TOO_NEW,
@@ -140,6 +156,9 @@ class CatalogSelection:
     #: too-new bundle) and the selection fell back (to the cached full
     #: catalog or the starter). The library memo retries these soon.
     failed: bool = False
+    #: The credential behind a full catalog: ``"login"`` or ``"app_key"``
+    #: (None for the starter catalog).
+    source: Optional[str] = None
 
     @property
     def kind(self) -> str:
@@ -195,14 +214,26 @@ def read_state() -> Optional[dict]:
     return data if isinstance(data, dict) else None
 
 
-def write_state(version: Optional[str], checked_at: float) -> None:
-    text = json.dumps({"version": version, "checked_at": store.iso_z(checked_at)})
+def write_state(version: Optional[str], checked_at: float, auth: str = "login") -> None:
+    data = {"version": version, "checked_at": store.iso_z(checked_at)}
+    if auth == AUTH_APP_KEY:
+        # Only an app key's check says so: a login's state keeps the pre-v1.4 bytes.
+        data["auth"] = AUTH_APP_KEY
+    text = json.dumps(data)
     store.write_atomic(state_path(), text.encode("utf-8"), prefix=".state-")
 
 
-def _check_due(state: Optional[dict], now: float) -> bool:
+def state_auth(state: Optional[dict]) -> str:
+    """The credential of the last check; a state written before contract
+    v1.4 (no ``auth``) was written by a login session."""
+    return AUTH_APP_KEY if (state or {}).get("auth") == AUTH_APP_KEY else AUTH_LOGIN
+
+
+def _check_due(state: Optional[dict], now: float, auth: str = "login") -> bool:
     if not state:
         return True
+    if state_auth(state) != auth:
+        return True  # another credential made the last check: ask again with this one
     raw = state.get("checked_at")
     # Same strictness as the Node SDK (exact "YYYY-MM-DDTHH:MM:SSZ").
     checked = (store.parse_iso_z(raw)
@@ -416,6 +447,7 @@ _SESSION_ENDED = "session_ended"
 _FORBIDDEN = "forbidden"
 _FAILED = "failed"
 _SCHEMA = "schema_too_new"
+_KEY_REJECTED = "key_rejected"
 
 
 def end_session() -> None:
@@ -449,21 +481,46 @@ def _run_check(creds: dict, cached: Optional[CatalogBundle], *, opener=None
                                  cached.version if cached else None, opener=opener)
     except _Failure:
         return _FAILED, None
-    now = _now()
+    if status == 401:
+        return _SESSION_ENDED, None
+    return _handle_live(status, raw, cached, AUTH_LOGIN)
 
+
+def _run_key_check(key: str, cached: Optional[CatalogBundle], *, opener=None
+                   ) -> tuple[str, Optional[CatalogBundle]]:
+    """``GET /v1/catalog/live`` with the app key (``TRYAII_API_KEY``) against
+    ``TRYAII_API_URL`` (the monitor's API base). A 401 (invalid, revoked or
+    expired key, deleted app) is ``key_rejected``: the full cache and
+    ``state.json`` are dropped, nothing raises, no session is touched."""
+    from tryaii.monitor.api import api_url as monitor_api_url
+
+    try:
+        status, raw = fetch_live(monitor_api_url(), key,
+                                 cached.version if cached else None, opener=opener)
+    except _Failure:
+        return _FAILED, None
+    if status == 401:
+        clear_cache()
+        return _KEY_REJECTED, None
+    return _handle_live(status, raw, cached, AUTH_APP_KEY)
+
+
+def _handle_live(status: int, raw: bytes, cached: Optional[CatalogBundle], auth: str
+                 ) -> tuple[str, Optional[CatalogBundle]]:
+    """Every answer of ``/v1/catalog/live`` except 401 (whose meaning
+    depends on the credential): 304, 403, 200 and the failures."""
+    now = _now()
     if status == 304:
         if cached is None:
             return _FAILED, None
-        _try_write_state(cached.version, now)
+        _try_write_state(cached.version, now, auth)
         return _NOT_MODIFIED, cached
-    if status == 401:
-        return _SESSION_ENDED, None
     if status == 403:
         body = _json_object(raw) or {}
         if body.get("error") == "insufficient_entitlement":
             # No access: remember it for 24 h and drop any old full cache.
             shutil.rmtree(full_dir(), ignore_errors=True)
-            _try_write_state(None, now)
+            _try_write_state(None, now, auth)
             return _FORBIDDEN, None
         return _FAILED, None
     if status != 200:
@@ -494,15 +551,22 @@ def _run_check(creds: dict, cached: Optional[CatalogBundle], *, opener=None
     except Exception:  # noqa: BLE001
         # Use it for this run; the next use downloads again.
         return _OK, bundle
-    _try_write_state(bundle.version, now)
+    _try_write_state(bundle.version, now, auth)
     return _OK, bundle
 
 
-def _try_write_state(version: Optional[str], now: float) -> None:
+def _try_write_state(version: Optional[str], now: float, auth: str = "login") -> None:
     try:
-        write_state(version, now)
+        write_state(version, now, auth)
     except OSError:
         pass
+
+
+def _env_app_key() -> Optional[str]:
+    """``TRYAII_API_KEY`` trimmed, or None (the monitor reads the same variable)."""
+    from tryaii.monitor.api import api_key
+
+    return api_key()
 
 
 def select_catalog(catalog: str = "auto", *, opener=None,
@@ -510,49 +574,90 @@ def select_catalog(catalog: str = "auto", *, opener=None,
     """Pick the catalog per contract section 5 ("Which catalog").
 
     * ``"starter"`` -- the packaged starter catalog; no network, no nudge.
-    * ``"auto"`` -- starter when not logged in (notice ``not_logged_in``);
-      otherwise the full catalog, checked against the server at most once
-      per 24 h (``force_check`` checks now).
-    * ``"full"`` -- like auto, but raises :class:`LoginRequiredError` when not
-      logged in.
+    * ``"auto"`` -- the full catalog, checked against the server at most
+      once per 24 h (``force_check`` checks now), with the first credential
+      found: a ``tryaii login`` session, else ``TRYAII_API_KEY``. Starter
+      without either (notice ``not_logged_in``) or when the key is rejected
+      (notice ``key_rejected``).
+    * ``"full"`` -- like auto, but raises :class:`LoginRequiredError` when
+      there is no session and no accepted app key.
 
     Raises :class:`SessionEndedError` (after deleting the credentials file
-    and the full cache) when the session is gone. Never prints.
+    and the full cache) when the session is gone. A rejected app key never
+    raises in ``auto``. Never prints.
     """
     if catalog not in CATALOG_MODES:
         raise ValueError(f"catalog must be one of {', '.join(CATALOG_MODES)}; got {catalog!r}")
     if catalog == "starter":
         return CatalogSelection(starter_bundle())
     creds = store.load()
+    key = None
     if creds is None:
-        if catalog == "full":
-            raise LoginRequiredError()
-        return CatalogSelection(starter_bundle(), NOTICE_NOT_LOGGED_IN)
+        key = _env_app_key()
+        if key is None:
+            if catalog == "full":
+                raise LoginRequiredError()
+            return CatalogSelection(starter_bundle(), NOTICE_NOT_LOGGED_IN)
+        from tryaii.monitor.api import is_app_key
+
+        if not is_app_key(key):
+            # Not even the key's shape: never sent anywhere.
+            if catalog == "full":
+                raise LoginRequiredError()
+            return CatalogSelection(starter_bundle(), NOTICE_KEY_REJECTED)
+    auth = AUTH_LOGIN if creds is not None else AUTH_APP_KEY
 
     state = read_state()
     cached = cached_full(state)
     now = _now()
-    due = force_check or _check_due(state, now)
+    due = force_check or _check_due(state, now, auth)
     if not due:
         if cached is not None:
-            return CatalogSelection(cached)
+            return CatalogSelection(cached, source=auth)
         if state.get("version") is None:
             # Checked within 24 h and the account had no access then.
             return CatalogSelection(starter_bundle(), NOTICE_NO_ENTITLEMENT)
         # state names a version but its directory is gone: check now.
 
-    outcome, bundle = _run_check(creds, cached, opener=opener)
+    if creds is not None:
+        outcome, bundle = _run_check(creds, cached, opener=opener)
+    else:
+        outcome, bundle = _run_key_check(key, cached, opener=opener)
     if outcome in (_OK, _NOT_MODIFIED):
-        return CatalogSelection(bundle, checked=True)
+        return CatalogSelection(bundle, checked=True, source=auth)
     if outcome == _SESSION_ENDED:
         end_session()
         raise SessionEndedError()
+    if outcome == _KEY_REJECTED:
+        if catalog == "full":
+            raise LoginRequiredError()
+        return CatalogSelection(starter_bundle(), NOTICE_KEY_REJECTED, checked=True)
     if outcome == _FORBIDDEN:
         return CatalogSelection(starter_bundle(), NOTICE_NO_ENTITLEMENT, checked=True)
     if cached is not None:
-        return CatalogSelection(cached, checked=True, failed=True)
+        return CatalogSelection(cached, checked=True, failed=True, source=auth)
     notice = NOTICE_SCHEMA_TOO_NEW if outcome == _SCHEMA else NOTICE_DOWNLOAD_FAILED
     return CatalogSelection(starter_bundle(), notice, checked=True, failed=True)
+
+
+#: ``tryaii monitor status`` labels (shared/monitor/SPEC.md §5.2).
+CATALOG_FULL_LOGIN = "full (login)"
+CATALOG_FULL_APP_KEY = "full (app key)"
+CATALOG_STARTER = "starter"
+
+
+def catalog_in_use() -> str:
+    """Which catalog this machine routes on, from local files only (no
+    network, no environment): ``full (login)`` / ``full (app key)`` when
+    ``state.json`` names a cached, verified full release (``auth`` says which
+    credential fetched it), else ``starter``."""
+    state = read_state()
+    if not state or not isinstance(state.get("version"), str):
+        return CATALOG_STARTER
+    cached = cached_full(state)
+    if cached is None or cached.version != state["version"]:
+        return CATALOG_STARTER
+    return CATALOG_FULL_APP_KEY if state_auth(state) == AUTH_APP_KEY else CATALOG_FULL_LOGIN
 
 
 def download_after_login(*, opener=None) -> Optional[CatalogBundle]:
@@ -620,7 +725,9 @@ def maybe_nudge(selection: CatalogSelection, write: Optional[Callable[[str], Any
 # schema_too_new, or a stale cached catalog kept after a failure) is kept for
 # FAILURE_RETRY_SECONDS only, so a long-running process that started during a
 # network blip retries on a later use instead of staying put for a day.
-# Not-logged-in and no-access (403) selections are final answers: 24 h.
+# Not-logged-in, no-access (403) and key-rejected selections are final
+# answers: 24 h. The memo key includes the app key's id (never its secret),
+# so a process that changes TRYAII_API_KEY selects again.
 _SELECTIONS: dict[tuple, tuple[float, CatalogSelection]] = {}
 _SELECTIONS_LOCK = threading.Lock()
 #: Monotonic clock of the memo (a seam for tests).
@@ -649,7 +756,8 @@ def selected_bundle(catalog: str = "auto") -> CatalogBundle:
         raise ValueError(f"catalog must be one of {', '.join(CATALOG_MODES)}; got {catalog!r}")
     if catalog == "starter":
         return starter_bundle()
-    key = (catalog, str(store.data_dir()))
+    env_key = _env_app_key() or ""
+    key = (catalog, str(store.data_dir()), env_key[:19])  # "tryaii_" + key_id
     now = _monotonic()
     with _SELECTIONS_LOCK:
         hit = _SELECTIONS.get(key)

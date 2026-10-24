@@ -48,10 +48,10 @@ describe('default registry excludes free tiers', () => {
 });
 
 describe.skipIf(!HAS_FULL_BUNDLE)(`full catalog excludes free tiers by default ${FULL_ONLY}`, () => {
-  it('default count is paid-only (322)', () => {
+  it('default count is paid-only (319)', () => {
     const paid = rawFull().filter((m) => !isFreeTier(m.model_id));
     expect(ModelRegistry.default(false, fullBundle()).length).toBe(paid.length);
-    expect(paid.length).toBe(322);
+    expect(paid.length).toBe(319);
     expect(ModelRegistry.fromBundle(fullBundle()).modelIds.some(isFreeTier)).toBe(false);
   });
 });
@@ -65,7 +65,7 @@ describe.skipIf(!HAS_FULL_BUNDLE)(`free data preserved for opt-in ${FULL_ONLY}`,
   it('includeFree opt-in loads everything', () => {
     const registry = ModelRegistry.default(true, fullBundle());
     expect(registry.length).toBe(rawFull().length);
-    expect(registry.length).toBe(362);
+    expect(registry.length).toBe(358);
     expect(registry.modelIds.some(isFreeTier)).toBe(true);
   });
 

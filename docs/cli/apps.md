@@ -23,6 +23,17 @@ of [`tryaii login`](login.md); they talk to the server you signed in to).
 `check` needs only the app key and talks to `TRYAII_API_URL` (default
 `https://api.tryaii.com`).
 
+**On a server the key is enough.** You run `tryaii login` and `tryaii apps
+create` once, on your own machine. Where the program runs, set only
+`TRYAII_API_KEY`: besides upload and the dashboard modes, the key also
+downloads the full model catalog (the same signed catalog a login gets,
+refreshed at most once a day), so recommendations use every model, not just
+the starter catalog. No personal login on servers. A machine with both a login
+and a key uses the login; a rejected key falls back to the starter catalog
+with one stderr line in the CLI
+(`TRYAII_API_KEY was not accepted for the full catalog; using the starter catalog.`).
+`tryaii monitor status` shows which one is in use (`catalog: full (app key)`).
+
 ## Verbs
 
 ### `create <name>`

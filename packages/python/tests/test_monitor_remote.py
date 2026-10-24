@@ -222,3 +222,182 @@ def test_a_broken_remote_json_means_local_behaviour():
     (monitor.dir / "remote.json").write_text("{not json", encoding="utf-8")
     client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
     assert client.chat.completions.calls[-1]["model"] == "gpt-5.5"
+
+
+# --- TS-296: the first calls honour the dashboard ---------------------------------
+
+def test_a_remote_json_written_in_process_applies_on_the_very_next_call():
+    # Regression (TS-296): the long poll wrote remote.json 3.5 s after the
+    # first call, but the next call still used the old mode because the
+    # cached copy was only re-checked every 5 s. No forcing here.
+    client = FakeClient()
+    monitor = wrap(client, app="shop", process="checkout", route_fn=route_fn)
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    assert client.chat.completions.calls[-1]["model"] == "gpt-5.5"
+    p, _ = poller((200, CONFIG_1), dirs=(monitor.dir,))
+    assert p.poll_once() == "changed"
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    assert client.chat.completions.calls[-1]["model"] == "gpt-5-mini"
+    events = store.read_recent_events(monitor.dir, 10)
+    assert [e["mode"] for e in events] == ["off", "managed"]
+
+
+def test_a_same_mtime_rewrite_is_still_picked_up():
+    # Coarse mtime (Windows / FAT, or a write within the same tick) must
+    # not hide an in-process write.
+    client = FakeClient()
+    monitor = wrap(client, app="shop", process="checkout", route_fn=route_fn)
+    other = dict(CONFIG_1, etag="e0", processes={"checkout": {"mode": "off", "model": None}})
+    store.write_remote(monitor.dir, other, FETCHED)
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    assert client.chat.completions.calls[-1]["model"] == "gpt-5.5"
+    path = monitor.dir / "remote.json"
+    stat = path.stat()
+    store.write_remote(monitor.dir, CONFIG_1, FETCHED)
+    import os
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    assert client.chat.completions.calls[-1]["model"] == "gpt-5-mini"
+
+
+class GatedOpener(Opener):
+    """An opener whose first request blocks until ``release`` is set."""
+
+    def __init__(self, *answers, hold_s=0.0):
+        super().__init__(*answers)
+        import threading
+
+        self.release = threading.Event()
+        self.hold_s = hold_s
+
+    def __call__(self, request, timeout=None):
+        if len(self.urls) == 0:
+            self.release.wait(self.hold_s)
+        return super().__call__(request, timeout)
+
+
+def _live_poller(monitor, opener):
+    p = remote.RemotePoller(KEY, BASE, opener=opener, now_ts=lambda: FETCHED)
+    p.register(monitor.dir)
+    monitor.transport._remote = p
+    monitor.transport._remote_settled = False
+    monitor.transport._remote_deadline = None
+    p.start()
+    return p
+
+
+def test_the_first_call_waits_for_the_first_answer():
+    import time as _time
+
+    client = FakeClient()
+    monitor = wrap(client, app="shop", process="checkout", route_fn=route_fn)
+    opener = GatedOpener((200, CONFIG_1), (304, None), hold_s=0.15)
+    p = _live_poller(monitor, opener)
+    try:
+        t0 = _time.monotonic()
+        client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+        spent = _time.monotonic() - t0
+        assert client.chat.completions.calls[-1]["model"] == "gpt-5-mini"
+        assert spent < 0.5 + 0.3
+        assert query(opener.urls[0]) == {"etag": "", "wait": "0"}
+        assert monitor.transport.remote_pending() is False
+    finally:
+        p.stop()
+    events = store.read_recent_events(monitor.dir, 10)
+    assert [e["mode"] for e in events] == ["managed"]
+
+
+def test_the_first_call_wait_is_bounded_and_happens_once():
+    import time as _time
+
+    client = FakeClient()
+    monitor = wrap(client, app="shop", process="checkout", route_fn=route_fn)
+    opener = GatedOpener((200, CONFIG_1), hold_s=10.0)   # a hanging server
+    p = _live_poller(monitor, opener)
+    try:
+        t0 = _time.monotonic()
+        client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+        first = _time.monotonic() - t0
+        t1 = _time.monotonic()
+        client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+        second = _time.monotonic() - t1
+        assert 0.4 <= first < 0.5 + 0.4
+        assert second < 0.2
+        assert [c["model"] for c in client.chat.completions.calls] == ["gpt-5.5", "gpt-5.5"]
+        assert monitor.transport.remote_pending() is False
+    finally:
+        p.stop()
+        opener.release.set()
+
+
+def test_no_first_call_wait_when_the_env_pins_the_mode(monkeypatch):
+    import time as _time
+
+    monkeypatch.setenv("TRYAII_MONITOR_MODE", "off")
+    client = FakeClient()
+    monitor = wrap(client, app="shop", process="checkout", route_fn=route_fn)
+    opener = GatedOpener((200, CONFIG_1), hold_s=10.0)
+    p = _live_poller(monitor, opener)
+    try:
+        t0 = _time.monotonic()
+        client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+        assert _time.monotonic() - t0 < 0.3
+    finally:
+        p.stop()
+        opener.release.set()
+
+
+def test_the_async_first_call_waits_off_the_event_loop():
+    import asyncio
+
+    class AsyncCompletions:
+        def __init__(self):
+            self.calls = []
+
+        async def create(self, **kwargs):
+            self.calls.append(dict(kwargs))
+
+            class R:
+                model = kwargs.get("model")
+                usage = {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+            return R()
+
+    class AsyncChat:
+        completions = AsyncCompletions()
+
+    class AsyncClient:
+        base_url = "https://api.openai.com/v1"
+        chat = AsyncChat()
+
+    client = AsyncClient()
+    monitor = wrap(client, app="shop", process="checkout", route_fn=route_fn)
+    opener = GatedOpener((200, CONFIG_1), (304, None), hold_s=0.15)
+    p = _live_poller(monitor, opener)
+    ticks = []
+
+    async def ticker():
+        for _ in range(5):
+            ticks.append(1)
+            await asyncio.sleep(0.02)
+
+    async def main():
+        t = asyncio.create_task(ticker())
+        await client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+        await t
+
+    try:
+        asyncio.run(main())
+    finally:
+        p.stop()
+    assert client.chat.completions.calls[-1]["model"] == "gpt-5-mini"
+    assert len(ticks) == 5
+
+
+def test_poller_first_answer_is_set_by_any_outcome(tmp_path):
+    p, _ = poller(urllib.error.URLError("down"), dirs=(tmp_path,))
+    assert not p.first_answer.is_set()
+    p.start()
+    assert p.first_answer.wait(2.0)
+    p.stop()
+    bad = remote.RemotePoller("not-a-key", BASE, opener=Opener((200, CONFIG_1)))
+    assert bad.first_answer.is_set()

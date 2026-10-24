@@ -290,7 +290,7 @@ describe('the shipped (starter) catalog', () => {
   const coverage = ModelRegistry.default().benchmarkCoverage();
 
   it('covers every benchmark the catalog reports', () => {
-    expect(Object.keys(coverage)).toHaveLength(16);
+    expect(Object.keys(coverage)).toHaveLength(15);
   });
 
   it('is a fraction in [0, 1] for every benchmark', () => {
@@ -301,8 +301,8 @@ describe('the shipped (starter) catalog', () => {
   });
 
   it('ranks a thin benchmark below a widely-reported one', () => {
-    // Terminal-bench-Hard is reported by fewer starter models than LiveCodeBench.
-    expect(coverage['Terminal-bench-Hard']).toBeLessThan(coverage['LiveCodeBench']);
+    // Tau2-bench is reported by fewer starter models than LiveCodeBench.
+    expect(coverage['Tau2-bench']).toBeLessThan(coverage['LiveCodeBench']);
   });
 
   it('memoises until the registry is mutated', () => {
@@ -319,7 +319,7 @@ describe('the shipped (starter) catalog', () => {
 describe.skipIf(!HAS_FULL_BUNDLE)(`the full catalog ${FULL_ONLY}`, () => {
   it('covers every benchmark the catalog reports', () => {
     const coverage = ModelRegistry.fromBundle(fullBundle()).benchmarkCoverage();
-    expect(Object.keys(coverage)).toHaveLength(33);
+    expect(Object.keys(coverage)).toHaveLength(30);
     // GSM8K is a saturated legacy benchmark few current models report;
     // LiveCodeBench is reported by a large share of the catalog.
     expect(coverage['GSM8K']).toBeLessThan(coverage['LiveCodeBench']);

@@ -201,7 +201,7 @@ describe('registry speed statistics', () => {
       .filter((x) => x.tokensPerSecond != null && x.ttftMs != null)
       .map((x) => speedUtilityFromT300(t300Seconds(x.tokensPerSecond!, x.ttftMs!)))
       .sort((a, b) => a - b);
-    // The packaged starter catalog (45 models; most carry speed measurements).
+    // The packaged starter catalog (46 models; most carry speed measurements).
     expect(us.length).toBeGreaterThan(30);
     expect(stats.p25SpeedUtility).toBeLessThan(us[Math.floor(us.length / 2)]);
     expect(stats.p25SpeedUtility).toBeGreaterThan(0);

@@ -6,18 +6,18 @@ Imports — Node: `BenchmarkRegistry`, `BenchmarkDefinition`, `STANDARD_BENCHMAR
 
 ## The standard benchmarks
 
-`BenchmarkRegistry.default()` loads the benchmarks of the [default catalog](../models/presets.md). The **starter catalog** shipped in the package has 16 benchmark signals, grouped by routing domain:
+`BenchmarkRegistry.default()` loads the benchmarks of the [default catalog](../models/presets.md). The **starter catalog** shipped in the package has 15 benchmark signals, grouped by routing domain:
 
-- Math and reasoning: **AIME-2024, AIME-2025, GPQA, HLE, AA-LCR**.
+- Math and reasoning: **AIME-2024, AIME-2025, GPQA, HLE**.
 - Knowledge and professional domains: **MMLU-Pro, MMMU, LegalBench**.
-- Code: **LiveCodeBench, SciCode**.
-- Agentic tasks: **Tau2-bench, Terminal-bench-Hard**.
+- Code: **SWE-bench-Pro, LiveCodeBench, SciCode**.
+- Agentic tasks: **Tau2-bench**.
 - Instruction following: **IFBench**.
 - Human preference: **Chatbot Arena Elo**, plus its **Code** and **Vision** tracks.
 
 After [`tryaii login`](../../cli/login.md) (free), the **full catalog** routes on a larger benchmark set. `BenchmarkRegistry.default()` takes the same `catalog` option as `Router` (`"auto"`, `"starter"`, `"full"`).
 
-Each benchmark has a category mapping, a [normalization range](../routing/scoring.md#normalization), and an importance weight. All three are catalog data: they live in each catalog bundle's `benchmarks.json` and `normalization_ranges.json` (see [the catalog contract](../../catalog/CONTRACT-catalog-v1.md), Appendix A), so the same engine routes the starter catalog that ships in the package and the full catalog. `STANDARD_BENCHMARKS` is the starter catalog's set; `BenchmarkRegistry.from_bundle(bundle)` / `BenchmarkRegistry.fromBundle(bundle)` gives any other bundle's. The ranges are **fitted to the full catalog** (`lo` = the p25 of the benchmark's real scores across routable models, `hi` = their max) and copied unchanged into the starter catalog, so a model scores the same on a benchmark both catalogs share; the importance weights are hand-maintained, because they are editorial rather than catalog-derived. A benchmark with too few real scores keeps a hand-written range and is flagged `"fallback": true`. Each catalog's representative training queries (232 in the starter catalog) ship with it and are loaded by the centroid generator, so the `STANDARD_BENCHMARKS` definitions themselves have empty `training_queries`.
+Each benchmark has a category mapping, a [normalization range](../routing/scoring.md#normalization), and an importance weight. All three are catalog data: they live in each catalog bundle's `benchmarks.json` and `normalization_ranges.json` (see [the catalog contract](../../catalog/CONTRACT-catalog-v1.md), Appendix A), so the same engine routes the starter catalog that ships in the package and the full catalog. `STANDARD_BENCHMARKS` is the starter catalog's set; `BenchmarkRegistry.from_bundle(bundle)` / `BenchmarkRegistry.fromBundle(bundle)` gives any other bundle's. The ranges are **fitted to the full catalog** (`lo` = the p25 of the benchmark's real scores across routable models, `hi` = their max) and copied unchanged into the starter catalog, so a model scores the same on a benchmark both catalogs share; the importance weights are hand-maintained, because they are editorial rather than catalog-derived. A benchmark with too few real scores keeps a hand-written range and is flagged `"fallback": true`. Each catalog's representative training queries (217 in the starter catalog) ship with it and are loaded by the centroid generator, so the `STANDARD_BENCHMARKS` definitions themselves have empty `training_queries`.
 
 ## BenchmarkDefinition
 

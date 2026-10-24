@@ -1,0 +1,13 @@
+{
+  "name": "tryaii",
+  "displayName": "TryAii",
+  "version": "0.2.0",
+  "description": "Connect Claude Code to TryAii in one step and see what your Claude Code usage costs. Uploads usage metadata only; prompts and code never leave your machine.",
+  "author": {
+    "name": "TryAii",
+    "url": "https://github.com/Tryaii-Admin"
+  },
+  "homepage": "https://github.com/Tryaii-Admin/tryaii-claude-code",
+  "repository": "https://github.com/Tryaii-Admin/tryaii-claude-code",
+  "keywords": ["tryaii", "usage", "cost", "tokens", "cache", "finops"]
+}

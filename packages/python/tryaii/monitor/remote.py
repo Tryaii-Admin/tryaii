@@ -10,6 +10,12 @@ polling for the process. The wrapper reads ``remote.json`` through the same
 mtime cache as ``config.json`` and applies it on the next call (precedence
 env > remote > ``wrap(mode=)`` > ``config.json`` > default). Fail-open: no
 failure here ever reaches the app.
+
+First answer (TS-296): the first poll asks with ``wait=0`` so the server
+answers at once (200 when the cached etag is stale or missing, else 304),
+and :attr:`RemotePoller.first_answer` is set when it returns, whatever the
+outcome. The transport lets the first call of the process wait for it, at
+most 0.5 s, once.
 """
 
 from __future__ import annotations
@@ -47,9 +53,9 @@ def _utcnow_ts() -> str:
     return format_ts(datetime.now(timezone.utc))
 
 
-def config_url(base_url: str, etag: Optional[str]) -> str:
+def config_url(base_url: str, etag: Optional[str], wait: int = WAIT_S) -> str:
     return (f"{base_url.rstrip('/')}/v1/monitor/config"
-            f"?etag={quote(etag or '', safe='')}&wait={WAIT_S}")
+            f"?etag={quote(etag or '', safe='')}&wait={wait}")
 
 
 class RemotePoller:
@@ -69,6 +75,11 @@ class RemotePoller:
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
         self._registered = threading.Event()
+        #: Set once the first poll returned (any outcome), or when the
+        #: poller cannot run: the first-call wait ends here (TS-296).
+        self.first_answer = threading.Event()
+        if self.disabled:
+            self.first_answer.set()
 
     def register(self, directory) -> None:
         directory = Path(directory)
@@ -87,13 +98,13 @@ class RemotePoller:
         with self._lock:
             return list(self._dirs)
 
-    def poll_once(self) -> str:
-        """One long poll. Returns ``changed``, ``unchanged``, ``error`` or
-        ``disabled``. Never raises."""
+    def poll_once(self, wait: int = WAIT_S) -> str:
+        """One long poll (``wait`` seconds server-side). Returns ``changed``,
+        ``unchanged``, ``error`` or ``disabled``. Never raises."""
         if self.disabled:
             return "disabled"
         try:
-            resp = api.request("GET", config_url(self.base_url, self.etag),
+            resp = api.request("GET", config_url(self.base_url, self.etag, wait),
                                bearer=self.key, opener=self._opener,
                                timeout=HTTP_TIMEOUT_S)
         except api.ApiNetworkError:
@@ -131,9 +142,17 @@ class RemotePoller:
 
     def _loop(self) -> None:
         self._registered.wait()
+        first = True
         while not self._stop.is_set():
             started = time.monotonic()
-            outcome = self.poll_once()
+            try:
+                # The first poll is answered at once (wait=0): the first
+                # call of the process may be waiting for it.
+                outcome = self.poll_once(0 if first else WAIT_S)
+            finally:
+                if first:
+                    first = False
+                    self.first_answer.set()
             if outcome == "disabled":
                 return
             if outcome == "error":
@@ -146,3 +165,4 @@ class RemotePoller:
 
     def stop(self) -> None:
         self._stop.set()
+        self.first_answer.set()

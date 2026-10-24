@@ -10,3 +10,4 @@ totals: 5 calls, 0 errors, est cost 0.0450, at winner 0.0028, savings 0.0422
 realised: 0 swapped calls, saved 0.0000
 source: local
 upload: off
+catalog: starter

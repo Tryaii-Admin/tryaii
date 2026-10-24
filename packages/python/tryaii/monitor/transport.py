@@ -36,6 +36,9 @@ DEFAULT_ROUTE_TIMEOUT_MS = 1500
 SHADOW_TIMEOUT_S = 2.0
 STATE_RECHECK_S = 5.0
 DRAIN_TIMEOUT_S = 2.0
+#: The first call of a process waits at most this long, once, for the first
+#: remote-config answer (SPEC.md §3.3, TS-296).
+REMOTE_FIRST_WAIT_S = 0.5
 
 STATUS_OK = "ok"
 STATUS_UNAVAILABLE = "unavailable"
@@ -100,6 +103,10 @@ class Transport:
         self._policy_cache: Optional[tuple] = None
         self._uploader = None
         self._remote = None
+        #: True once the first remote-config answer arrived or the bounded
+        #: first-call wait ran out: calls never wait again.
+        self._remote_settled = False
+        self._remote_deadline: Optional[float] = None
         self._app_dirs: list = []
 
     # -- catalog ---------------------------------------------------------
@@ -164,6 +171,37 @@ class Transport:
         for service in (uploader, remote):
             if service is not None:
                 service.register(directory)
+
+    def remote_pending(self) -> bool:
+        """True while a remote poller runs whose first answer has not come
+        and whose first-call wait has not run out (SPEC.md §3.3). A flag
+        check once settled; False without a poller."""
+        if self._remote_settled:
+            return False
+        remote = self._remote
+        if remote is None:
+            return False
+        if remote.first_answer.is_set():
+            self._remote_settled = True
+            return False
+        return True
+
+    def wait_remote_config(self) -> None:
+        """Block until the poller's first answer (200/304/error/401) or until
+        ``REMOTE_FIRST_WAIT_S`` after the first call that waited, whichever
+        comes first; concurrent first calls share the one deadline. After
+        that no call waits again."""
+        remote = self._remote
+        if self._remote_settled or remote is None:
+            return
+        with self._lock:
+            if self._remote_deadline is None:
+                self._remote_deadline = time.monotonic() + REMOTE_FIRST_WAIT_S
+            deadline = self._remote_deadline
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            remote.first_answer.wait(remaining)
+        self._remote_settled = True
 
     def _start_services(self) -> None:
         """Start the uploader and the remote poller when TRYAII_API_KEY is

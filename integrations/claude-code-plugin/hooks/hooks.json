@@ -1,0 +1,16 @@
+{
+  "description": "When a Claude Code session ends, start 'tryaii claude-code sync' in the background: it adds the project folder name, subagent type and (after analyze) task type of the session's calls to TryAii. Never text. Always exits 0, also when tryaii is not installed or not connected.",
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "tryaii claude-code sync --background --quiet; exit 0",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}

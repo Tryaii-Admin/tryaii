@@ -14,8 +14,9 @@ tryaii <command> [options]
 | [`diagnose <verb>`](diagnose/README.md) | Agent-first codebase LLM diagnostics: [`init`](diagnose/init.md) installs the agent playbook, [`plan`](diagnose/plan.md) hands the agent the interview + inventory shape, [`check`](diagnose/check.md) runs model-fit/cache/cost/hygiene over an inventory, [`report`](diagnose/report.md) renders a local HTML report with run-over-run deltas |
 | [`monitor <verb>`](monitor.md) | Read the records of `tryaii.monitor.wrap(client)` and steer it: [`status`](monitor.md#status) per app/sub-process (mode, pinned model, calls, tokens, est. cost, savings), [`set`](monitor.md#set-process-mode) a sub-process to `off` / `stable` / `dynamic` / `managed`, [`apps`](monitor.md#apps), [`events`](monitor.md#events) (`--json` = JSONL) |
 | [`apps <verb>`](apps.md) | tryaii.com apps and app keys for monitor upload: `create`, `list`, `keys` (`--new`, `--revoke`), `check` |
+| [`claude-code <verb>`](claude-code.md) | **Python only.** Your own Claude Code usage from its local logs: `report` (tokens, cache hit share, cost split, cheaper-model hints), `connect` (import and upload as the app `claude-code`), `analyze` (opt-in: classify your tasks locally and say which model is good enough), `disconnect` |
 | [`designpartner`](designpartner.md) | Enroll as a tryaii design partner: one resumable command (questionnaire → diagnose → tiered consent → submission; nothing sent without `--confirm`, always saved locally first) |
-| [`models`](models.md) | List the model catalog in use — the 45-model starter catalog, or the full catalog after `login` (`--provider`, `--json`) |
+| [`models`](models.md) | List the model catalog in use — the 46-model starter catalog, or the full catalog after `login` (`--provider`, `--json`) |
 | [`benchmarks`](benchmarks.md) | List registered benchmarks (`--json`) |
 | [`setup`](setup.md) | Download the embedding model and warm centroids (one-time) |
 | [`regenerate`](regenerate.md) | Force-rebuild benchmark centroids (e.g. after changing the embedding model) |

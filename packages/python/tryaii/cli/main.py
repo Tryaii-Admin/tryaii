@@ -2767,6 +2767,11 @@ def cli():
             _write_paced(COMMAND_HELP["help"] if wants_help else HELP)
             return
         topic_help = COMMAND_HELP.get(topic)
+        if topic_help is None and topic == "claude-code":
+            # Python-only command (SPEC.md §10.6): outside the parity tables.
+            from tryaii.cli.claude_code import HELP_CLAUDE_CODE
+
+            topic_help = HELP_CLAUDE_CODE
         if topic_help is None:
             print(
                 f'error: unknown help topic: {topic}. '
@@ -2798,6 +2803,11 @@ def cli():
             verb_help = APPS_VERB_HELP.get(verbs[0]) if verbs else None
             _write_paced(verb_help or COMMAND_HELP["apps"])
             return
+        if command == "claude-code":
+            from tryaii.cli.claude_code import HELP_CLAUDE_CODE
+
+            _write_paced(HELP_CLAUDE_CODE)
+            return
         # Unknown command + --help still gets the global overview.
         _write_paced(COMMAND_HELP.get(command, HELP))
         return
@@ -2818,6 +2828,13 @@ def cli():
         from tryaii.cli.apps import cmd_apps
 
         cmd_apps(filtered[1:])
+        return
+
+    if command == "claude-code":
+        # Python only for now (SPEC.md §10.6, a documented parity exception).
+        from tryaii.cli.claude_code import cmd_claude_code
+
+        cmd_claude_code(filtered[1:])
         return
 
     args = parser.parse_args(filtered)

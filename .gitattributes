@@ -1,3 +1,8 @@
 # Fixtures are compared byte for byte by both SDKs: keep LF on every OS.
 shared/monitor/fixtures/** text eol=lf
 shared/cachelint/fixtures/** text eol=lf
+# Catalog bundles are hashed byte for byte (manifest.json, build-catalog-bundles.py --check):
+# keep LF on every OS, or a Windows checkout reads the committed starter as stale.
+shared/catalog/starter/** text eol=lf
+packages/python/tryaii/catalog/data/** text eol=lf
+packages/node/src/catalog/data/** text eol=lf

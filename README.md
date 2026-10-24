@@ -48,9 +48,9 @@ embeddings are computed on-device (an int8 ONNX MiniLM on `onnxruntime` on Pytho
 PyTorch; ONNX MiniLM via `@xenova/transformers` on Node), so no API key is needed just to rank models. An
 OpenRouter key is only required if you want the SDK to *call* the chosen model for you.
 
-Out of the box, `tryaii` routes on a **starter catalog** of 45 well-known models and
-16 benchmarks that ships inside the package — no account, no network. Log in (free,
-with your tryaii.com Google account) to route on the **full catalog of 322 models**:
+Out of the box, `tryaii` routes on a **starter catalog** of 46 well-known models and
+15 benchmarks that ships inside the package — no account, no network. Log in (free,
+with your tryaii.com Google account) to route on the **full catalog of 319 models**:
 
 ```bash
 tryaii login     # device sign-in: open the printed URL in any browser, approve the code
@@ -239,8 +239,8 @@ tryaii <command> [options]
 |---------|--------------|
 | `route "<prompt>"`   | Classify one prompt and print ranked model recommendations with reasoning. |
 | `eval <input.json>`  | Route a whole dataset and write `results.jsonl`, `summary.json`, and an `index.html` dashboard. |
-| `models`             | List the models of the catalog in use (provider, latency, pricing): the 45-model starter catalog, or the full catalog after `login`. |
-| `benchmarks`         | List the catalog's benchmarks and their score-normalization ranges (16 in the starter catalog). |
+| `models`             | List the models of the catalog in use (provider, latency, pricing): the 46-model starter catalog, or the full catalog after `login`. |
+| `benchmarks`         | List the catalog's benchmarks and their score-normalization ranges (14 in the starter catalog). |
 | `setup`              | Download the embedding model and warm the centroids (one-time). |
 | `regenerate`         | Rebuild benchmark centroids, e.g. after switching the embedding model. |
 | `cachelint <request.json>` | Lint a chat request for prompt-cache readiness — verdict-first report; warns, never blocks. |
@@ -248,7 +248,7 @@ tryaii <command> [options]
 | `monitor <verb>`     | Read what `tryaii.monitor.wrap(client)` recorded and steer it — `status` per app/sub-process (model used, shadow-routing winner, cost, savings), `set` a sub-process to `off` / `stable` / `dynamic` / `managed`, `apps`, `events`. |
 | `apps <verb>`        | tryaii.com apps and app keys for monitor upload — `create`, `list`, `keys` (`--new`, `--revoke`), `check`. |
 | `designpartner`      | Enroll as a tryaii design partner — one resumable command; nothing is sent without an explicit `--confirm`. |
-| `login`              | Sign in with your tryaii.com account (free; unlocks the full model catalog of 322 models). |
+| `login`              | Sign in with your tryaii.com account (free; unlocks the full model catalog of 319 models). |
 | `logout`             | Sign out and remove the stored credentials and the downloaded full catalog. |
 | `whoami`             | Show the signed-in account and the catalog release in use (`--json`). |
 
@@ -309,8 +309,8 @@ All global flags work identically on the npm and PyPI CLIs and are accepted in a
 Exit codes also match: `0` success, `1` runtime failure, `2` usage error (`130` when `login` is cancelled).
 
 When nobody is logged in, `route`, `eval` and `models` print a one-line hint on **stderr**
-at most once a day: `Routing on the starter catalog (45 models). Log in for free to use the
-full catalog (322 models): tryaii login`.
+at most once a day: `Routing on the starter catalog (46 models). Log in for free to use the
+full catalog (319 models): tryaii login`.
 
 The banner prints to **stderr** and auto-suppresses when output is piped or redirected, so
 `tryaii models --json > models.json` stays clean. See [Examples](#examples) (top of this
@@ -374,15 +374,15 @@ CLI (same command for both packages)
   tryaii eval examples/prompts.json --max-price=0.50 --difficulty-source=intrinsic   # spend more on harder prompts
   tryaii models --json        # machine-readable model catalog (stdout)
   tryaii benchmarks --json    # machine-readable benchmark catalog
-  tryaii login                # optional, free: unlocks the full 322-model catalog
+  tryaii login                # optional, free: unlocks the full 319-model catalog
   # Add --no-banner (or set TRYAII_NO_BANNER=1) for clean, scriptable output.
 
 NOTES
   - route() is async in Node, sync in Python.
   - Routing is local and free; only DREClient/OpenRouter calls hit the network
     (plus, once logged in, an at-most-daily check for a new full-catalog release).
-  - Without login, routing uses the 45-model starter catalog; after `tryaii login`
-    it uses the full catalog of 322 models.
+  - Without login, routing uses the 46-model starter catalog; after `tryaii login`
+    it uses the full catalog of 319 models.
   - In budget eval, --max-price is a hard cap and quality/cost/speed flags are ignored.
 ````
 
@@ -456,7 +456,7 @@ Top-K ranked models, each with human-readable reasoning
 ```
 tryaii/
   shared/                  Single source of truth, synced into both packages
-    catalog/starter/       Starter catalog bundle: 45 models, 16 benchmarks, centroids,
+    catalog/starter/       Starter catalog bundle: 46 models, 15 benchmarks, centroids,
                            training queries, normalization ranges
     cachelint/ diagnose/ designpartner/   Cross-SDK specs and fixtures
   packages/
@@ -467,7 +467,7 @@ tryaii/
 
 ## Models & benchmarks
 
-The package ships a **starter catalog: 45 models from 6 providers, scored on 16
+The package ships a **starter catalog: 46 models from 6 providers, scored on 15
 benchmarks** — enough to route real workloads with no account and no network. Model ids
 are OpenRouter-native slugs (`provider/model`, e.g. `openai/gpt-5.5`,
 `anthropic/claude-opus-5.5`), so the chosen id can be passed straight through to
@@ -475,16 +475,16 @@ OpenRouter, and the catalog is fully extensible via `router.addModel(...)` /
 `router.add_model(...)`.
 
 - **openai** (16): GPT-5.5, GPT-5.4 (+ mini / nano), GPT-5.x, o3 / o4-mini, GPT-4o, gpt-oss-120b, and more
-- **anthropic** (10): Claude Opus 5.5, Fable 5.1 / 5, Sonnet 5.5 / 4.x, Opus 4.8 / 4.5, Haiku 4.5
+- **anthropic** (11): Claude Opus 5.5 / 5, Fable 5.1 / 5, Sonnet 5.5 / 4.x, Opus 4.8 / 4.5, Haiku 4.5
 - **google** (8): Gemini 3.8 Flash, 3.5 Flash, 3.1 Pro / Flash-Lite, 2.5 family
 - **deepseek** (4), **x-ai** (4), **mistralai** (3)
 
-**16 benchmarks** drive classification in the starter catalog: AIME-2024/2025, GPQA,
-HLE, AA-LCR, MMLU-Pro, MMMU, LegalBench, LiveCodeBench, SciCode, Tau2-bench,
-Terminal-bench-Hard, IFBench, and Chatbot Arena Elo (+ Code / Vision).
+**15 benchmarks** drive classification in the starter catalog: AIME-2024/2025, GPQA,
+HLE, MMLU-Pro, MMMU, LegalBench, SWE-bench-Pro, LiveCodeBench, SciCode, Tau2-bench, IFBench, and
+Chatbot Arena Elo (+ Code / Vision).
 
 **Log in for the full catalog.** `tryaii login` (free) unlocks the full catalog of
-**322 routable models** across many more providers and benchmarks. It downloads right
+**319 routable models** across many more providers and benchmarks. It downloads right
 after login, refreshes at most once a day, is cached under `~/.tryaii/catalog/`, and is
 used only after its Ed25519 signature checks out. In code, `Router(catalog="auto")`
 (the default) picks the full catalog when you are logged in; `catalog="starter"` keeps

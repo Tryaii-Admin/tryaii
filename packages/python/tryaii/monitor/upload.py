@@ -125,22 +125,32 @@ def _valid_event_id(value) -> bool:
     return True
 
 
-def envelope_head(batch_id: str, version: str) -> bytes:
+#: ``sdk.source`` of a Claude Code import batch (API.md v1.6, §3.2.3), the only
+#: accepted value; every other upload leaves the key out.
+SOURCE_CLAUDE_CODE_IMPORT = "claude-code-import"
+
+
+def envelope_head(batch_id: str, version: str, source: Optional[str] = None) -> bytes:
     """The request body up to the opening ``[`` of ``events`` (API.md §3.2
-    key order: schema, batch_id, sdk {lang, version}, notice_version)."""
+    key order: schema, batch_id, sdk {lang, version[, source]}, notice_version).
+    ``source`` (v1.6) is set only for the Claude Code importer's directory."""
     from tryaii.monitor import NOTICE_VERSION
 
+    sdk = {"lang": "python", "version": version}
+    if source is not None:
+        sdk["source"] = source
     head = json.dumps({"schema": UPLOAD_SCHEMA, "batch_id": batch_id,
-                       "sdk": {"lang": "python", "version": version},
+                       "sdk": sdk,
                        "notice_version": NOTICE_VERSION},
                       ensure_ascii=False, separators=(",", ":"))
     return (head[:-1] + ',"events":[').encode("utf-8")
 
 
-def build_body(batch_id: str, version: str, lines: list) -> bytes:
+def build_body(batch_id: str, version: str, lines: list,
+               source: Optional[str] = None) -> bytes:
     """The exact request body: the envelope with the outgoing event lines
     (:func:`outgoing_line`) spliced in."""
-    return envelope_head(batch_id, version) + b",".join(lines) + b"]}"
+    return envelope_head(batch_id, version, source) + b",".join(lines) + b"]}"
 
 
 class Batch:
@@ -296,6 +306,7 @@ class Uploader:
             from tryaii import __version__ as version
         self._version = version
         self._dirs: list = []
+        self._sources: dict = {}
         self._lock = threading.Lock()
         self._pass_lock = threading.Lock()
         self.disabled = not api.is_app_key(key)
@@ -313,11 +324,16 @@ class Uploader:
 
     # -- registration ----------------------------------------------------
 
-    def register(self, directory) -> None:
+    def register(self, directory, source: Optional[str] = None) -> None:
+        """Upload ``directory``; ``source`` (API.md v1.6) labels its batches'
+        ``sdk.source`` (only ``SOURCE_CLAUDE_CODE_IMPORT``, by the Claude Code
+        importer; wrapped-call directories leave it out)."""
         directory = Path(directory)
         with self._lock:
             if directory not in self._dirs:
                 self._dirs.append(directory)
+            if source is not None:
+                self._sources[directory] = source
         self._wake.set()
 
     @property
@@ -430,7 +446,9 @@ class Uploader:
             if self._paused(directory, cursor):
                 return "idle"
             batch_id = str(uuid.uuid4())
-            head = envelope_head(batch_id, self._version)
+            with self._lock:
+                source = self._sources.get(directory)
+            head = envelope_head(batch_id, self._version, source)
             batch = next_batch(directory, cursor, head_bytes=len(head),
                                hash_key=privacy.hash_key(directory.parent))
             if batch is None:

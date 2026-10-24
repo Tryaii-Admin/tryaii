@@ -37,6 +37,7 @@ import {
   usageFromResponse,
   evaluatePin,
   filterRanking,
+  modelFacts,
   managedTarget,
   nativeModelId,
   normalizeCacheUsage,
@@ -56,6 +57,7 @@ import {
   shadowAllowed,
   store,
   windowSeconds,
+  type ModelFactsMap,
 } from '../src/monitor/index.js';
 import { ModelPolicy } from '../src/policy.js';
 import { ModelRegistry } from '../src/registry/models.js';
@@ -157,13 +159,25 @@ function genWinner(inp: Record<string, any>): unknown {
   };
 }
 
+/** A pin case's `models` (tie-break facts): inline, or "starter" = modelFacts(starter); absent = null. */
+function pinModels(spec: unknown): ModelFactsMap | null {
+  if (spec === 'starter') return modelFacts(starterBundle());
+  return (spec as ModelFactsMap | undefined) ?? null;
+}
+
 function genPin(inp: Record<string, any>): unknown {
+  if ('facts_of' in inp) {
+    const facts = modelFacts(starterBundle());
+    const out: Record<string, unknown> = {};
+    for (const id of inp.facts_of as string[]) out[id] = facts[id] ?? null;
+    return out;
+  }
   if ('first_call_winner' in inp) return pinFromFirstCall(inp.first_call_winner, inp.now);
   let events = inp.events;
   if (events === undefined || events === null) events = store.readEvents(storeDir(inp.store), inp.now, SEVEN_DAYS);
   let pin = inp.pin;
   if (pin === 'from_store') pin = store.readPins(storeDir(inp.store)).processes[inp.process] ?? null;
-  return evaluatePin(events, pin, inp.now, inp.process);
+  return evaluatePin(events, pin, inp.now, inp.process, pinModels(inp.models));
 }
 
 function genConfig(inp: Record<string, any>): unknown {
