@@ -1,4 +1,6 @@
-# monitor upload and dashboard API — contract v1.6 (2026-10-24)
+# monitor upload and dashboard API — contract v1.7 (2026-10-24)
+
+v1.7 (2026-10-24, Jira TS-245 / TS-249, epic "Works with Langfuse"; it follows v1.6, Claude Code sessions, TS-297 / TS-290): two optional event fields and one optional batch field (section 3.2.4). `usage.reasoning_tokens` is the reasoning share of `completion_tokens` (included in it, never added on top), read from `usage.completion_tokens_details.reasoning_tokens`. `otel` is the OpenTelemetry span the call belongs to (`{trace_id, span_id}`, plus `origin: "tryaii"` when the SDK made that span itself), written only when there is one, so the SDK's Langfuse export can put its span in the same trace as the developer's own (`SPEC.md` section "Langfuse export"). The upload batch gains `integrations: ["langfuse"]` while the SDK's Langfuse export is on, so the funnel can be measured. All three are optional; the schema ids stay `tryaii.monitor.event/1` and `tryaii.monitor.upload/1`, older events and batches stay valid, and the batch carries the event fields exactly as stored. The server stores `usage.reasoning_tokens` as `events.reasoning_tokens`, keeps the known names of `integrations` per app in `app_integrations` (section 4) and ignores `otel`. Nothing in v1.7 changes a v1.6 field.
 
 v1.6 (Claude Code sessions and live advice, Jira TS-297 / TS-290; released with Data Notice
 `2026-10-24`, section 7.1). All changes are additive; a reader must tolerate their absence:
@@ -168,6 +170,7 @@ POST /v1/monitor/events
   "sdk": {"lang": "python"|"node", "version": "0.7.0",
           "source"?: "claude-code-import"},   // v1.6, optional: sent only with Claude Code import batches
   "notice_version": "2026-10-24",    // notice version built into the SDK (not proof of consent)
+  "integrations": ["langfuse"],      // v1.7, optional: present only when the Langfuse export is on
   "events": [ Event, ... ]           // 1..500 events, body <= 1 MiB
 }
 -> 202 {"accepted": n, "batch_id": "..."}      (queued; duplicates by batch_id are accepted and ignored)
@@ -340,9 +343,16 @@ cache_ttl_policy           ttl|null         the lifetime the request asked for, 
 
 `usage.prompt_tokens` stays what the provider reported; whether it includes the
 cached tokens is a per-provider convention (OpenAI, Azure, OpenRouter, Gemini:
-included; Anthropic, Bedrock: excluded). `null` means "not reported", `0` means
-"reported as zero" (below the provider's minimum prompt size caching silently does
-nothing). A batch with events that lack the keys is valid: a missing key reads as
+included; Anthropic, Bedrock: excluded). The server reads the convention from the
+event's `provider`: `anthropic` and `bedrock` exclude the cached and written tokens,
+every other value includes them. The cache hit rates of TS-231 (summary `cache_usage`,
+`cache_hit_rate`, rollups) divide by `prompt_tokens + cached_tokens +
+cache_write_tokens` for those two, else by `max(prompt_tokens, cached_tokens)`. The
+SDKs' Anthropic wrapper (Anthropic, Bedrock and Vertex clients of the Anthropic SDK,
+all with Messages-API usage) and the Claude Code import send `anthropic`;
+OpenAI-shaped clients send `openai`, `openrouter` or `other`. `null` means "not
+reported", `0` means "reported as zero" (below the provider's minimum prompt size
+caching silently does nothing). A batch with events that lack the keys is valid: a missing key reads as
 `null`.
 
 Lifetimes are what the dashboard's hot-cache bar is built on: a `cache_writes`
@@ -379,6 +389,63 @@ boolean`). Fields named `session_ref` or `effort` in an uploaded event are ignor
 OTLP receiver (section 8) sets them, so an upload cannot forge a session reference. In the
 SDK's event line it follows `cache_ttl_policy` (`SPEC.md` §3.1, §10.5); the wrappers leave it
 out.
+
+#### 3.2.4 Reasoning tokens, active trace and integrations (v1.7)
+
+v1.7 adds two optional event fields and one optional batch field (`SPEC.md` section
+3.1 for `usage.reasoning_tokens`, section "Langfuse export" for `otel` and the export
+itself; the SDK sends the event fields **unchanged**):
+
+```
+usage.reasoning_tokens   int|null         output tokens the model spent on reasoning, from
+                                          usage.completion_tokens_details.reasoning_tokens;
+                                          INCLUDED in completion_tokens, never added on top
+otel                     object|null      {"trace_id": "<32 hex>", "span_id": "<16 hex>"
+                                          [, "origin": "tryaii"]}: the span the call belongs
+                                          to, fixed at call time; the key is present only
+                                          when there is one; origin only when the SDK made it
+integrations (batch)     list             ["langfuse"] while the SDK's Langfuse export is on;
+                                          the key is absent otherwise
+```
+
+**`usage.reasoning_tokens`** — `integer >= 0 | null`, the last key inside `usage`.
+Read from the provider's response for streamed and non-streamed calls alike (for a
+stream, the usage of the last chunk). `null` means "not reported" (no
+`completion_tokens_details`, or no `reasoning_tokens` in it), `0` means "reported as
+zero". It is part of `completion_tokens` as the provider counts it, so
+`completion_tokens`, `total_tokens` and every cost figure stay as they were; a reader
+must never add it to `completion_tokens`. Langfuse shows output and reasoning tokens
+apart (TS-244 pilot); this field lets the dashboard do the same. The server stores it
+as `events.reasoning_tokens` (section 4); a value it cannot read (not an integer,
+negative, above 2^53) is stored as null, never a `400`.
+
+**`otel`** — `{"trace_id": "<32 hex>", "span_id": "<16 hex>"[, "origin": "tryaii"]}`,
+the span the TryAii observation belongs to, fixed by the wrapper at call time.
+Ids are lower-case hex, the W3C trace-context sizes (32 and 16 characters).
+Without `origin` it is the OpenTelemetry span active around the call (for example
+a Langfuse `@observe` span, or Langfuse's own generation in Node); the SDK's
+Langfuse export makes the TryAii span its child. `"origin": "tryaii"` is present
+only when the wrapper made the parent span itself (Python, Langfuse's OpenAI
+integration and no active span, `SPEC.md` §11.2): the ids are then the ones the
+export gives the TryAii span, sent as the trace root. Any other `origin` value is
+ignored. Absent when no span applies. The server **ignores** `otel`: it is neither
+stored nor validated beyond the batch limits.
+
+**`integrations`** — on the batch, after `notice_version`. `["langfuse"]` while the
+SDK's Langfuse export is really on: the switch `TRYAII_LANGFUSE=on` (also `1`,
+`true`), an app key in `TRYAII_API_KEY` and both `LANGFUSE_PUBLIC_KEY` and
+`LANGFUSE_SECRET_KEY` (`SPEC.md` §11.1); absent otherwise, and never an empty list.
+The server keeps only known names (today `langfuse`; case and surrounding spaces
+ignored, duplicates dropped) from the first 16 entries; an unknown name, a
+non-string, a value that is not a list, or a missing key is ignored, never a `400`.
+For each kept name it upserts `monitor.app_integrations` (section 4: one row per
+app and name, with `first_seen` / `last_seen` = the `received_at` of the first and
+the latest batch that named it), in the batch transaction and only for a batch not
+seen before. A batch without the key counts as no integration. The admin funnel
+("apps that upload with the Langfuse export on") reads that table.
+
+A batch with events that lack `usage.reasoning_tokens` or `otel` is valid: a missing
+key reads as `null`.
 
 The server stores the metadata fields only. It **rejects the whole batch** with
 400 if any event carries a field named `prompt`, `messages`, `response`,
@@ -465,6 +532,8 @@ GET /v1/monitor/apps/{app_id}/events?limit=100&before=<ts>&process=<name>
 -> 200 {"events":[Event...], "next_before": "<ts>"|null}
    // v1.5: each Event carries usage.cached_tokens / cache_write_tokens / cache_writes
    // and cache_ttl_policy as uploaded (null for events stored before the server kept them, TS-231)
+   // v1.7: usage.reasoning_tokens from events.reasoning_tokens (null when not reported
+   // or stored before v1.7); never otel
 GET /v1/monitor/apps/{app_id}/config               -> 200 RemoteConfig
 PUT /v1/monitor/apps/{app_id}/config
     {"default_mode"?: ..., "processes": {"<name>": {"mode": ..., "model"?: ...}}}
@@ -769,6 +838,8 @@ app_config(app_id pk, etag, default_mode, processes jsonb, updated_at, updated_b
 config_audit(id, app_id, at, user_id, change jsonb)
 batches(batch_id pk, app_id, key_id, received_at, event_count, sdk jsonb, notice_version)
        -- sdk = {lang, version} (+ "source": "import" for a Claude Code import batch, v1.6)
+app_integrations(app_id, integration, first_seen, last_seen,
+                 pk(app_id, integration))                -- v1.7 (TS-249): batch integrations
 events(event_id pk, app_id, ts, process, call_file, call_line, call_function, provider,
        model_requested, model_resolved, model_used, mode, winner, winner_reachable,
        route_status, class, subclass, confidence, prompt_tokens, completion_tokens,
@@ -778,6 +849,7 @@ events(event_id pk, app_id, ts, process, call_file, call_line, call_function, pr
        -- v1.5 (added by TS-231, migration 0008): cache_write_tokens null, cache_writes jsonb null,
        --                         cache_ttl_policy null
        -- v1.6 (migration 0009): session_ref null, effort null, cache_cold bool null
+       -- v1.7: reasoning_tokens bigint null (usage.reasoning_tokens; not in the rollups)
        PARTITION BY RANGE (ts), one partition per day, dropped after 90 days
 cache_reports(app_id, process, ts, event_id, report jsonb, received_at,
               pk(app_id, process))                       -- v1.4: latest CacheReport per process
@@ -808,7 +880,7 @@ indexed `(app_id, ts) WHERE cache_cold`. None of the three is in `rollups_daily`
 Ingest: `POST /v1/monitor/events` validates and enqueues the batch on SQS
 (standard queue, DLQ after 3 receives); the worker inserts events (`ON CONFLICT
 DO NOTHING` on `event_id`), records the batch (with its `notice_version`),
-upserts `rollups_daily` and, for each newly inserted event that carries a cache report,
+upserts `app_integrations` for the batch's known `integrations` (v1.7), upserts `rollups_daily` and, for each newly inserted event that carries a cache report,
 upserts `cache_reports` (`ON CONFLICT (app_id, process) DO UPDATE ... WHERE
 cache_reports.ts <= EXCLUDED.ts`; of two reports in one batch the later `ts` wins).
 Reports older than 90 days are deleted with the expired events partitions. It never writes `consent`: a batch shows which notice the
@@ -906,10 +978,10 @@ DELETE /v1/monitor/data             -> 200 {"apps_deleted": n, "purge_at"}  (eve
   data; the keys stay revoked (create a new one). Restore answers 409 `name_taken` when
   a live app of the same owner has the name.
 - After 30 days the worker purges the app: events, rollups, cache reports, config,
-  layout, config changes, batches, keys and the app row. A `deletions` row (app id, owner, deleted_at,
+  layout, config changes, batches, integrations (`app_integrations`, v1.7), keys and the app row. A `deletions` row (app id, owner, deleted_at,
   purged_at) is kept as the record that the deletion was done.
 - Retention: events 90 days; `cache_reports` 90 days after their `ts`; `batches` and `config_audit` 13 months (395 days);
-  `rollups_daily` while the app exists; `deletions` and `consent` while the account
+  `rollups_daily` and `app_integrations` while the app exists; `deletions` and `consent` while the account
   exists.
 - v1.6: `events.session_ref` **7 days** (the worker clears it daily on calls 7 to 9 days old;
   the calls themselves stay 90 days without it); `process_advice` **90 days** from its

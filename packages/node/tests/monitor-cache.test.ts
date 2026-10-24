@@ -88,7 +88,7 @@ describe('cache fields', () => {
     const [event] = eventsOf(monitor);
     expect(event.usage).toEqual({
       prompt_tokens: 1400, completion_tokens: 10, total_tokens: 1410,
-      cached_tokens: 1280, cache_write_tokens: null, cache_writes: null,
+      cached_tokens: 1280, cache_write_tokens: null, cache_writes: null, reasoning_tokens: null,
     });
     expect('cache' in event).toBe(false);
   });
@@ -207,7 +207,7 @@ describe('cache fields', () => {
       usageFromResponse({ prompt_tokens: 100, completion_tokens: 5, total_tokens: 105, cache_read_input_tokens: 64 }),
     ).toEqual({
       prompt_tokens: 100, completion_tokens: 5, total_tokens: 105,
-      cached_tokens: 64, cache_write_tokens: null, cache_writes: null,
+      cached_tokens: 64, cache_write_tokens: null, cache_writes: null, reasoning_tokens: null,
     });
   });
 });

@@ -513,7 +513,8 @@ def test_event_mapping_and_key_order(projects, pricer):
                               "total_tokens": 1060, "cached_tokens": 0,
                               "cache_write_tokens": 1000,
                               "cache_writes": [{"tokens": 600, "ttl": "5m"},
-                                               {"tokens": 400, "ttl": "1h"}]}
+                                               {"tokens": 400, "ttl": "1h"}],
+                              "reasoning_tokens": None}
     assert event["est_cost_usd"] == event["est_cost_anchor_usd"] == round(
         pricer.cost(a)["total"], 6)
     assert event["latency_ms"] is None and event["prompt_hash"] is None

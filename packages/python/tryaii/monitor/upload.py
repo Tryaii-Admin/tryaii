@@ -42,6 +42,7 @@ from typing import Callable, Optional
 from tryaii.monitor import api, privacy, store
 from tryaii.monitor.callsite import is_absolute_file
 from tryaii.monitor.events import EVENT_SCHEMA, format_ts
+from tryaii.monitor.langfuse import settings as langfuse_settings
 
 logger = logging.getLogger("tryaii.monitor")
 
@@ -125,32 +126,46 @@ def _valid_event_id(value) -> bool:
     return True
 
 
+def batch_integrations(env=None) -> Optional[list]:
+    """The batch's ``integrations`` (API.md v1.7): ``["langfuse"]`` while the
+    Langfuse export is really on (``langfuse.settings``: the switch, an app
+    key in ``TRYAII_API_KEY`` and both Langfuse keys), else None (the key is
+    then left out). ``env`` defaults to ``os.environ``."""
+    return ["langfuse"] if langfuse_settings(env)["enabled"] else None
+
+
 #: ``sdk.source`` of a Claude Code import batch (API.md v1.6, §3.2.3), the only
 #: accepted value; every other upload leaves the key out.
 SOURCE_CLAUDE_CODE_IMPORT = "claude-code-import"
 
 
-def envelope_head(batch_id: str, version: str, source: Optional[str] = None) -> bytes:
+def envelope_head(batch_id: str, version: str, source: Optional[str] = None,
+                  integrations: Optional[list] = None) -> bytes:
     """The request body up to the opening ``[`` of ``events`` (API.md §3.2
-    key order: schema, batch_id, sdk {lang, version[, source]}, notice_version).
-    ``source`` (v1.6) is set only for the Claude Code importer's directory."""
+    key order: schema, batch_id, sdk {lang, version[, source]}, notice_version,
+    then ``integrations`` (v1.7) only when given and non-empty). ``source``
+    (v1.6) is set only for the Claude Code importer's directory."""
     from tryaii.monitor import NOTICE_VERSION
 
     sdk = {"lang": "python", "version": version}
     if source is not None:
         sdk["source"] = source
-    head = json.dumps({"schema": UPLOAD_SCHEMA, "batch_id": batch_id,
-                       "sdk": sdk,
-                       "notice_version": NOTICE_VERSION},
-                      ensure_ascii=False, separators=(",", ":"))
+    doc = {"schema": UPLOAD_SCHEMA, "batch_id": batch_id,
+           "sdk": sdk,
+           "notice_version": NOTICE_VERSION}
+    if integrations:
+        doc["integrations"] = list(integrations)
+    head = json.dumps(doc, ensure_ascii=False, separators=(",", ":"))
     return (head[:-1] + ',"events":[').encode("utf-8")
 
 
 def build_body(batch_id: str, version: str, lines: list,
-               source: Optional[str] = None) -> bytes:
+               source: Optional[str] = None,
+               integrations: Optional[list] = None) -> bytes:
     """The exact request body: the envelope with the outgoing event lines
     (:func:`outgoing_line`) spliced in."""
-    return envelope_head(batch_id, version, source) + b",".join(lines) + b"]}"
+    return (envelope_head(batch_id, version, source, integrations)
+            + b",".join(lines) + b"]}")
 
 
 class Batch:
@@ -448,7 +463,8 @@ class Uploader:
             batch_id = str(uuid.uuid4())
             with self._lock:
                 source = self._sources.get(directory)
-            head = envelope_head(batch_id, self._version, source)
+            head = envelope_head(batch_id, self._version, source,
+                                 batch_integrations())
             batch = next_batch(directory, cursor, head_bytes=len(head),
                                hash_key=privacy.hash_key(directory.parent))
             if batch is None:

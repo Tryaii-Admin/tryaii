@@ -12,6 +12,7 @@
 import { formatFixed } from './cachelint/util/halfEven.js';
 import { ENV_APP, envFromOs, MSG_BAD_MODE, MSG_MANAGED_NEEDS_MODEL, setProcessMode } from './monitor/config.js';
 import { formatTs, parseTs } from './monitor/events.js';
+import { statusLine as langfuseStatusLine } from './monitor/langfuse.js';
 import * as privacy from './monitor/privacy.js';
 import { aggregate, windowSeconds } from './monitor/status.js';
 import * as store from './monitor/store.js';
@@ -343,6 +344,8 @@ function verbStatus(argv: string[], env: Env, write: Write): void {
   const classification = classificationLine(dataDir);
   if (classification !== null) write(`${classification}\n`);
   write(`${catalogLine()}\n`);
+  const langfuse = langfuseStatusLine();
+  if (langfuse !== null) write(`${langfuse}\n`);
 }
 
 /**

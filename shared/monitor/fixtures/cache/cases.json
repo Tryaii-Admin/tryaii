@@ -24,7 +24,8 @@
           "total_tokens": 1391,
           "cached_tokens": 1024,
           "cache_write_tokens": null,
-          "cache_writes": null
+          "cache_writes": null,
+          "reasoning_tokens": null
         }
       }
     },
@@ -49,7 +50,8 @@
           "total_tokens": 1391,
           "cached_tokens": 0,
           "cache_write_tokens": null,
-          "cache_writes": null
+          "cache_writes": null,
+          "reasoning_tokens": null
         }
       }
     },
@@ -71,7 +73,8 @@
           "total_tokens": 1391,
           "cached_tokens": null,
           "cache_write_tokens": null,
-          "cache_writes": null
+          "cache_writes": null,
+          "reasoning_tokens": null
         }
       }
     },
@@ -96,7 +99,8 @@
           "total_tokens": 1391,
           "cached_tokens": null,
           "cache_write_tokens": null,
-          "cache_writes": null
+          "cache_writes": null,
+          "reasoning_tokens": null
         }
       }
     },
@@ -119,7 +123,8 @@
           "total_tokens": 1391,
           "cached_tokens": null,
           "cache_write_tokens": null,
-          "cache_writes": null
+          "cache_writes": null,
+          "reasoning_tokens": null
         }
       }
     },
@@ -143,7 +148,8 @@
           "total_tokens": 1391,
           "cached_tokens": 512,
           "cache_write_tokens": null,
-          "cache_writes": null
+          "cache_writes": null,
+          "reasoning_tokens": null
         }
       }
     },
@@ -169,7 +175,8 @@
           "total_tokens": 1391,
           "cached_tokens": 256,
           "cache_write_tokens": null,
-          "cache_writes": null
+          "cache_writes": null,
+          "reasoning_tokens": null
         }
       }
     },
@@ -194,7 +201,8 @@
           "total_tokens": 1391,
           "cached_tokens": 1024,
           "cache_write_tokens": null,
-          "cache_writes": null
+          "cache_writes": null,
+          "reasoning_tokens": null
         }
       }
     },
@@ -220,7 +228,8 @@
           "total_tokens": 1391,
           "cached_tokens": null,
           "cache_write_tokens": null,
-          "cache_writes": null
+          "cache_writes": null,
+          "reasoning_tokens": null
         }
       }
     },
@@ -245,7 +254,8 @@
           "total_tokens": 1391,
           "cached_tokens": null,
           "cache_write_tokens": null,
-          "cache_writes": null
+          "cache_writes": null,
+          "reasoning_tokens": null
         }
       }
     },
@@ -273,6 +283,295 @@
       },
       "expected": {
         "usage": null
+      }
+    },
+    {
+      "name": "usage-reasoning-reported",
+      "description": "API.md v1.7: completion_tokens_details.reasoning_tokens becomes usage.reasoning_tokens; completion_tokens stays as reported (it already includes them).",
+      "input": {
+        "kind": "usage",
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "completion_tokens_details": {
+            "reasoning_tokens": 1024,
+            "audio_tokens": 0,
+            "accepted_prediction_tokens": 0,
+            "rejected_prediction_tokens": 0
+          }
+        }
+      },
+      "expected": {
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "cached_tokens": null,
+          "cache_write_tokens": null,
+          "cache_writes": null,
+          "reasoning_tokens": 1024
+        }
+      }
+    },
+    {
+      "name": "usage-reasoning-zero",
+      "description": "A reported 0 reasoning tokens stays 0, unlike null.",
+      "input": {
+        "kind": "usage",
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          }
+        }
+      },
+      "expected": {
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "cached_tokens": null,
+          "cache_write_tokens": null,
+          "cache_writes": null,
+          "reasoning_tokens": 0
+        }
+      }
+    },
+    {
+      "name": "usage-reasoning-not-reported",
+      "description": "No completion_tokens_details: reasoning_tokens is null.",
+      "input": {
+        "kind": "usage",
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740
+        }
+      },
+      "expected": {
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "cached_tokens": null,
+          "cache_write_tokens": null,
+          "cache_writes": null,
+          "reasoning_tokens": null
+        }
+      }
+    },
+    {
+      "name": "usage-reasoning-details-null",
+      "description": "completion_tokens_details null: null.",
+      "input": {
+        "kind": "usage",
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "completion_tokens_details": null
+        }
+      },
+      "expected": {
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "cached_tokens": null,
+          "cache_write_tokens": null,
+          "cache_writes": null,
+          "reasoning_tokens": null
+        }
+      }
+    },
+    {
+      "name": "usage-reasoning-details-without-count",
+      "description": "completion_tokens_details without reasoning_tokens: null.",
+      "input": {
+        "kind": "usage",
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "completion_tokens_details": {
+            "audio_tokens": 0
+          }
+        }
+      },
+      "expected": {
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "cached_tokens": null,
+          "cache_write_tokens": null,
+          "cache_writes": null,
+          "reasoning_tokens": null
+        }
+      }
+    },
+    {
+      "name": "usage-reasoning-stream-chunk",
+      "description": "The usage of a stream's last chunk (stream_options.include_usage) has the same shape: cached and reasoning tokens are both read.",
+      "input": {
+        "kind": "usage",
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "prompt_tokens_details": {
+            "cached_tokens": 1024,
+            "audio_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 896
+          }
+        }
+      },
+      "expected": {
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "cached_tokens": 1024,
+          "cache_write_tokens": null,
+          "cache_writes": null,
+          "reasoning_tokens": 896
+        }
+      }
+    },
+    {
+      "name": "usage-reasoning-integral-float",
+      "description": "An integral float reasoning count becomes an int.",
+      "input": {
+        "kind": "usage",
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "completion_tokens_details": {
+            "reasoning_tokens": 896.0
+          }
+        }
+      },
+      "expected": {
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "cached_tokens": null,
+          "cache_write_tokens": null,
+          "cache_writes": null,
+          "reasoning_tokens": 896
+        }
+      }
+    },
+    {
+      "name": "usage-reasoning-bad-boolean",
+      "description": "A boolean reasoning count is not a count: null.",
+      "input": {
+        "kind": "usage",
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "completion_tokens_details": {
+            "reasoning_tokens": true
+          }
+        }
+      },
+      "expected": {
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "cached_tokens": null,
+          "cache_write_tokens": null,
+          "cache_writes": null,
+          "reasoning_tokens": null
+        }
+      }
+    },
+    {
+      "name": "usage-reasoning-bad-negative",
+      "description": "A negative reasoning count is not a count: null.",
+      "input": {
+        "kind": "usage",
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "completion_tokens_details": {
+            "reasoning_tokens": -1
+          }
+        }
+      },
+      "expected": {
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "cached_tokens": null,
+          "cache_write_tokens": null,
+          "cache_writes": null,
+          "reasoning_tokens": null
+        }
+      }
+    },
+    {
+      "name": "usage-reasoning-bad-string",
+      "description": "A string reasoning count is ignored: null.",
+      "input": {
+        "kind": "usage",
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "completion_tokens_details": {
+            "reasoning_tokens": "896"
+          }
+        }
+      },
+      "expected": {
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "cached_tokens": null,
+          "cache_write_tokens": null,
+          "cache_writes": null,
+          "reasoning_tokens": null
+        }
+      }
+    },
+    {
+      "name": "usage-reasoning-event-name",
+      "description": "An event-shaped usage that already carries reasoning_tokens keeps it (re-emitted lines).",
+      "input": {
+        "kind": "usage",
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "reasoning_tokens": 640,
+          "completion_tokens_details": {
+            "reasoning_tokens": 896
+          }
+        }
+      },
+      "expected": {
+        "usage": {
+          "prompt_tokens": 1240,
+          "completion_tokens": 1500,
+          "total_tokens": 2740,
+          "cached_tokens": null,
+          "cache_write_tokens": null,
+          "cache_writes": null,
+          "reasoning_tokens": 640
+        }
       }
     },
     {

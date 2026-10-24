@@ -326,6 +326,11 @@ def _verb_status(argv: list, env: dict) -> None:
     if line:
         print(line)
     print(_catalog_line())
+    from tryaii.monitor.langfuse import status_line
+
+    langfuse = status_line()
+    if langfuse:
+        print(langfuse)
 
 
 def _catalog_line() -> str:

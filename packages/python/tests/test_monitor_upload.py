@@ -117,7 +117,8 @@ def _reset_log_once():
 
 # --- happy path -------------------------------------------------------------------
 
-def test_validates_once_then_uploads_the_unread_lines(tmp_path):
+def test_validates_once_then_uploads_the_unread_lines(tmp_path, monkeypatch):
+    monkeypatch.delenv("TRYAII_LANGFUSE", raising=False)
     path = write_events(tmp_path, [event(1), event(2)])
     up, opener, clock = make(tmp_path, {
         "/v1/apps/keys/validate": [(200, VALID)],
@@ -156,6 +157,54 @@ def test_validates_once_then_uploads_the_unread_lines(tmp_path):
     assert len([c for c in opener.calls if c["path"] == "/v1/apps/keys/validate"]) == 1
     clock.t += upload.INTERVAL_S
     assert up.run_once() == "idle"
+
+
+LANGFUSE_KEYS = {"TRYAII_API_KEY": KEY, "LANGFUSE_PUBLIC_KEY": "pk-lf-test",
+                 "LANGFUSE_SECRET_KEY": "sk-lf-test"}
+
+
+def test_integrations_follow_the_langfuse_export(tmp_path, monkeypatch):
+    # API.md v1.7: "integrations": ["langfuse"] after notice_version while the
+    # Langfuse export is really on (switch + app key + both Langfuse keys,
+    # langfuse.settings); absent otherwise.
+    from tryaii.monitor.config import langfuse_enabled
+
+    for value, on in (("on", True), ("1", True), ("true", True), (" ON ", True),
+                      ("TRUE", True), ("off", False), ("0", False), ("", False),
+                      ("yes", False), (None, False)):
+        env = {} if value is None else {"TRYAII_LANGFUSE": value}
+        assert langfuse_enabled(env) is on, value
+        # The switch alone is not enough: the exporter is off without the keys.
+        assert upload.batch_integrations(env) is None
+        assert upload.batch_integrations({**env, **LANGFUSE_KEYS}) == (["langfuse"] if on else None)
+    for missing in LANGFUSE_KEYS:
+        env = {"TRYAII_LANGFUSE": "on", **LANGFUSE_KEYS}
+        del env[missing]
+        assert upload.batch_integrations(env) is None, missing
+    assert upload.batch_integrations({"TRYAII_LANGFUSE": "on", **LANGFUSE_KEYS,
+                                      "TRYAII_API_KEY": "not-an-app-key"}) is None
+    head = upload.envelope_head("b", "0.7.0", integrations=["langfuse"])
+    assert head.endswith(b',"integrations":["langfuse"],"events":[')
+    assert b"integrations" not in upload.envelope_head("b", "0.7.0", integrations=[])
+
+    write_events(tmp_path, [event(1)])
+    monkeypatch.setenv("TRYAII_LANGFUSE", "on")
+    for name, value in LANGFUSE_KEYS.items():
+        monkeypatch.setenv(name, value)
+    up, opener, clock = make(tmp_path, {
+        "/v1/apps/keys/validate": [(200, VALID)],
+        "/v1/monitor/events": [(202, {"accepted": 1, "batch_id": "x"})]})
+    assert up.run_once() == "sent"
+    body = json.loads(opener.posts()[0]["data"])
+    assert list(body) == ["schema", "batch_id", "sdk", "notice_version", "integrations",
+                          "events"]
+    assert body["integrations"] == ["langfuse"]
+
+    monkeypatch.setenv("TRYAII_LANGFUSE", "off")
+    write_events(tmp_path, [event(2)])
+    clock.t += upload.INTERVAL_S
+    assert up.run_once() == "sent"
+    assert "integrations" not in json.loads(opener.posts()[1]["data"])
 
 
 def test_local_files_are_never_modified(tmp_path):

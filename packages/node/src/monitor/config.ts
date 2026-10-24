@@ -7,6 +7,9 @@ export const CONFIG_SCHEMA = 'tryaii.monitor.config/1';
 export const REMOTE_SCHEMA = 'tryaii.monitor.remote/1';
 export const ENV_MODE = 'TRYAII_MONITOR_MODE';
 export const ENV_APP = 'TRYAII_APP';
+/** The Langfuse export switch (SPEC.md "Langfuse export"; API.md v1.7). */
+export const ENV_LANGFUSE = 'TRYAII_LANGFUSE';
+export const LANGFUSE_ON_VALUES = ['on', '1', 'true'] as const;
 export const DEFAULT_APP = 'default';
 export const DEFAULT_PROCESS = 'default';
 export const MSG_BAD_MODE = 'mode must be off, stable, dynamic or managed';
@@ -207,6 +210,16 @@ export function setProcessMode(config: unknown, process: string, mode: string, m
     default_mode: validMode(base.default_mode) ?? 'off',
     processes: sortedByKey(processes),
   };
+}
+
+/**
+ * True when `TRYAII_LANGFUSE` is `on`, `1` or `true` (trimmed, any case); off
+ * by default. Only the switch: whether the export is really on (the switch plus
+ * the keys) is `settings()` in `langfuse.ts` (SPEC.md §11.1).
+ */
+export function langfuseEnabled(env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env): boolean {
+  const value = env[ENV_LANGFUSE];
+  return typeof value === 'string' && (LANGFUSE_ON_VALUES as readonly string[]).includes(value.trim().toLowerCase());
 }
 
 /** The monitor-relevant environment, for callers that are not pure. */

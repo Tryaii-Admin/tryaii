@@ -117,7 +117,7 @@ tryaii diagnose check inventory.json --quality 3 --cost 4 --speed 2
 tryaii diagnose report                   # open .tryaii/diagnose/<run-id>/index.html
 ```
 
-Or wrap the OpenAI client your app already uses — every call is recorded locally
+Or wrap the OpenAI or Anthropic client your app already uses — every call is recorded locally
 and shadow-routed to find the model that gives at least the quality of the model in
 your code for at most its price; the model id in your code stays and is the anchor.
 Per sub-process you then choose `off` (watch), `stable` (one pinned model per day),
@@ -130,7 +130,7 @@ switch it off: [PRIVACY.md](PRIVACY.md)):
 
 ```python
 import tryaii.monitor as monitor
-monitor.wrap(client, app="shop")          # your openai.OpenAI(); patched in place
+monitor.wrap(client, app="shop")          # your openai.OpenAI() or anthropic.Anthropic(); patched in place
 with monitor.process("purchase item"):    # name the sub-process
     client.chat.completions.create(model="gpt-5.5", messages=messages)
 ```

@@ -1,7 +1,8 @@
 # monitor (SDK surface)
 
 `tryaii.monitor` (Python) and the `tryaii/monitor` subpath (Node) wrap the
-OpenAI SDK client your application already uses. Each call is recorded
+OpenAI or Anthropic SDK client your application already uses
+([Anthropic clients](#anthropic-clients) below). Each call is recorded
 locally and shadow-routed; the model id in your code stays and is the anchor
 (and the fallback). The CLI that reads the records is
 [`tryaii monitor`](../cli/monitor.md), which also explains what is stored,
@@ -19,7 +20,7 @@ mon = monitor.wrap(client, app="shop", process=None, mode=None)
 
 | Argument | Default | Meaning |
 |---|---|---|
-| `client` | — | An `openai.OpenAI` or `openai.AsyncOpenAI` (anything with `base_url` and `chat.completions.create`). Patched **in place**: `client.chat.completions.create` becomes the monitored function. |
+| `client` | — | An `openai.OpenAI` or `openai.AsyncOpenAI` (anything with `base_url` and `chat.completions.create`), or an `anthropic` client (`Anthropic`, `AsyncAnthropic`, `AnthropicBedrock`, `AnthropicVertex` and their async twins: anything with `messages.create` and no `chat`). Patched **in place**: `client.chat.completions.create` (or `client.messages.create` and `client.messages.stream`) becomes the monitored function. |
 | `app` | `TRYAII_APP`, else the working directory's name | Where records go: `<data dir>/monitor/<app>/` |
 | `process` | `None` | Default sub-process name for this client (below the per-call tag and `process()` block) |
 | `mode` | `None` | `off`, `stable`, `dynamic` or `managed` for this client, below `TRYAII_MONITOR_MODE` and the dashboard config, above `config.json` (`managed` here has no model, so the model in your code is sent — assign the model in `config.json` or on the dashboard) |
@@ -57,6 +58,8 @@ matter: `wrap(client)` then `observeOpenAI(client)`, or
 TryAii event per call. On a Langfuse proxy, `wrap()` patches the client behind
 the proxy so Langfuse traces each call once. Langfuse's proxy returns a plain
 `Promise`, so `.withResponse()` is not available through it in either order.
+To see TryAii's recommendation in Langfuse, see
+[Works with Langfuse](#works-with-langfuse).
 
 ## `install(...)`
 
@@ -66,18 +69,69 @@ the proxy so Langfuse traces each call once. Langfuse's proxy returns a plain
 import openai
 import tryaii.monitor as monitor
 
-monitor.install(app="shop", mode="off")   # True when the openai classes were patched
+monitor.install(app="shop", mode="off")   # True when the openai or anthropic classes were patched
 ```
 
 Sets the module defaults (`app`, `process`, `mode`, `cachelint`) and patches
 `openai.resources.chat.completions.Completions.create` and
-`AsyncCompletions.create` at class level, so every client created in this
-process is monitored. Returns `False` — with the defaults still set — when
-`openai` has not been imported yet: import it first, then call `install()`.
+`AsyncCompletions.create` — and, when `anthropic` is imported,
+`anthropic.resources.messages.Messages` / `AsyncMessages` (`create` and
+`stream`, which also serve the Bedrock and Vertex clients) — at class level,
+so every client created in this process is monitored. Returns `False` — with
+the defaults still set — when neither SDK has been imported yet: import it
+first, then call `install()`. `install_anthropic()` patches the anthropic
+classes alone.
 
 **Node**: `install({ app, process, mode })` sets the defaults only and
 returns nothing -- ES-module `openai` classes cannot be patched in place, so
 wrap each client with `wrap()`.
+
+## Anthropic clients
+
+`wrap()` recognises an `anthropic` / `@anthropic-ai/sdk` client by its
+`messages.create` (and no `chat`) and hands it to `wrap_anthropic` /
+`wrapAnthropic` (also exported; it returns an `AnthropicMonitor`). The same
+options, call-site capture, sub-process naming, privacy and upload rules
+apply. What differs:
+
+- **Wrapped surface**: `client.messages.create` (sync, async,
+  `stream=True`) and `client.messages.stream()` (Python: the `with` /
+  `async with` manager, recorded on exit from the accumulated message; Node:
+  the `MessageStream`, whose internal `create()` call carries the call site
+  captured at `stream()`). In Node `create()` always returns the SDK's own
+  `APIPromise`, in every mode, so `.withResponse()`, `messages.stream()` and
+  `messages.parse()` keep working. `client.beta.messages`, the Batches and
+  token-counting endpoints, and `with_raw_response` are not wrapped.
+- **Bedrock and Vertex**: `AnthropicBedrock` / `AnthropicVertex` share the
+  `Messages` resource and are wrapped the same way. Bedrock ids
+  (`us.anthropic.claude-haiku-4-5-20251001-v1:0`) resolve to the catalog
+  anchor once the region / vendor prefix and version suffix are stripped;
+  Vertex ids (`claude-haiku-4-5@20251001`) resolve as they are. The id in
+  your code is what is sent and recorded as `model_used`.
+- **Provider `anthropic`**: the event's `provider` is `anthropic` for every
+  Messages-API client (Bedrock and Vertex included), which tells the server
+  that `prompt_tokens` excludes the cache, so its hit rate counts the cached
+  and written tokens as input. Routing treats it like class `other`: the
+  model is never swapped. Shadow routing still runs and records the
+  winner (`winner_reachable: false`); `stable` and `dynamic` record their
+  decision and send the model in your code; `managed` with another model is
+  recorded as `unreachable_managed`.
+- **Routing text**: the top-level `system` (string or text blocks) is the
+  system message, then the last `user` message.
+- **Usage** (contract v1.5, SPEC.md §3.1b, `anthropic` row):
+  `prompt_tokens` = `input_tokens` as reported (Anthropic's `input_tokens`
+  **excludes** cached and written tokens), `completion_tokens` =
+  `output_tokens`, `total_tokens` = their sum when both are reported,
+  `cached_tokens` = `cache_read_input_tokens`, `cache_write_tokens` =
+  `cache_creation_input_tokens`, and `cache_writes` =
+  `cache_creation.ephemeral_5m_input_tokens` as `{"ttl": "5m"}` and
+  `ephemeral_1h_input_tokens` as `{"ttl": "1h"}` (`null` when the response
+  has no `cache_creation`). A field the response does not report is `null`.
+  Streams merge the `message_start` usage with the `message_delta` usage.
+  The longest explicit `cache_control.ttl` of the request is recorded as
+  `cache_ttl_policy` once the TS-229 plumbing has landed.
+- **Install**: Python `pip install "tryaii[anthropic]"`; Node: install
+  `@anthropic-ai/sdk` yourself (tryaii never imports it).
 
 ## `process(name)`
 
@@ -321,6 +375,16 @@ and now and then a report whose finding excerpts are masked, never prompt
 text). Every batch carries `notice_version` — the version of the data
 notice built into this SDK, `tryaii.monitor.NOTICE_VERSION` (currently
 `"2026-10-24"`, the date it was published) — and the SDK language and version.
+Since contract v1.7 a batch also carries `integrations`, the integrations in
+use on this machine (`["langfuse"]` while the
+[Langfuse export](#works-with-langfuse) is on; absent otherwise), and the
+event's `usage` carries `reasoning_tokens` (below).
+
+**Reasoning tokens** (contract v1.7). `usage.reasoning_tokens` is the part of
+`completion_tokens` the model spent on reasoning, read from
+`usage.completion_tokens_details.reasoning_tokens`. It is already included in
+`completion_tokens`, as the provider counts it, and is never added on top.
+`null` (or absent) means the provider reported nothing.
 
 **How long it is kept and how to delete it.** Call records: 90 days. Daily
 totals per app: while the app exists. Deleting an app on the dashboard hides
@@ -339,8 +403,15 @@ the lifetime the request asked for. A field the provider does not report is
 `null`, a reported zero is `0`, and `prompt_tokens` stays exactly what the
 provider counted (OpenAI, Azure, OpenRouter and Gemini include the cached
 tokens in it; Anthropic and Bedrock do not). The fields are plain counts:
-no cache content, key or prompt text. The `openai` wrapper starts filling
-them in a following release (TS-229); until then they are `null`. The pure
+no cache content, key or prompt text. The `openai` wrapper fills them from
+the response (TS-229): OpenAI and Azure send the read count and, on models
+that report it, a write total (`cache_writes` stays `null` because they
+give no lifetime breakdown); OpenRouter sends the read and write totals;
+an OpenAI-compatible host that answers with Anthropic-shaped usage gets
+the 5m/1h breakdown. `cache_ttl_policy` comes from the request: OpenAI
+`prompt_cache_retention="24h"`, or the longest explicit
+`cache_control.ttl`. `in_memory` retention, and `cache_control` without a
+`ttl`, are recorded as `null`. The pure
 mapper `normalize_cache_usage(provider, raw_usage)` /
 `normalizeCacheUsage` (below) turns a provider's raw usage object into
 these three fields, and `build_event` always writes them in contract order.
@@ -351,6 +422,132 @@ the uploader refuses to send any line carrying a field named `prompt`,
 a batch too), the embedding vectors in `vectors-*.jsonl`, `pins.json`,
 `config.json`, your provider API keys, and anything outside
 `<data dir>/monitor/<app>/events-*.jsonl`.
+
+## Works with Langfuse
+
+If your app already traces its LLM calls with [Langfuse](https://langfuse.com),
+the wrapper can add TryAii's recommendation to each trace: which model to
+use, what it would save, and the route status, as Langfuse scores you can
+filter and chart. Keep Langfuse's own integration; add `monitor.wrap` to the
+same client.
+
+**Python** (Langfuse's drop-in `langfuse.openai`):
+
+```python
+from langfuse.openai import OpenAI      # Langfuse's integration
+import tryaii.monitor as monitor
+
+client = OpenAI()
+monitor.wrap(client, app="shop")
+```
+
+With `monitor.install()` instead of `wrap()`, call `install()` **after**
+`import langfuse.openai` (or `from langfuse.openai import ...`). If
+`install()` runs first, Langfuse's integration wraps TryAii's patch, and each
+call gives two traces in Langfuse (Langfuse's and TryAii's) instead of one.
+`wrap()` works in either order.
+
+**Node** (`observeOpenAI` from `@langfuse/openai`). The app must register an
+OpenTelemetry tracer provider, as in Langfuse's documented setup (for example
+`NodeSDK` with `LangfuseSpanProcessor` from `@langfuse/otel`). Without one,
+Langfuse's integration records nothing, and the TryAii export makes its own
+trace for each call:
+
+```ts
+import OpenAI from 'openai';
+import { observeOpenAI } from '@langfuse/openai';
+import { wrap } from 'tryaii/monitor';
+
+const client = observeOpenAI(new OpenAI());
+wrap(client, { app: 'shop' });           // or wrap(client) before observeOpenAI(client)
+```
+
+Then turn the export on in the app's environment:
+
+```bash
+TRYAII_LANGFUSE=on                       # also 1 or true; off by default
+TRYAII_API_KEY=<app key>                 # tryaii apps create
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_BASE_URL=https://cloud.langfuse.com   # optional, see below
+```
+
+| Variable | Effect |
+|---|---|
+| `TRYAII_LANGFUSE` | `on`, `1` or `true` (any case) turns the export on (default: off) |
+| `TRYAII_API_KEY` | An app key (`tryaii_...`); the export needs it |
+| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | Your Langfuse project's keys, the same ones Langfuse's integration reads |
+| `LANGFUSE_BASE_URL` | Your Langfuse host; else `LANGFUSE_HOST`; else `https://cloud.langfuse.com` |
+
+It works with Langfuse Cloud (EU: `https://cloud.langfuse.com`, US:
+`https://us.cloud.langfuse.com`) and with a self-hosted Langfuse v3.22 or
+later (its URL). When the switch is on but the app key or a Langfuse key is
+missing, the process logs one warning,
+`tryaii monitor: the Langfuse export is off (<reason>)`, and the export stays
+off; your calls are never affected.
+
+`tryaii monitor status` prints one line for the machine after the `catalog:`
+line, only when `TRYAII_LANGFUSE` is set. It reads the environment of the
+shell that runs `status`:
+
+```
+langfuse: on (https://cloud.langfuse.com)
+langfuse: off (LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY are needed)
+langfuse: off
+```
+
+The second form shows the reason when the switch is on but a key is missing
+(`TRYAII_API_KEY is not set`, `TRYAII_API_KEY is not an app key`, or the
+Langfuse keys); the third is for any other switch value (for example `off`).
+
+**How it runs.** The export is a second reader of the local event lines, like
+the uploader, with its own cursor (`langfuse.json` next to the events). The
+cursor starts at the end of the events already stored when the export first
+runs (or when the Langfuse host changes): it exports the calls made from then
+on, and never older ones. It runs on a background thread, sends in batches, retries when Langfuse is
+unreachable, and never raises into your app or sits in the path of an LLM
+call. It posts OpenTelemetry (OTLP/HTTP JSON) to
+`<host>/api/public/otel/v1/traces` and the scores to
+`<host>/api/public/scores`, with your Langfuse keys.
+
+**Where the TryAii span goes.**
+
+Each call gives one trace in Langfuse, and its cost is counted once.
+
+- When an OpenTelemetry span is active around the call (for example a
+  Langfuse `@observe` or `startActiveObservation` span), or, in Node, when
+  `observeOpenAI` traced the call, the TryAii span is a child of that span in
+  the same trace.
+- In Python, with `langfuse.openai` and no active span, the wrapper puts a
+  TryAii span around the call and Langfuse's generation becomes its child:
+  the TryAii span is the trace root.
+- In these cases the TryAii observation is a plain span, without a model or
+  cost, because Langfuse's own generation already has them.
+- Without any of these, the export creates the trace itself (its id derived
+  from the event id) with a generation that carries the model, the token
+  usage and TryAii's cost estimate.
+
+The span carries the event's metadata and a link to the app's page on your
+tryaii.com dashboard.
+
+**Scores.** After the span is accepted, the export adds up to three scores to
+its trace, each only when the event has the value:
+
+| Score | Type | Meaning |
+|---|---|---|
+| `tryaii.recommended_model` | categorical | The model TryAii recommends for this call (the shadow-routing winner), or the model in your code when it should stay |
+| `tryaii.est_savings_usd` | numeric | Estimated saving in USD at the recommended model: the call's estimated cost minus its estimated cost at the winner (catalog pricing), rounded to 6 decimals |
+| `tryaii.route_status` | categorical | The event's route status (`ok`, `unavailable`, `timeout`, `skipped`, ...) |
+
+Each score has a fixed id per event and name, so a retry never adds a
+duplicate.
+
+**What is sent, and where.** Metadata only, the same kind of fields as the
+[upload](#what-is-uploaded): never prompt or response text. The data goes
+from your app straight to your own Langfuse, never through TryAii. The upload
+to TryAii is unchanged, except that while the export is on its batches carry
+`"integrations": ["langfuse"]`, which names the integration in use and
+nothing else.
 
 ## The pure engine
 

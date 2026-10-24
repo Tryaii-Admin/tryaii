@@ -96,6 +96,7 @@ Everything lives under `~/.tryaii/monitor/<app>/` (or `$TRYAII_DRE_DATA_DIR/moni
 | `config.json` | The mode per sub-process (and the model of a `managed` one), written by `tryaii monitor set`. |
 | `remote.json` | The modes set on the tryaii.com dashboard, kept current by the wrapper while `TRYAII_API_KEY` is set. |
 | `upload.json` | How many bytes of each events file were uploaded, the last success and the last error. |
+| `langfuse.json` | How far the [Langfuse export](#works-with-langfuse) got, when it is on. |
 
 Next to the app directories, in `<data dir>/monitor/`:
 
@@ -175,6 +176,7 @@ be sent depends on the client's `base_url`:
 | `api.openai.com` (the default) | `openai/*` only |
 | `openrouter.ai` | the whole catalog |
 | anything else (Azure OpenAI, a local OpenAI-compatible server, a proxy) | only the model in your code — monitor only, never a swap |
+| any `anthropic` client (Anthropic API, Bedrock, Vertex) | only the model in your code — monitor only, never a swap |
 
 Pointing the client at OpenRouter with an `OPENROUTER_API_KEY` is the way to
 let `stable` / `dynamic` swap across providers.
@@ -196,6 +198,64 @@ continues).
 Every monitor step is fail-open: a problem inside tryaii never changes or
 fails your call, and a provider error is re-raised unchanged after an error
 event is written.
+
+## Works with Langfuse
+
+If your app traces its LLM calls with [Langfuse](https://langfuse.com), the
+wrapper can put TryAii's recommendation on each Langfuse trace. Keep
+Langfuse's integration and wrap the same client:
+
+```python
+from langfuse.openai import OpenAI      # Langfuse's integration
+import tryaii.monitor as monitor
+
+client = OpenAI()
+monitor.wrap(client, app="shop")
+```
+
+```ts
+import OpenAI from 'openai';
+import { observeOpenAI } from '@langfuse/openai';
+import { wrap } from 'tryaii/monitor';
+
+const client = observeOpenAI(new OpenAI());   // needs an OpenTelemetry provider registered
+wrap(client, { app: 'shop' });
+```
+
+In Python, `monitor.install()` must run after `import langfuse.openai`;
+otherwise each call gives two traces in Langfuse (`wrap()` works in either
+order). In Node, register an OpenTelemetry tracer provider as in Langfuse's
+documented setup (for example `NodeSDK` with `LangfuseSpanProcessor`);
+without one, Langfuse records nothing and the export makes its own trace.
+
+Then set `TRYAII_LANGFUSE=on`, your app key `TRYAII_API_KEY`, and your
+Langfuse project's `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`.
+`LANGFUSE_BASE_URL` (else `LANGFUSE_HOST`) is your Langfuse host; the default
+is `https://cloud.langfuse.com`. It works with Langfuse Cloud (EU and US,
+`https://us.cloud.langfuse.com`) and with a self-hosted Langfuse v3.22 or
+later. With a key missing, the process logs one warning and the export stays
+off. The export starts at the end of the calls already stored, so older calls
+are not sent.
+
+In the background, the wrapper sends each call's metadata to your Langfuse as
+a span, one trace per call: in the trace of Langfuse's integration or of an
+active OpenTelemetry span when there is one (a plain span, no model cost, so
+the call is not counted twice), else a new trace with the model and token
+usage. It then adds up to three scores (each when the call has the value):
+
+- `tryaii.recommended_model`: the model TryAii recommends, or the model in
+  your code when it should stay;
+- `tryaii.est_savings_usd`: the estimated saving at that model, in USD;
+- `tryaii.route_status`: the call's route status.
+
+Metadata only, never prompt or response text. The data goes from your app
+straight to your own Langfuse, never through TryAii; while the export is on,
+uploads to TryAii carry `"integrations": ["langfuse"]`. When
+`TRYAII_LANGFUSE` is set, `tryaii monitor status` ends with one line for the
+machine (from the environment of the shell that runs it): `langfuse: on
+(<host>)`, `langfuse: off (<reason>)` when a key is missing, or `langfuse:
+off`. Details:
+[docs/sdk/monitor.md](../sdk/monitor.md#works-with-langfuse).
 
 ## Command reference
 
@@ -345,6 +405,9 @@ in force. `--json` prints `{"upload", "reason", "notice_version"}`.
 | `TRYAII_TELEMETRY` | `0` stops uploading, like `TRYAII_MONITOR_UPLOAD=0` |
 | `DO_NOT_TRACK` | `1` stops uploading |
 | `TRYAII_MONITOR_REMOTE` | `0` stops following the dashboard config (upload continues) |
+| `TRYAII_LANGFUSE` | `on` (also `1`, `true`) turns on the [Langfuse export](#works-with-langfuse); default off |
+| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | Your Langfuse project's keys, for the export |
+| `LANGFUSE_BASE_URL` | Your Langfuse host, else `LANGFUSE_HOST`, else `https://cloud.langfuse.com` |
 | `TRYAII_MONITOR_VECTORS` | `0` stops writing `vectors-*.jsonl` (default: on) |
 | `TRYAII_MONITOR_ROUTE_TIMEOUT_MS` | Budget for in-path routing (`dynamic`, first `stable` call); default `1500` |
 | `TRYAII_NO_DAEMON` | `1` disables routing; calls are still recorded with `route_status: disabled` |
@@ -354,8 +417,12 @@ in force. `--json` prints `{"upload", "reason", "notice_version"}`.
 ## Known limits
 
 - Wrapped surface: `client.chat.completions.create` of the official `openai`
-  SDK (Python `OpenAI` / `AsyncOpenAI`; Node `OpenAI`). The Responses API and
-  the `anthropic` SDK are not wrapped yet.
+  SDK (Python `OpenAI` / `AsyncOpenAI`; Node `OpenAI`), and
+  `client.messages.create` / `client.messages.stream` of the official
+  `anthropic` SDK (Python `Anthropic` / `AsyncAnthropic` /
+  `AnthropicBedrock` / `AnthropicVertex`; Node `@anthropic-ai/sdk`;
+  [details](../sdk/monitor.md#anthropic-clients)). The Responses API and
+  Anthropic's `client.beta.messages` are not wrapped yet.
 - Streaming: `stream_options.include_usage` is set on streams to OpenAI and
   OpenRouter so the last chunk carries `usage`; other OpenAI-compatible hosts
   return no `usage` on streams, so those events have null tokens and costs.

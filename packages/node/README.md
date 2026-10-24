@@ -284,6 +284,9 @@ your project) and function that made the call, and a task profile (how
 similar the prompt is to public benchmark categories). It **never** sends
 prompt or response text, embeddings, provider API keys or file contents.
 The prompt hash it sends is keyed with a secret that stays on your machine.
+Metadata sent to your own Langfuse (`TRYAII_LANGFUSE=on`) goes from your app
+straight to your Langfuse, never through TryAii; while the export is on,
+uploads to TryAii carry an `integrations` field naming the integrations in use.
 
 - See what is sent and switch it off: `tryaii monitor upload` /
   `tryaii monitor upload off`, or set `TRYAII_TELEMETRY=0` or `DO_NOT_TRACK=1`.

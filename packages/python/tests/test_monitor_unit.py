@@ -29,9 +29,11 @@ from tryaii.monitor import (
 )
 from tryaii.monitor.events import (
     CACHE_TTLS,
+    cache_ttl_policy_from_request,
     classification_from_wire,
     normalize_cache_usage,
     normalize_usage,
+    usage_from_provider,
     usage_from_response,
 )
 from tryaii.monitor.extract import prompt_hash
@@ -154,10 +156,12 @@ def test_usage_and_classification_normalisation():
 
     assert usage_from_response(Usage()) == {
         "prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12,
-        "cached_tokens": None, "cache_write_tokens": None, "cache_writes": None}
+        "cached_tokens": None, "cache_write_tokens": None, "cache_writes": None,
+        "reasoning_tokens": None}
     assert usage_from_response({"prompt_tokens": 3}) == {
         "prompt_tokens": 3, "completion_tokens": None, "total_tokens": None,
-        "cached_tokens": None, "cache_write_tokens": None, "cache_writes": None}
+        "cached_tokens": None, "cache_write_tokens": None, "cache_writes": None,
+        "reasoning_tokens": None}
     assert usage_from_response({}) is None
     wire = {"broadCategory": "coding", "subcategory": "x", "confidence": 0.123456}
     assert classification_from_wire(wire) == {
@@ -173,7 +177,8 @@ def test_build_event_carries_cache_usage_in_contract_order():
              "prompt_tokens": 10, "cached_tokens": True, "completion_tokens": 2}
     event = _event(usage=usage, cache_ttl_policy="1h")
     assert list(event["usage"]) == ["prompt_tokens", "completion_tokens", "total_tokens",
-                                    "cached_tokens", "cache_write_tokens", "cache_writes"]
+                                    "cached_tokens", "cache_write_tokens", "cache_writes",
+                                    "reasoning_tokens"]
     # a boolean is not a count; the aggregate is summed from the breakdown; a
     # zero entry is dropped; the ttl is lower-cased; an integral float is an int
     assert event["usage"]["cached_tokens"] is None
@@ -190,7 +195,8 @@ def test_normalize_usage_keeps_zero_and_drops_negatives():
     out = normalize_usage({"prompt_tokens": 1, "cached_tokens": 0,
                            "cache_write_tokens": -1, "cache_writes": []})
     assert out == {"prompt_tokens": 1, "completion_tokens": None, "total_tokens": None,
-                   "cached_tokens": 0, "cache_write_tokens": 0, "cache_writes": []}
+                   "cached_tokens": 0, "cache_write_tokens": 0, "cache_writes": [],
+                   "reasoning_tokens": None}
 
 
 def test_normalize_cache_usage_reads_objects_like_dicts():
@@ -209,6 +215,40 @@ def test_normalize_cache_usage_reads_objects_like_dicts():
         "cached_tokens": None, "cache_write_tokens": None, "cache_writes": None}
     assert normalize_cache_usage(None, {"cached_tokens": 1}) == {
         "cached_tokens": None, "cache_write_tokens": None, "cache_writes": None}
+
+
+
+def test_usage_from_provider_adds_only_reported_cache_fields():
+    bedrock = {"prompt_tokens": 10, "cacheReadInputTokens": 0, "cacheWriteInputTokens": 700,
+               "cacheDetails": [{"inputTokens": 700, "ttl": "1h"}]}
+    assert usage_from_provider("bedrock", bedrock) == {
+        "prompt_tokens": 10, "completion_tokens": None, "total_tokens": None,
+        "cached_tokens": 0, "cache_write_tokens": 700,
+        "cache_writes": [{"tokens": 700, "ttl": "1h"}], "reasoning_tokens": None}
+    gemini = {"prompt_tokens": 10, "usageMetadata": {"cachedContentTokenCount": 64}}
+    assert usage_from_provider("gemini", gemini)["cached_tokens"] == 64
+    assert usage_from_provider("gemini", gemini)["cache_write_tokens"] is None
+    # the first shape wins per column; later shapes only fill what is still null
+    mixed = {"prompt_tokens": 5, "prompt_tokens_details": {"cached_tokens": 3},
+             "cache_read_input_tokens": 9, "cache_creation_input_tokens": 4}
+    out = usage_from_provider(("openai", "anthropic"), mixed)
+    assert (out["cached_tokens"], out["cache_write_tokens"], out["cache_writes"]) == (3, 4, None)
+    assert usage_from_provider("openai", None) is None
+    assert usage_from_provider("openai", {}) is None
+
+
+def test_cache_ttl_policy_from_request_never_assumes_a_default():
+    assert cache_ttl_policy_from_request({"prompt_cache_retention": "24h"}) == "24h"
+    assert cache_ttl_policy_from_request({"prompt_cache_retention": "in_memory"}) is None
+    assert cache_ttl_policy_from_request(
+        {"extra_body": {"prompt_cache_retention": "24H"}}) == "24h"
+    tools = [{"type": "function", "cache_control": {"type": "ephemeral", "ttl": "5m"}}]
+    assert cache_ttl_policy_from_request({"messages": [], "tools": tools}) == "5m"
+    no_ttl = [{"role": "user", "content": [{"type": "text", "text": "q",
+                                            "cache_control": {"type": "ephemeral"}}]}]
+    assert cache_ttl_policy_from_request({"messages": no_ttl}) is None
+    assert cache_ttl_policy_from_request({"messages": "not a list"}) is None
+    assert cache_ttl_policy_from_request(None) is None
 
 
 # --- pins / config ----------------------------------------------------------

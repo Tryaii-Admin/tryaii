@@ -23,6 +23,7 @@ export {
   DEFAULT_APP,
   DEFAULT_PROCESS,
   ENV_APP,
+  ENV_LANGFUSE,
   ENV_MODE,
   MSG_BAD_MODE,
   MSG_MANAGED_NEEDS_MODEL,
@@ -30,6 +31,7 @@ export {
   callSiteProcess,
   emptyConfig,
   envFromOs,
+  langfuseEnabled,
   resolveApp,
   resolveMode,
   resolveProcess,
@@ -50,10 +52,12 @@ export {
   ROUTE_STATUSES,
   TAXONOMY_VERSION_KEY,
   USAGE_CACHE_KEYS,
+  USAGE_REASONING_KEYS,
   USAGE_TOKEN_KEYS,
   VECTOR_SCHEMA,
   buildEvent,
   buildVector,
+  cacheTtlPolicyFromRequest,
   classificationFromWire,
   estimateCost,
   formatTs,
@@ -63,8 +67,10 @@ export {
   normalizeCacheWrites,
   normalizeUsage,
   parseTs,
+  reasoningTokensFromUsage,
   roundCost,
   taxonomyVersion,
+  usageFromProvider,
   usageFromResponse,
   type CacheProvider,
   type CacheTtl,
@@ -134,6 +140,7 @@ export {
   PROVIDER_OPENAI,
   PROVIDER_OPENROUTER,
   PROVIDER_OTHER,
+  PROVIDER_ANTHROPIC,
   STATUS_UNREACHABLE_MANAGED,
   SWAP_QUALITY_EPSILON,
   allowedModels,
@@ -154,13 +161,14 @@ export {
   shadowAllowed,
   type Allowed,
   type ManagedDecision,
+  type EventProvider,
   type Mode,
   type Provider,
   type ScoreLike,
   type WinnerPick,
 } from './winner.js';
 
-// The openai wrapper, the sub-process context and the daemon transport
+// The openai and anthropic wrappers, the sub-process context and the daemon transport
 // (slice 1 runtime API; mirrors monitor/__init__.py's wrap / install / process).
 export { currentProcess, process, runProcess } from './context.js';
 export {
@@ -193,12 +201,23 @@ export {
   errorRecord,
   install,
   vectorsEnabled,
-  wrap,
   type CallPlan,
   type InstallOptions,
   type MonitorOptions,
   type WrapOptions,
 } from './wrapOpenai.js';
+// `wrap` dispatches per SDK: an `@anthropic-ai/sdk` client (TS-169) goes to
+// the Messages-API wrapper, anything else to the openai wrapper.
+export {
+  AnthropicMonitor,
+  AnthropicMonitoredStream,
+  anchorModelId,
+  cacheTtlPolicy as anthropicCacheTtlPolicy,
+  isAnthropicClient,
+  usageFromAnthropic,
+  wrap,
+  wrapAnthropic,
+} from './wrapAnthropic.js';
 
 // Slice 2 services: the background uploader and the dashboard long poll
 // (mirrors tryaii.monitor.upload.Uploader / tryaii.monitor.remote.RemotePoller).

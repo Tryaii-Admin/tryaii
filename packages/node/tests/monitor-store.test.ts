@@ -15,6 +15,7 @@ import {
   CACHE_TTLS,
   buildEvent,
   buildVector,
+  cacheTtlPolicyFromRequest,
   normalizeCacheUsage,
   normalizeUsage,
   emptyConfig,
@@ -30,6 +31,7 @@ import {
   store,
   taxonomyVersion,
   uploadInfo,
+  usageFromProvider,
 } from '../src/monitor/index.js';
 import { ModelPolicy } from '../src/policy.js';
 import { ModelRegistry } from '../src/registry/models.js';
@@ -157,7 +159,7 @@ describe('slice 2 engine', () => {
     expect(a.cache_ttl_policy).toBeNull();
     expect(a.usage).toEqual({
       prompt_tokens: 10, completion_tokens: 2, total_tokens: 12,
-      cached_tokens: null, cache_write_tokens: null, cache_writes: null,
+      cached_tokens: null, cache_write_tokens: null, cache_writes: null, reasoning_tokens: null,
     });
     expect(a.event_id).not.toBe(b.event_id);
     expect(a.event_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
@@ -177,13 +179,14 @@ describe('slice 2 engine', () => {
     const e = event('2026-10-11T12:00:00.000Z', 'p', { usage, cache_ttl_policy: '1h' });
     expect(Object.keys(e.usage as object)).toEqual([
       'prompt_tokens', 'completion_tokens', 'total_tokens',
-      'cached_tokens', 'cache_write_tokens', 'cache_writes',
+      'cached_tokens', 'cache_write_tokens', 'cache_writes', 'reasoning_tokens',
     ]);
     // a boolean is not a count; the aggregate is summed from the breakdown; a
     // zero entry is dropped; the ttl is lower-cased
     expect(e.usage).toEqual({
       prompt_tokens: 10, completion_tokens: 2, total_tokens: 12,
       cached_tokens: null, cache_write_tokens: 5, cache_writes: [{ tokens: 5, ttl: '1h' }],
+      reasoning_tokens: null,
     });
     expect(e.cache_ttl_policy).toBe('1h');
     expect(event('2026-10-11T12:00:00.000Z', 'p', { cache_ttl_policy: '2h' }).cache_ttl_policy).toBeNull();
@@ -192,7 +195,7 @@ describe('slice 2 engine', () => {
     expect(CACHE_TTLS).toEqual(['5m', '1h', '30m', '24h', 'explicit']);
     expect(normalizeUsage({ prompt_tokens: 1, cached_tokens: 0, cache_write_tokens: -1, cache_writes: [] })).toEqual({
       prompt_tokens: 1, completion_tokens: null, total_tokens: null,
-      cached_tokens: 0, cache_write_tokens: 0, cache_writes: [],
+      cached_tokens: 0, cache_write_tokens: 0, cache_writes: [], reasoning_tokens: null,
     });
     expect(normalizeCacheUsage('OpenAI', { prompt_tokens_details: { cached_tokens: 1024 }, cache_write_tokens: 2048 })).toEqual({
       cached_tokens: 1024, cache_write_tokens: 2048, cache_writes: null,
@@ -200,6 +203,41 @@ describe('slice 2 engine', () => {
     const empty = { cached_tokens: null, cache_write_tokens: null, cache_writes: null };
     expect(normalizeCacheUsage('anthropic', null)).toEqual(empty);
     expect(normalizeCacheUsage(null, { cached_tokens: 1 })).toEqual(empty);
+  });
+
+  it('usageFromProvider adds only the cache fields the provider reported (TS-229)', () => {
+    const bedrock = {
+      prompt_tokens: 10, cacheReadInputTokens: 0, cacheWriteInputTokens: 700,
+      cacheDetails: [{ inputTokens: 700, ttl: '1h' }],
+    };
+    expect(usageFromProvider('bedrock', bedrock)).toEqual({
+      prompt_tokens: 10, completion_tokens: null, total_tokens: null,
+      cached_tokens: 0, cache_write_tokens: 700, cache_writes: [{ tokens: 700, ttl: '1h' }], reasoning_tokens: null,
+    });
+    const gemini = { prompt_tokens: 10, usageMetadata: { cachedContentTokenCount: 64 } };
+    expect(usageFromProvider('gemini', gemini)?.cached_tokens).toBe(64);
+    expect(usageFromProvider('gemini', gemini)?.cache_write_tokens).toBeNull();
+    // the first shape wins per column; later shapes only fill what is still null
+    const mixed = {
+      prompt_tokens: 5, prompt_tokens_details: { cached_tokens: 3 },
+      cache_read_input_tokens: 9, cache_creation_input_tokens: 4,
+    };
+    const out = usageFromProvider(['openai', 'anthropic'], mixed);
+    expect([out?.cached_tokens, out?.cache_write_tokens, out?.cache_writes]).toEqual([3, 4, null]);
+    expect(usageFromProvider('openai', null)).toBeNull();
+    expect(usageFromProvider('openai', {})).toBeNull();
+  });
+
+  it('cacheTtlPolicyFromRequest never assumes a default (TS-229)', () => {
+    expect(cacheTtlPolicyFromRequest({ prompt_cache_retention: '24h' })).toBe('24h');
+    expect(cacheTtlPolicyFromRequest({ prompt_cache_retention: 'in_memory' })).toBeNull();
+    expect(cacheTtlPolicyFromRequest({ extra_body: { prompt_cache_retention: '24H' } })).toBe('24h');
+    const tools = [{ type: 'function', cache_control: { type: 'ephemeral', ttl: '5m' } }];
+    expect(cacheTtlPolicyFromRequest({ messages: [], tools })).toBe('5m');
+    const noTtl = [{ role: 'user', content: [{ type: 'text', text: 'q', cache_control: { type: 'ephemeral' } }] }];
+    expect(cacheTtlPolicyFromRequest({ messages: noTtl })).toBeNull();
+    expect(cacheTtlPolicyFromRequest({ messages: 'not a list' })).toBeNull();
+    expect(cacheTtlPolicyFromRequest(null)).toBeNull();
   });
 
   it('reads the taxonomy version from benchmarks.json, then the manifest', () => {

@@ -36,15 +36,18 @@ import { currentProcess } from './context.js';
 import {
   buildEvent,
   buildVector,
+  cacheTtlPolicyFromRequest,
   classificationFromWire,
   estimateCost,
   formatTs,
-  usageFromResponse,
+  usageFromProvider,
   type CallSiteRecord,
   type ErrorRecord,
   type Usage,
 } from './events.js';
 import { routingText } from './extract.js';
+import { activeSpanIds, takeLangfuseSpan, watchLangfuseSpans, type OtelIds } from './otel.js';
+import { settings as langfuseSettings } from './langfuse.js';
 import { CacheTracker, type CacheBlock } from './cache.js';
 import {
   evaluatePin,
@@ -84,6 +87,7 @@ import {
   routeAllowed,
   routedModel,
   shadowAllowed,
+  type EventProvider,
   type Mode,
   type Provider,
 } from './winner.js';
@@ -182,7 +186,7 @@ export interface CallPlan {
   app: string;
   process: string;
   mode: Mode;
-  provider: Provider;
+  provider: EventProvider;
   modelRequested: string | null;
   anchor: string | null;
   text: string;
@@ -222,6 +226,10 @@ export interface CallPlan {
   lintMessages?: unknown[] | null;
   /** Tool schemas of the linted request (`tools` then legacy `functions`). */
   lintTools?: unknown[] | null;
+  /** The cache lifetime the request asked for (SPEC.md §3.1b), or null. */
+  cacheTtlPolicy?: string | null;
+  /** The active OpenTelemetry span at call time, or null (SPEC.md "Langfuse export"). */
+  otel?: OtelIds | null;
 }
 
 function sameList(a: readonly string[] | null, b: readonly string[] | null): boolean {
@@ -251,7 +259,7 @@ export interface FinishArgs {
 
 /** Per-client monitor state: identity, mode sources, store and transport. */
 export class Monitor {
-  readonly provider: Provider;
+  readonly provider: EventProvider;
   readonly app: string;
   readonly dir: string;
   private readonly transportRef: Transport;
@@ -265,8 +273,10 @@ export class Monitor {
   private readonly cachelint: boolean;
   private cacheEngine: Promise<CacheTracker | null> | null = null;
   private cacheTracker: CacheTracker | null = null;
+  /** The Langfuse export is on for this process (SPEC.md §11). */
+  private readonly langfuseExport: boolean;
 
-  constructor(provider: Provider, opts: MonitorOptions = {}) {
+  constructor(provider: EventProvider, opts: MonitorOptions = {}) {
     this.provider = provider;
     this.transportRef = opts.transport ?? getTransport();
     const env = envFromOs();
@@ -291,6 +301,14 @@ export class Monitor {
     this.vectors = opts.vectors === null || opts.vectors === undefined ? vectorsEnabled() : Boolean(opts.vectors);
     if (opts.cachelint) this.hook = loadCacheLintHook();
     this.cachelint = Boolean(opts.cachelint);
+    let exportOn = false;
+    try {
+      exportOn = langfuseSettings().enabled;
+      if (exportOn) watchLangfuseSpans();
+    } catch {
+      exportOn = false;
+    }
+    this.langfuseExport = exportOn;
   }
 
   get transport(): Transport {
@@ -356,11 +374,27 @@ export class Monitor {
         lintModel: null,
         lintMessages: null,
         lintTools: null,
+        cacheTtlPolicy: cacheTtlPolicyFromRequest(params),
+        otel: this.callOtel(),
       };
     } catch (err) {
       debug('before() failed', err);
       return null;
     }
+  }
+
+  /**
+   * The event's `otel`: with the Langfuse export on, the generation Langfuse's
+   * `observeOpenAI` started for this very call (see otel.ts); else the active
+   * span; else null.
+   */
+  private callOtel(): OtelIds | null {
+    if (this.langfuseExport) {
+      watchLangfuseSpans(); // late OpenTelemetry set-up: from the next call on
+      const generation = takeLangfuseSpan();
+      if (generation !== null) return generation;
+    }
+    return activeSpanIds();
   }
 
   // -- 1b. first-call remote config (SPEC.md §3.3, TS-296) --------------
@@ -541,13 +575,26 @@ export class Monitor {
 
   // -- 4. record -------------------------------------------------------
 
+  /**
+   * The API shape(s) of this client's usage for `normalizeCacheUsage`
+   * (SPEC.md §3.1b): `openai` for OpenAI and Azure, `openrouter` for
+   * OpenRouter; any other host is read as `openai` and then as `anthropic`
+   * (OpenAI-compatible proxies in front of Claude report
+   * `cache_creation_input_tokens`).
+   */
+  usageShape(): string | readonly string[] {
+    if (this.provider === PROVIDER_OPENROUTER) return 'openrouter';
+    if (this.provider === PROVIDER_OPENAI) return 'openai';
+    return ['openai', 'anthropic'];
+  }
+
   /** Hand the finished call to the transport (never throws). */
   finish(plan: CallPlan, args: FinishArgs): void {
     try {
       if (this.hook !== null && plan.lintKey && typeof this.hook.verify === 'function' && isObject(args.usage)) {
         this.hook.verify(plan.lintKey, args.usage);
       }
-      const usage = usageFromResponse(args.usage);
+      const usage = usageFromProvider(this.usageShape(), args.usage);
       const error = errorRecord(args.error);
       if (error !== null) {
         // A failed call is recorded right away and never routed: nothing to
@@ -635,7 +682,9 @@ export class Monitor {
       prompt_hash: plan.promptHash,
       vector: vectorWritten,
       taxonomy_version: this.transportRef.taxonomyVersion(),
+      cache_ttl_policy: plan.cacheTtlPolicy ?? null,
       cache: this.cacheBlock(plan),
+      otel: plan.otel ?? null,
     });
     store.appendEvent(this.dir, event);
   }

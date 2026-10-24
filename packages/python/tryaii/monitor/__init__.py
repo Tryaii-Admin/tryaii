@@ -4,7 +4,8 @@ Slice 1 pure API (clock-free, routing-free, fixture-frozen): text
 extraction, provider class / reachability / winner selection, pins, config
 precedence, status aggregation and the local store. The openai wrapper and
 the daemon transport (``wrap``, ``install``, ``process``) are built on top
-of these in ``tryaii.monitor.wrapper_openai`` / ``tryaii.monitor.transport``.
+of these in ``tryaii.monitor.wrapper_openai`` / ``tryaii.monitor.transport``;
+``tryaii.monitor.wrapper_anthropic`` wraps the ``anthropic`` SDK (TS-169).
 
 Slice 2 adds the ``managed`` mode, policy-aware reachability, the remote
 config long poll (``tryaii.monitor.remote``) and the background uploader
@@ -71,8 +72,18 @@ __all__ = [
     "resolve_mode", "resolve_app", "resolve_process", "set_process_mode", "empty_config",
     "aggregate",
     "wrap", "install", "process", "current_process", "Monitor",
+    "wrap_anthropic", "install_anthropic", "AnthropicMonitor",
 ]
 
 # The wrapper imports the pure modules above; importing it last keeps the
 # package import order simple for both the CLI and the library.
-from tryaii.monitor.wrapper_openai import Monitor, install, wrap  # noqa: E402
+# ``wrap`` / ``install`` dispatch per SDK: an ``anthropic`` client (TS-169)
+# goes to the Messages-API wrapper, anything else to the openai wrapper.
+from tryaii.monitor.wrapper_anthropic import (  # noqa: E402
+    AnthropicMonitor,
+    install,
+    install_anthropic,
+    wrap,
+    wrap_anthropic,
+)
+from tryaii.monitor.wrapper_openai import Monitor  # noqa: E402

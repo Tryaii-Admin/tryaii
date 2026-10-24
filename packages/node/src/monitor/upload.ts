@@ -38,6 +38,7 @@ import { basename, dirname, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
 import * as api from './api.js';
+import { settings as langfuseSettings } from './langfuse.js';
 import { EVENT_SCHEMA, formatTs } from './events.js';
 import * as privacy from './privacy.js';
 import { isAbsoluteFile } from './relpath.js';
@@ -129,22 +130,34 @@ export function validEventId(value: unknown): boolean {
 }
 
 /**
- * The request body up to the opening `[` of `events` (API.md §3.2 key order:
- * schema, batch_id, sdk {lang, version}, notice_version).
+ * The batch's `integrations` (API.md v1.7): `["langfuse"]` while the Langfuse
+ * export is really on (`settings()` in langfuse.ts: the switch, an app key in
+ * `TRYAII_API_KEY` and both Langfuse keys), else null (the key is then left out).
  */
-export function envelopeHead(batchId: string, version: string): Buffer {
-  const head = JSON.stringify({
+export function batchIntegrations(env: NodeJS.ProcessEnv = process.env): string[] | null {
+  return langfuseSettings(env).enabled ? ['langfuse'] : null;
+}
+
+/**
+ * The request body up to the opening `[` of `events` (API.md §3.2 key order:
+ * schema, batch_id, sdk {lang, version}, notice_version, then `integrations`
+ * (v1.7) only when given and non-empty).
+ */
+export function envelopeHead(batchId: string, version: string, integrations: string[] | null = null): Buffer {
+  const doc: Record<string, unknown> = {
     schema: UPLOAD_SCHEMA,
     batch_id: batchId,
     sdk: { lang: 'node', version },
     notice_version: NOTICE_VERSION,
-  });
+  };
+  if (integrations !== null && integrations.length) doc.integrations = [...integrations];
+  const head = JSON.stringify(doc);
   return Buffer.from(head.slice(0, -1) + ',"events":[', 'utf-8');
 }
 
 /** The exact request body: the envelope with the outgoing event lines (`outgoingLine`) spliced in. */
-export function buildBody(batchId: string, version: string, lines: Buffer[]): Buffer {
-  return Buffer.concat([envelopeHead(batchId, version), joinLines(lines), Buffer.from(']}')]);
+export function buildBody(batchId: string, version: string, lines: Buffer[], integrations: string[] | null = null): Buffer {
+  return Buffer.concat([envelopeHead(batchId, version, integrations), joinLines(lines), Buffer.from(']}')]);
 }
 
 function joinLines(lines: Buffer[]): Buffer {
@@ -577,7 +590,7 @@ export class Uploader {
     try {
       const cursor = store.readUploadCursor(directory) ?? store.emptyUploadCursor();
       if (this.paused(directory, cursor)) return 'idle';
-      const head = envelopeHead(randomUUID(), this.version);
+      const head = envelopeHead(randomUUID(), this.version, batchIntegrations(this.env ?? process.env));
       const batch = nextBatch(directory, cursor, {
         headBytes: head.length,
         hashKey: privacy.hashKey(dirname(directory)),

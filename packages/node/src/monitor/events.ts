@@ -70,6 +70,8 @@ export type CacheProvider = (typeof CACHE_PROVIDERS)[number];
 /** The event's `usage` keys, in contract order (SPEC.md §3.1, §3.1b). */
 export const USAGE_TOKEN_KEYS = ['prompt_tokens', 'completion_tokens', 'total_tokens'] as const;
 export const USAGE_CACHE_KEYS = ['cached_tokens', 'cache_write_tokens', 'cache_writes'] as const;
+/** API.md v1.7: the reasoning share of `completion_tokens` (SPEC.md §3.1). */
+export const USAGE_REASONING_KEYS = ['reasoning_tokens'] as const;
 
 export interface CacheWrite {
   tokens: number;
@@ -86,6 +88,8 @@ export interface Usage extends CacheUsage {
   prompt_tokens: number | null;
   completion_tokens: number | null;
   total_tokens: number | null;
+  /** API.md v1.7: part of `completion_tokens`, never added on top; null = not reported. */
+  reasoning_tokens: number | null;
 }
 
 export interface Classification {
@@ -282,6 +286,7 @@ export function normalizeUsage(usage: unknown): Usage | null {
     cached_tokens: cache.cached_tokens,
     cache_write_tokens: cache.cache_write_tokens,
     cache_writes: cache.cache_writes,
+    reasoning_tokens: count(get(usage, 'reasoning_tokens')),
   };
   if (Object.values(out).every((v) => v === null)) return null;
   return out;
@@ -297,14 +302,90 @@ export function normalizeCacheTtlPolicy(value: unknown): CacheTtl | null {
  * is read from the raw usage (API.md v1.4: `prompt_tokens_details.cached_tokens`
  * or `cache_read_input_tokens`) unless the input already carries it under its
  * event name; the write columns pass through when the input carries them
- * under their event names (TS-229 merges `normalizeCacheUsage` into the raw
- * usage before calling this) and are null otherwise.
+ * under their event names and are null otherwise (the wrappers call
+ * `usageFromProvider`, which adds them from the raw usage). `reasoning_tokens`
+ * (API.md v1.7) is read from `completion_tokens_details.reasoning_tokens`
+ * unless the input carries it under its event name; null when not reported.
  */
 export function usageFromResponse(usage: unknown): Usage | null {
   const out = normalizeUsage(usage);
   // API.md v1.4: the provider's cached prompt tokens (null = not reported).
   if (out !== null && out.cached_tokens === null) out.cached_tokens = cachedTokensFromUsage(usage);
+  if (out !== null && out.reasoning_tokens === null) out.reasoning_tokens = reasoningTokensFromUsage(usage);
   return out;
+}
+
+/**
+ * The event's `usage` from a provider's raw usage of API shape `shape`
+ * (CACHE_PROVIDERS, SPEC.md §3.1b): the token counts as `usageFromResponse`
+ * reads them, then every cache column `normalizeCacheUsage` finds in the raw
+ * usage. Only what the provider reported is filled; the rest stays null.
+ * `shape` may be a list of shapes, tried in order for the columns still null
+ * (an OpenAI-compatible host that answers with Anthropic-shaped usage).
+ * Mirrors events.usage_from_provider.
+ */
+export function usageFromProvider(shape: string | readonly string[], usage: unknown): Usage | null {
+  const out = usageFromResponse(usage);
+  if (out === null) return null;
+  for (const one of typeof shape === 'string' ? [shape] : shape) {
+    const cache = normalizeCacheUsage(one, usage);
+    if (out.cached_tokens === null) out.cached_tokens = cache.cached_tokens;
+    if (out.cache_write_tokens === null) out.cache_write_tokens = cache.cache_write_tokens;
+    if (out.cache_writes === null) out.cache_writes = cache.cache_writes;
+  }
+  return out;
+}
+
+/**
+ * Request lifetimes longest first: a request naming several asked for the
+ * longest (Anthropic orders 1h breakpoints before 5m ones).
+ */
+const TTL_RANK: readonly CacheTtl[] = ['24h', '1h', '30m', '5m'];
+/**
+ * OpenAI `prompt_cache_retention` values that name a lifetime (`in_memory`
+ * is best-effort, no promised lifetime -> null).
+ */
+const RETENTION_TTLS: Record<string, CacheTtl> = { '24h': '24h' };
+
+/**
+ * Explicit `cache_control.ttl` values on messages / content parts / tool
+ * schemas (OpenRouter and Anthropic-compatible hosts).
+ */
+function cacheControlTtls(items: unknown, found: Set<CacheTtl>): void {
+  if (!Array.isArray(items)) return;
+  for (const item of items) {
+    const ttl = ttlOf(get(get(item, 'cache_control'), 'ttl'));
+    if (ttl !== null) found.add(ttl);
+    cacheControlTtls(get(item, 'content'), found);
+  }
+}
+
+/**
+ * `cache_ttl_policy` (SPEC.md §3.1b) from an OpenAI-shaped request:
+ * `prompt_cache_retention` (also inside `extra_body`), else the longest
+ * explicit `cache_control.ttl` on its messages or tools. Null when the
+ * request names no lifetime - a default is never assumed. Mirrors
+ * events.cache_ttl_policy_from_request.
+ */
+export function cacheTtlPolicyFromRequest(params: unknown): CacheTtl | null {
+  if (params === null || typeof params !== 'object' || Array.isArray(params)) return null;
+  for (const source of [params, get(params, 'extra_body')]) {
+    const retention = get(source, 'prompt_cache_retention');
+    if (typeof retention === 'string') return RETENTION_TTLS[retention.trim().toLowerCase()] ?? null;
+  }
+  const found = new Set<CacheTtl>();
+  cacheControlTtls(get(params, 'messages'), found);
+  cacheControlTtls(get(params, 'tools'), found);
+  return TTL_RANK.find((t) => found.has(t)) ?? null;
+}
+
+/**
+ * `usage.completion_tokens_details.reasoning_tokens` (OpenAI-compatible chat
+ * completions, streamed or not); null when the provider does not report it
+ * (API.md v1.7).
+ */
+export function reasoningTokensFromUsage(usage: unknown): number | null {
+  return count(get(get(usage, 'completion_tokens_details'), 'reasoning_tokens'));
 }
 
 /**
@@ -356,6 +437,8 @@ export interface EventFields {
   cache?: CacheBlock | null;
   /** The cache lifetime the request asked for (SPEC.md §3.1b); unknown values record as null. */
   cache_ttl_policy?: string | null;
+  /** The active OpenTelemetry span at call time (SPEC.md "Langfuse export"); emitted only when set. */
+  otel?: { trace_id: string; span_id: string; origin?: string } | null;
 }
 
 /** One event line in contract key order (SPEC.md §3.1). */
@@ -396,6 +479,11 @@ export function buildEvent(f: EventFields): Record<string, unknown> {
     prompt_hash: f.prompt_hash,
     vector: Boolean(f.vector),
   };
+  if (f.otel !== null && f.otel !== undefined) {
+    const otel: Record<string, unknown> = { trace_id: f.otel.trace_id, span_id: f.otel.span_id };
+    if (f.otel.origin !== undefined && f.otel.origin !== null) otel.origin = f.otel.origin;
+    event.otel = otel;
+  }
   if (f.cache !== null && f.cache !== undefined) event.cache = f.cache;
   return event;
 }

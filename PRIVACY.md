@@ -43,6 +43,11 @@ keys, file contents. The uploader refuses to send any record that has a field
 named `prompt`, `messages`, `response`, `content`, `text` or `raw`, and the
 server rejects such a batch too.
 
+**Your own Langfuse.** If you turn on the Langfuse export (`TRYAII_LANGFUSE=on`),
+the call metadata it sends goes from your app straight to your own Langfuse,
+never through TryAii. While the export is on, uploads to TryAii carry an
+`integrations` field that names the integrations in use (`["langfuse"]`), and nothing more about them.
+
 The first upload from a machine prints a four-line notice to your terminal.
 `tryaii apps create` prints it too, and records on your account that you saw it.
 

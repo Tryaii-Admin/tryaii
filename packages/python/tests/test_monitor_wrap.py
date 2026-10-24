@@ -45,14 +45,18 @@ SCORES_HAIKU_WINS = [
 # --- fakes ------------------------------------------------------------------
 
 class FakeUsage:
-    def __init__(self, prompt_tokens=100, completion_tokens=50):
+    def __init__(self, prompt_tokens=100, completion_tokens=50, reasoning_tokens=None):
         self.prompt_tokens = prompt_tokens
         self.completion_tokens = completion_tokens
         self.total_tokens = prompt_tokens + completion_tokens
+        self.reasoning_tokens = reasoning_tokens
 
     def model_dump(self):
-        return {"prompt_tokens": self.prompt_tokens, "completion_tokens": self.completion_tokens,
-                "total_tokens": self.total_tokens}
+        out = {"prompt_tokens": self.prompt_tokens, "completion_tokens": self.completion_tokens,
+               "total_tokens": self.total_tokens}
+        if self.reasoning_tokens is not None:
+            out["completion_tokens_details"] = {"reasoning_tokens": self.reasoning_tokens}
+        return out
 
 
 class FakeResponse:
@@ -105,20 +109,27 @@ class RateLimitError(Exception):
 
 
 class FakeCompletions:
-    def __init__(self, *, raise_exc=None, usage=True):
+    def __init__(self, *, raise_exc=None, usage=True, reasoning=None):
         self.calls = []
         self.raise_exc = raise_exc
         self.usage = usage
+        self.reasoning = reasoning
+
+    def _usage(self):
+        # ``usage`` may be a raw usage dict (a provider response fixture).
+        if isinstance(self.usage, dict):
+            return self.usage
+        return FakeUsage(reasoning_tokens=self.reasoning) if self.usage else None
 
     def create(self, **kwargs):
         self.calls.append(dict(kwargs))
         if self.raise_exc is not None:
             raise self.raise_exc
         if kwargs.get("stream"):
-            last = FakeChunk("", FakeUsage() if self.usage else None)
+            last = FakeChunk("", self._usage())
             chunks = [FakeChunk("a"), FakeChunk("b"), last]
             return FakeStream(chunks)
-        return FakeResponse(kwargs.get("model"), FakeUsage() if self.usage else None)
+        return FakeResponse(kwargs.get("model"), self._usage())
 
 
 class FakeAsyncCompletions(FakeCompletions):
@@ -127,8 +138,8 @@ class FakeAsyncCompletions(FakeCompletions):
         if self.raise_exc is not None:
             raise self.raise_exc
         if kwargs.get("stream"):
-            return FakeAsyncStream([FakeChunk("a"), FakeChunk("", FakeUsage())])
-        return FakeResponse(kwargs.get("model"), FakeUsage())
+            return FakeAsyncStream([FakeChunk("a"), FakeChunk("", self._usage())])
+        return FakeResponse(kwargs.get("model"), self._usage())
 
 
 def required_args(fn):
@@ -146,8 +157,8 @@ class FakeDecoratedAsyncCompletions(FakeCompletions):
         self.calls.append(dict(kwargs))
         await asyncio.sleep(0.01)
         if kwargs.get("stream"):
-            return FakeAsyncStream([FakeChunk("a"), FakeChunk("", FakeUsage())])
-        return FakeResponse(kwargs.get("model"), FakeUsage())
+            return FakeAsyncStream([FakeChunk("a"), FakeChunk("", self._usage())])
+        return FakeResponse(kwargs.get("model"), self._usage())
 
 
 class FakeChat:
@@ -208,7 +219,7 @@ def test_off_records_event_and_vector_without_touching_the_call():
         "est_cost_usd", "est_cost_winner_usd", "est_cost_anchor_usd", "latency_ms",
         "stream", "error",
         "prompt_hash", "vector"]
-    assert event["cache_ttl_policy"] is None   # TS-229 fills it from the request
+    assert event["cache_ttl_policy"] is None   # the request named no lifetime
     assert str(uuid.UUID(event["event_id"])) == event["event_id"]
     assert event["taxonomy_version"] is None   # no bundle carries one yet
     assert event["ts"] == "2026-10-11T12:00:00.123Z"
@@ -227,7 +238,7 @@ def test_off_records_event_and_vector_without_touching_the_call():
                                        "confidence": 0.8123}
     assert event["usage"] == {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150,
                               "cached_tokens": None, "cache_write_tokens": None,
-                              "cache_writes": None}
+                              "cache_writes": None, "reasoning_tokens": None}
     assert event["est_cost_usd"] == 0.002   # 100*0.005/1k + 50*0.03/1k
     assert event["est_cost_winner_usd"] == 0.000125
     assert event["est_cost_anchor_usd"] == 0.002   # no swap: equals est_cost_usd
@@ -473,7 +484,33 @@ def test_stream_is_forwarded_and_recorded_at_the_end():
     assert event["stream"] is True
     assert event["usage"] == {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150,
                               "cached_tokens": None, "cache_write_tokens": None,
-                              "cache_writes": None}
+                              "cache_writes": None, "reasoning_tokens": None}
+
+
+def test_reasoning_tokens_are_recorded_for_sync_and_stream_calls():
+    # API.md v1.7: completion_tokens_details.reasoning_tokens -> usage.reasoning_tokens,
+    # part of completion_tokens (never added on top).
+    client = FakeClient(completions=FakeCompletions(reasoning=30))
+    monitor = wrap(client, app="shop", route_fn=make_route_fn(SCORES_MINI_WINS))
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    list(client.chat.completions.create(model="gpt-5.5", messages=MESSAGES, stream=True))
+    events = events_of(monitor)
+    assert [e["stream"] for e in events] == [False, True]
+    for e in events:
+        assert e["usage"]["reasoning_tokens"] == 30
+        assert e["usage"]["completion_tokens"] == 50 and e["usage"]["total_tokens"] == 150
+        assert list(e["usage"])[-1] == "reasoning_tokens"
+
+
+async def test_reasoning_tokens_are_recorded_for_async_and_async_stream_calls():
+    client = FakeClient(completions=FakeAsyncCompletions(reasoning=0))
+    monitor = wrap(client, app="shop", route_fn=make_route_fn(SCORES_MINI_WINS))
+    await client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    stream = await client.chat.completions.create(model="gpt-5.5", messages=MESSAGES, stream=True)
+    [c async for c in stream]
+    events = events_of(monitor)
+    assert [e["stream"] for e in events] == [False, True]
+    assert [e["usage"]["reasoning_tokens"] for e in events] == [0, 0]   # reported 0 stays 0
 
 
 def test_stream_closed_early_is_still_recorded():
@@ -519,7 +556,7 @@ async def test_async_create_behind_a_sync_decorator_is_detected():
     [event] = events_of(monitor)
     assert event["usage"] == {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150,
                               "cached_tokens": None, "cache_write_tokens": None,
-                              "cache_writes": None}
+                              "cache_writes": None, "reasoning_tokens": None}
     assert event["latency_ms"] > 0
 
     stream = await client.chat.completions.create(model="gpt-5.5", messages=MESSAGES, stream=True)
@@ -1024,3 +1061,84 @@ def test_embedding_model_present_lets_the_daemon_start(monkeypatch, tmp_path):
                         lambda *a, **k: tmp_path / "model.onnx")
     Transport(TryaiiDreConfig(data_dir=tmp_path))._warm_up()
     assert started == [1]
+
+
+# --- prompt-cache usage (SPEC.md §3.1b, TS-229) -------------------------------
+
+def _cache_event(base_url, usage, **kwargs):
+    client = FakeClient(base_url=base_url, completions=FakeCompletions(usage=usage))
+    monitor = wrap(client, app="shop", route_fn=make_route_fn(SCORES_MINI_WINS))
+    resp = client.chat.completions.create(model="gpt-5.5", messages=MESSAGES, **kwargs)
+    if kwargs.get("stream"):
+        list(resp)   # the event is written once the stream ends
+    [event] = events_of(monitor)
+    return event
+
+
+OPENAI_CACHE_USAGE = {"prompt_tokens": 2000, "completion_tokens": 10, "total_tokens": 2010,
+                      "prompt_tokens_details": {"cached_tokens": 1024,
+                                                "cache_write_tokens": 512}}
+
+
+def test_openai_cache_read_and_write_are_recorded():
+    event = _cache_event("https://api.openai.com/v1", OPENAI_CACHE_USAGE,
+                         prompt_cache_retention="24h")
+    assert event["usage"] == {"prompt_tokens": 2000, "completion_tokens": 10,
+                              "total_tokens": 2010, "cached_tokens": 1024,
+                              "cache_write_tokens": 512, "cache_writes": None,
+                              "reasoning_tokens": None}
+    assert event["cache_ttl_policy"] == "24h"
+
+
+def test_openai_without_a_write_field_leaves_it_null_not_zero():
+    usage = {"prompt_tokens": 2000, "completion_tokens": 10, "total_tokens": 2010,
+             "prompt_tokens_details": {"cached_tokens": 0}}
+    event = _cache_event("https://api.openai.com/v1", usage,
+                         extra_body={"prompt_cache_retention": "in_memory"})
+    assert event["usage"]["cached_tokens"] == 0
+    assert event["usage"]["cache_write_tokens"] is None
+    assert event["usage"]["cache_writes"] is None
+    assert event["cache_ttl_policy"] is None   # in_memory promises no lifetime
+
+
+def test_azure_reads_the_openai_shape():
+    event = _cache_event("https://shop.openai.azure.com/openai/deployments/x", OPENAI_CACHE_USAGE)
+    assert event["provider"] == "other"
+    assert event["usage"]["cached_tokens"] == 1024
+    assert event["usage"]["cache_write_tokens"] == 512
+
+
+def test_openrouter_reads_top_level_cached_tokens_and_the_request_ttl():
+    usage = {"prompt_tokens": 3000, "completion_tokens": 5, "total_tokens": 3005,
+             "cached_tokens": 2048, "cache_write_tokens": 900}
+    messages = [{"role": "system", "content": [
+        {"type": "text", "text": "rules", "cache_control": {"type": "ephemeral", "ttl": "1h"}}]},
+        {"role": "user", "content": [
+            {"type": "text", "text": "q", "cache_control": {"type": "ephemeral", "ttl": "5m"}}]}]
+    client = FakeClient(base_url="https://openrouter.ai/api/v1",
+                        completions=FakeCompletions(usage=usage))
+    monitor = wrap(client, app="shop", route_fn=make_route_fn(SCORES_MINI_WINS))
+    client.chat.completions.create(model="openai/gpt-5.5", messages=messages)
+    [event] = events_of(monitor)
+    assert event["usage"]["cached_tokens"] == 2048
+    assert event["usage"]["cache_write_tokens"] == 900
+    assert event["cache_ttl_policy"] == "1h"   # the longest lifetime asked for
+
+
+def test_compatible_host_with_anthropic_shaped_usage_records_the_breakdown():
+    usage = {"prompt_tokens": 40, "completion_tokens": 7, "total_tokens": 47,
+             "cache_read_input_tokens": 1500, "cache_creation_input_tokens": 300,
+             "cache_creation": {"ephemeral_5m_input_tokens": 100,
+                                "ephemeral_1h_input_tokens": 200}}
+    event = _cache_event("http://localhost:4000/v1", usage)
+    assert event["usage"]["cached_tokens"] == 1500
+    assert event["usage"]["cache_write_tokens"] == 300
+    assert event["usage"]["cache_writes"] == [{"tokens": 100, "ttl": "5m"},
+                                              {"tokens": 200, "ttl": "1h"}]
+
+
+def test_stream_records_cache_usage_from_the_last_chunk():
+    event = _cache_event("https://api.openai.com/v1", OPENAI_CACHE_USAGE, stream=True)
+    assert event["stream"] is True
+    assert event["usage"]["cached_tokens"] == 1024
+    assert event["usage"]["cache_write_tokens"] == 512
