@@ -43,6 +43,42 @@ ERROR_WAIT_S = 30.0
 MIN_INTERVAL_S = 1.0
 
 
+_app_name_warned: set = set()
+_app_name_lock = threading.Lock()
+
+
+def app_name_warning(local_app: str, remote) -> Optional[str]:
+    """The TS-308 warning when the key's app (RemoteConfig ``app_name``,
+    API.md v1.8) differs from the local app name (exact compare), else
+    None (also without ``app_name``: a v1.7 server)."""
+    if not isinstance(remote, dict):
+        return None
+    name = remote.get("app_name")
+    if not isinstance(name, str) or not name or name == local_app:
+        return None
+    return (f'tryaii monitor: app="{local_app}" uploads to app "{name}" (the app of '
+            f"TRYAII_API_KEY). To use a separate app, run: tryaii apps create {local_app} "
+            f"and use its key.")
+
+
+def warn_app_name(local_app: str, remote) -> None:
+    """Log :func:`app_name_warning` once per local app per OS process."""
+    text = app_name_warning(local_app, remote)
+    if text is None:
+        return
+    with _app_name_lock:
+        if local_app in _app_name_warned:
+            return
+        _app_name_warned.add(local_app)
+    logger.warning(text)
+
+
+def reset_app_name_warnings() -> None:
+    """Forget which apps were warned about (tests)."""
+    with _app_name_lock:
+        _app_name_warned.clear()
+
+
 def remote_enabled(env=None) -> bool:
     """False when ``TRYAII_MONITOR_REMOTE`` is ``"0"``."""
     env = os.environ if env is None else env
@@ -113,6 +149,10 @@ class RemotePoller:
             logger.debug("monitor remote poll failed", exc_info=True)
             return "error"
         if resp.status == 304:
+            # The cached answer still holds: warn from it (TS-308), since a
+            # long-lived mismatch is never answered with a 200 again.
+            for directory in self.dirs:
+                warn_app_name(directory.name, store.read_remote(directory))
             return "unchanged"
         if resp.status == 401:
             self.disabled = True
@@ -131,6 +171,8 @@ class RemotePoller:
             return "error"
         etag = body.get("etag")
         self.etag = etag if isinstance(etag, str) else None
+        for directory in self.dirs:
+            warn_app_name(directory.name, body)
         return "changed"
 
     def start(self) -> None:

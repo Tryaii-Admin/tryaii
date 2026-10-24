@@ -81,7 +81,11 @@ saved against the model in your code (`-` for records written before 0.7,
 which lack the anchor price). `top winner share` is the model that won most
 often and how often. The `->` lines are the files each sub-process runs in.
 `source` says whether a dashboard config is in force, `upload` how far the
-upload got (see [status](#status)). The SDK side is documented in
+upload got (see [status](#status)). When the dashboard's name for the app of
+`TRYAII_API_KEY` differs from the local app name, the line
+`  key app: "<name>" (differs from the local name)` follows `source`
+(`--json`: `key_app`, `key_app_mismatch`): the key decides the dashboard app,
+`app=` is only the local name. The SDK side is documented in
 [docs/sdk/monitor.md](../sdk/monitor.md).
 
 ## What is stored, and where
@@ -144,7 +148,7 @@ directory's name.
 | Mode | What is sent | When to use |
 |---|---|---|
 | `off` (default) | The model in your code. tryaii only records and shadow-routes. | Watch first. |
-| `stable` | One pinned model for 24 hours: the model that **won most** of this sub-process's calls in the last 24 h (last 7 days when fewer than 20 calls). On the first call with no history the call is routed in-path and its winner is pinned. The anchor is sent whenever the pin is not reachable. | Predictable behaviour: one model per sub-process per day. |
+| `stable` | The model the dashboard pinned (your choice, or the current winner for 24 hours) when there is one. Else one local pin for 24 hours: the model that **won most** of this sub-process's calls in the last 24 h (last 7 days when fewer than 20 calls); on the first call with no history the call is routed in-path and its winner is pinned. Unpin on the dashboard deletes the local pin on the next call. The anchor is sent whenever the pin is not reachable (`route_status: unreachable_pin` for a dashboard pin). | Predictable behaviour: one model per sub-process per day. |
 | `dynamic` | The best-for-less model of each call among the models this client can send. | Lowest cost at the anchor's quality. |
 | `managed` | The model assigned to the sub-process (`--model`, or on the dashboard), when this client can reach it and your policy allows it; otherwise the model in your code, recorded with `route_status: unreachable_managed`. The winner is still recorded. | You decided which model a sub-process uses. |
 

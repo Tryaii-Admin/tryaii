@@ -9,6 +9,7 @@ any output, event or upload body.
 
 from __future__ import annotations
 
+import copy
 import json
 import uuid
 from datetime import datetime, timezone
@@ -1936,3 +1937,284 @@ def test_plugin_session_end_hook_always_exits_0(tmp_path):
         done = subprocess.run([powershell, "-NoProfile", "-NonInteractive", "-Command",
                                hook["command"]], env=env, capture_output=True, timeout=60)
         assert done.returncode == 0
+
+
+# --- 0.8.3 QA: project = repository, id-like folders, variants, imported profiles --
+
+SINCE = datetime(2026, 9, 21, 12, tzinfo=timezone.utc)
+VARIANT = "anthropic/claude-haiku-4.5:batch"
+
+
+# --- project = repository, id-like folders ------------------------------------------
+
+def _git_file(folder, gitdir):
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / ".git").write_text(f"gitdir: {gitdir}\n", encoding="utf-8")
+    return str(folder)
+
+
+def test_project_of_a_git_worktree_is_the_main_repo(tmp_path):
+    from tryaii.claude_code.reader import worktree_repo_name
+
+    main = tmp_path / "repos" / "shop-app"
+    (main / ".git" / "worktrees" / "feature-x").mkdir(parents=True)
+    assert project_label(str(main)) == "shop-app"  # a normal checkout: .git is a folder
+    wt = _git_file(tmp_path / "wt" / "feature-x", main / ".git" / "worktrees" / "feature-x")
+    assert project_label(wt) == "shop-app"
+    assert "/" not in project_label(wt) and "\\" not in project_label(wt)
+    # A Claude app worktree folder with an id-like name and a relative gitdir.
+    app_wt = main / ".claude" / "worktrees" / "local_0f8fad5b-d9cb-469f-a165-70867728950e"
+    assert project_label(_git_file(app_wt, "../../../.git/worktrees/x")) == "shop-app"
+    # A bare repository's worktree: <name>.git/worktrees/<wt>.
+    bare = _git_file(tmp_path / "b" / "hotfix", tmp_path / "billing.git" / "worktrees" / "hotfix")
+    assert project_label(bare) == "billing"
+    # A submodule keeps its own name; a folder that is gone keeps its base name.
+    sub = _git_file(tmp_path / "super" / "libfoo", tmp_path / "super" / ".git" / "modules" / "lib")
+    assert project_label(sub) == "libfoo"
+    gone = str(tmp_path / "gone" / "old-repo")
+    assert project_label(gone) == "old-repo" and worktree_repo_name(gone) is None
+
+
+def test_worktree_calls_are_one_project_in_report_and_import(tmp_path, pricer):
+    main = tmp_path / "code" / "shop-app"
+    (main / ".git").mkdir(parents=True)
+    wt = _git_file(tmp_path / "wt" / "fix-1", main / ".git" / "worktrees" / "fix-1")
+    root = tmp_path / "projects"
+    _write(root / "p1" / "s1.jsonl", [
+        _assistant("msg_W1", "claude-sonnet-5-5", "2026-10-20T10:00:00.000Z", _usage(out=5),
+                   cwd=str(main)),
+        _assistant("msg_W2", "claude-sonnet-5-5", "2026-10-20T10:01:00.000Z", _usage(out=5),
+                   cwd=wt)])
+    calls = _calls(root).calls
+    assert {c.project for c in calls} == {"shop-app"}
+    doc = build_report(calls, pricer, days=30, now=NOW_DT, since=SINCE, files=1,
+                       projects_dir="~")
+    assert [r["project"] for r in doc["top_projects"]] == ["shop-app"]
+    assert importer.build_call_event(calls[1], pricer)["call_site"]["file"] == "shop-app"
+
+
+@pytest.mark.parametrize("name,is_id", [
+    ("local_0f8fad5b-d9cb-469f-a165-70867728950e", True),
+    ("0f8fad5b-d9cb-469f-a165-70867728950e", True),
+    ("0f8fad5bd9cb469fa16570867728950e", True),
+    ("3f2a9c1b7e5d4a60", True),
+    ("01HZX3V8K4M2Q7R9T5W6Y8B0CD", True),
+    ("shop-app", False), ("tryaii-dev", False), ("deadbeefcafebabe", False),
+    ("app-2026", False), ("release_1", False),
+])
+def test_id_like_folder_names(name, is_id):
+    from tryaii.claude_code.reader import looks_like_id, project_value
+
+    assert looks_like_id(name) is is_id
+    assert project_label("C:\\x\\" + name) == ("unknown" if is_id else name)
+    assert project_value(name) == (None if is_id else name)
+
+
+def test_id_like_project_is_sent_as_null(tmp_path, pricer):
+    from tryaii.claude_code import sync
+
+    root = tmp_path / "projects"
+    _write(root / "p" / "s.jsonl", [
+        _assistant("msg_I", "claude-sonnet-5-5", "2026-10-20T10:00:00.000Z", _usage(out=5),
+                   cwd="C:\\Users\\alice\\x\\local_0f8fad5b-d9cb-469f-a165-70867728950e")])
+    (call,) = _calls(root).calls
+    assert call.project == "unknown"
+    assert importer.build_call_event(call, pricer)["call_site"] == {
+        "file": None, "line": None, "function": None}
+    assert sync.annotation(call, pricer, None, None)["project"] is None
+
+
+# --- variants Claude Code cannot use ------------------------------------------------
+
+class _VariantRegistry:
+    """The starter registry plus a cheaper ``:batch`` variant of Haiku (the
+    full catalog lists such variants under the model's display name)."""
+
+    def __init__(self, base):
+        self._base = base
+        self.model_ids = list(base.model_ids) + [VARIANT]
+        info = copy.deepcopy(base.get_model(HAIKU))
+        info.model_id = VARIANT
+        info.pricing.input_per_1k /= 2
+        info.pricing.output_per_1k /= 2
+        self._variant = info
+
+    def get_model(self, model_id):
+        return self._variant if model_id == VARIANT else self._base.get_model(model_id)
+
+    def __getattr__(self, name):
+        return getattr(self._base, name)
+
+
+class _VariantRouter(FakeRouter):
+    def __call__(self, text):
+        scores, cls = super().__call__(text)
+        haiku = next(s for s in scores if s["modelId"] == HAIKU)
+        return scores + [{"modelId": VARIANT, "qualityScore": haiku["qualityScore"]},
+                         {"modelId": "openai/gpt-5-nano:free", "qualityScore": 0.99}], cls
+
+
+def test_advice_never_names_a_variant(analyze_projects, pricer):
+    from tryaii.claude_code.pricing import claude_code_model
+
+    assert claude_code_model(HAIKU) and not claude_code_model(VARIANT)
+    assert not claude_code_model("google/gemma-3:free") and not claude_code_model(None)
+    pricer.registry = _VariantRegistry(pricer.registry)
+    doc = _analysis(analyze_projects, pricer, _VariantRouter())
+    text = json.dumps(doc)
+    assert ":batch" not in text and ":free" not in text
+    explore = {p["process"]: p for p in doc["processes"]}["Explore"]
+    assert explore["recommendation"]["model"] == HAIKU
+    models = [g["model"] for g in explore["good_enough_shares"]]
+    assert len(models) == len(set(models)) and HAIKU in models
+
+
+def test_stored_analysis_with_variants_is_cleaned(analyze_projects, pricer, data_dir):
+    from tryaii.claude_code import analysis, sync
+    from tryaii.claude_code.report import render_report
+
+    doc = _analysis(analyze_projects, pricer)
+    # An analysis stored by 0.8.1 against the full catalog.
+    doc["calls"]["msg_e0_0"]["good_enough"] = [VARIANT, HAIKU]
+    doc["calls"]["msg_e0_0"]["recommended"] = VARIANT
+    explore = {p["process"]: p for p in doc["processes"]}["Explore"]
+    explore["good_enough_shares"].insert(0, {"model": VARIANT, "share": 1.0})
+    analysis.write_analysis(data_dir, doc)
+    stored = analysis.read_analysis(data_dir)
+    assert stored["calls"]["msg_e0_0"]["recommended"] == HAIKU
+    assert VARIANT not in json.dumps(stored)
+    assert VARIANT not in json.dumps(sync.advice_docs(stored))
+    rep = build_report(_calls(analyze_projects).calls, pricer, days=30, now=NOW_DT,
+                       since=SINCE, files=1, projects_dir="~")
+    rep["analysis"] = analysis.summary(stored)
+    assert ":batch" not in render_report(rep)
+    explore["recommendation"]["model"] = VARIANT
+    analysis.write_analysis(data_dir, doc)
+    row = {p["process"]: p for p in analysis.read_analysis(data_dir)["processes"]}["Explore"]
+    assert row["recommendation"] is None and "analyze again" in row["advice"]
+
+
+def test_cheapest_tier_model_skips_variants(pricer):
+    from tryaii.claude_code.pricing import cheapest_tier_model
+
+    pricer.registry = _VariantRegistry(pricer.registry)
+    assert ":" not in cheapest_tier_model(pricer, "haiku")
+
+
+# --- task profiles for imported calls -----------------------------------------------
+
+def _imported_and_uploaded(projects, data_dir, capsys, uploaded_lines=None):
+    """connect --no-live (no key: stored only), then mark the events as
+    uploaded (every line, or the first ``uploaded_lines`` of each file)."""
+    code, out, err = _run(capsys, "connect", "--no-live", "--yes", "--projects-dir",
+                          str(projects), "--now", NOW)
+    assert code == 0, err
+    directory = importer.app_directory(data_dir)
+    files, events = {}, []
+    for path in store.event_files(directory):
+        lines = path.read_bytes().splitlines(keepends=True)
+        events += [json.loads(line) for line in lines]
+        n = len(lines) if uploaded_lines is None else uploaded_lines
+        files[path.name] = sum(len(line) for line in lines[:n])
+    store.write_upload_cursor(directory, {"files": files})
+    return out, events
+
+
+def _stored_analysis(projects, pricer, data_dir):
+    from tryaii.claude_code import analysis
+
+    consent = analysis.write_consent(data_dir, now=NOW, method="--yes")
+    doc = _analysis(projects, pricer)
+    doc["consent"] = consent
+    analysis.write_analysis(data_dir, doc)
+    return doc
+
+
+def test_connect_suggests_analyze_then_sync(projects, data_dir, capsys):
+    from tryaii.claude_code import analysis
+
+    out, _events = _imported_and_uploaded(projects, data_dir, capsys)
+    assert out.rstrip().splitlines()[-1] == cli.ANALYZE_HINT
+    analysis.write_consent(data_dir, now=NOW, method="--yes")
+    code, out, err = _run(capsys, "connect", "--no-live", "--yes", "--projects-dir",
+                          str(projects), "--now", NOW)
+    assert code == 0 and cli.ANALYZE_HINT not in out
+
+
+def test_sync_annotates_imported_calls_uploaded_before_analyze(analyze_projects, data_dir,
+                                                               pricer, capsys, monkeypatch):
+    from tryaii.claude_code import sync
+    from tryaii.monitor.upload import find_forbidden
+
+    _out, events = _imported_and_uploaded(analyze_projects, data_dir, capsys)
+    assert events and all(e["classification"] is None for e in events)
+    by_id = {e["event_id"]: e for e in events}
+    doc = _stored_analysis(analyze_projects, pricer, data_dir)
+    calls = read_calls(analyze_projects).calls
+    expected = {importer.event_id(c) for c in calls if c.key in doc["calls"]}
+    assert expected and expected <= set(by_id)
+    monkeypatch.setenv("TRYAII_API_KEY", KEY)  # no live telemetry: the import's app key
+    monkeypatch.setenv("TRYAII_API_URL", API)
+    old_server = (200, {"matched": 0, "unmatched": sorted(expected), "advice_stored": 0})
+    new_server = (200, {"matched": len(expected), "unmatched": [], "advice_stored": 0})
+    opener = _sync_opener(monkeypatch, [old_server, new_server])
+    code, out, err = _sync(capsys, analyze_projects, NOW)
+    assert code == 0, err  # an old server's 'unmatched' is harmless
+    assert f"{len(expected)} of them imported calls" in out
+    (body,) = _sent(opener)
+    sent = {c["event_id"]: c for c in body["calls"]}
+    assert set(sent) == expected
+    e0 = sent[importer.request_event_id("req_msg_e0_0")]
+    assert set(e0) == {"event_id", "ts", "project", "process", "classification", "winner",
+                       "est_cost_winner_usd", "taxonomy_version"}
+    assert e0["ts"] == by_id[e0["event_id"]]["ts"] and e0["process"] == "Explore"
+    assert e0["project"] == "shop-app" and e0["winner"] == HAIKU
+    assert e0["classification"]["category"] == "EDUCATIONAL"
+    raw = opener.posts()[0]["data"].decode("utf-8")
+    assert CANARY not in raw and SECRET not in raw and "alice" not in raw
+    assert find_forbidden(body) is None
+    assert set(sync.read_state(data_dir)["unmatched"]) == expected
+    # Retried; once matched it is never sent again.
+    code, out, err = _sync(capsys, analyze_projects, _later(6))
+    assert code == 0, err
+    assert {c["event_id"] for c in _sent(opener)[1]["calls"]} == expected
+    code, out, err = _sync(capsys, analyze_projects, _later(12))
+    assert code == 0, err
+    assert len(opener.posts()) == 2 and "0 calls annotated" in out
+
+
+def test_sync_skips_imported_events_not_uploaded_or_with_a_profile(analyze_projects, data_dir,
+                                                                   pricer, capsys):
+    from tryaii.claude_code import sync
+
+    _out, events = _imported_and_uploaded(analyze_projects, data_dir, capsys, uploaded_lines=2)
+    doc = _stored_analysis(analyze_projects, pricer, data_dir)
+    calls = read_calls(analyze_projects).calls
+    uploaded = importer.uploaded_events(data_dir)
+    assert set(uploaded) == {e["event_id"] for e in events[:2]}
+    profiled = {importer.event_id(c) for c in calls if c.key in doc["calls"]}
+    todo = sync.plan_imported(calls, uploaded, sync.read_state(data_dir), doc["calls"], pricer,
+                              None)
+    assert {d["event_id"] for d in todo} == set(uploaded) & profiled
+    assert todo  # the fixture's first events are classified
+    with_profile = {k: {**v, "classified": True} for k, v in uploaded.items()}
+    assert sync.plan_imported(calls, with_profile, sync.read_state(data_dir), doc["calls"],
+                              pricer, None) == []
+
+
+def test_sync_batches_imported_annotations_at_500(tmp_path, pricer):
+    from tryaii.claude_code import sync
+    from tryaii.claude_code.reader import Call
+
+    calls, uploaded, results = [], {}, {}
+    for i in range(1201):
+        call = Call(key=f"m{i}", model="claude-opus-5-5", ts=NOW_DT, project="p",
+                    subagent=False, agent_type=None, usage={"output_tokens": 1},
+                    request_id=f"req_{i}")
+        calls.append(call)
+        uploaded[importer.event_id(call)] = {"ts": NOW, "classified": False}
+        results[call.key] = {"category": "TECHNICAL", "subcategory": None, "confidence": 0.5,
+                             "recommended": HAIKU}
+    todo = sync.plan_imported(calls, uploaded, sync.read_state(tmp_path), results, pricer, None)
+    assert len(todo) == 1201
+    assert [len(c) for c, _a in sync.batches(todo, [])] == [500, 500, 201]

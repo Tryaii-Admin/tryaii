@@ -16,7 +16,7 @@ Only in the Python package for now (`pip install tryaii`); the Node CLI does not
 
 ## What is read
 
-Claude Code keeps a log per session under `~/.claude/projects` (or `$CLAUDE_CONFIG_DIR/projects`). The command reads only the model id, the token counts, the time, whether the call came from a subagent (and the subagent type, such as `Explore`) and the base name of the project folder (`tryaii-dev`, never the full path). It never prints, stores or uploads message text, tool inputs or outputs, or file contents, and it never writes into Claude Code's folder. The one exception is `analyze`, which you opt into (below).
+Claude Code keeps a log per session under `~/.claude/projects` (or `$CLAUDE_CONFIG_DIR/projects`). The command reads only the model id, the token counts, the time, whether the call came from a subagent (and the subagent type, such as `Explore`) and the base name of the project folder (`tryaii-dev`, never the full path). For a git worktree (also the worktree folders the Claude app creates) the project is the main repository's folder name, so all worktrees of a repo count as one project; TryAii finds it by reading the worktree's `.git` file only. A folder name that looks like an id (`local_<uuid>`, a UUID, a long hex string) gives no project name; the dashboard shows those calls under "Other". It never prints, stores or uploads message text, tool inputs or outputs, or file contents, and it never writes into Claude Code's folder. The one exception is `analyze`, which you opt into (below).
 
 One API call appears on several log lines (and again in a resumed session), so calls are counted once by their message id.
 
@@ -97,7 +97,7 @@ To show the cache timer (how long the prompt cache stays warm in each session, a
 
 Live telemetry carries no project and no task profile; `sync` (below) adds them from your local logs.
 
-## `sync` (live advice)
+## `sync` (live advice and imported calls)
 
 ```
 tryaii claude-code sync
@@ -105,7 +105,8 @@ tryaii claude-code sync
 
 For the calls that came by live telemetry, `sync` reads Claude Code's logs on this machine (calls since live telemetry was turned on, at most the last 7 days; `--days N` to change it) and sends TryAii, per call: the project folder's base name (never a path; a value that looks like a path is left out), the subagent type (live telemetry reports a custom subagent only as `custom`) and, if you ran `analyze` and your consent is current, the task type (category, subcategory, confidence) and the Anthropic model recommended for it. It also sends, for the main conversation and each subagent type, a summary of `analyze`'s advice: the share of each task type, which models are good enough, the recommended model, the estimated saving and the confidence (not the advice sentence). It never sends text, paths, the session id or your email; the request is checked for text fields before it leaves the machine.
 
-- It needs both parts of `connect` (the log import and live telemetry), the app key, and upload on (`tryaii monitor upload`). Otherwise it says what is missing and exits 0.
+- For calls the log import uploaded before you ran `analyze` (the last 30 days), it sends the same fields with the task type and the recommended model, so the dashboard's model advice and savings include them. `connect` reminds you: when you have not run `analyze`, its last line says to run `tryaii claude-code analyze`, then `tryaii claude-code sync`.
+- It needs the log import part of `connect`, the app key, and upload on (`tryaii monitor upload`). With live telemetry it uses the key `connect` stored; without it, it annotates imported calls only, with the app key in `TRYAII_API_KEY`. Otherwise it says what is missing and exits 0.
 - Each call is matched to the live event TryAii already holds by the id the live telemetry uses (made from the request id). Calls younger than 2 minutes wait for the next run; a call the server has not stored yet is retried for 24 hours.
 - If the stored `analyze` result is more than a day old and your consent is current, `sync` runs `analyze` again first (on this machine, as `analyze` does). Without that consent it sends only the project and the subagent type.
 - It runs at most once every 5 minutes; `--background` starts it detached and returns at once; `--quiet` prints nothing. Its state is in `~/.tryaii/claude-code/sync.json`.
@@ -127,7 +128,7 @@ Per task it gives two answers: the cheapest **Anthropic** model whose benchmark 
 
 Benchmarks describe short, self-contained tasks better than long agentic coding sessions, so subagent advice fits better; main-thread advice is always marked low confidence.
 
-The result (categories and model ids per call, no text) is stored in `~/.tryaii/claude-code/analysis.json`; `report` shows it as an extra section, `connect` sends the task profile and the Anthropic recommendation with new imported events, and `sync` sends them for calls that came by live telemetry, together with the per-process advice summary (task shares, good-enough models, recommended model, estimated saving, confidence; never text). Imported events stored before you ran `analyze` keep no classification.
+The result (categories and model ids per call, no text) is stored in `~/.tryaii/claude-code/analysis.json`; `report` shows it as an extra section, `connect` sends the task profile and the Anthropic recommendation with new imported events, and `sync` sends them for calls that came by live telemetry, together with the per-process advice summary (task shares, good-enough models, recommended model, estimated saving, confidence; never text). Imported events uploaded before you ran `analyze` get their task type and recommendation when you next run `sync` (below). Advice names only models you can set in Claude Code: catalog variants such as `:batch` (the Batch API) or `:free` are never listed.
 
 ## `disconnect`
 

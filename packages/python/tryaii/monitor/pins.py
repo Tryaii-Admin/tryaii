@@ -27,9 +27,13 @@ def empty_pins() -> dict:
 
 
 def pin_valid(pin: Optional[dict], now: str) -> bool:
-    """True while ``now`` is before the pin's ``expires_at``."""
+    """True while ``now`` is before the pin's ``expires_at``; a pin whose
+    ``expires_at`` is null (an owner's pin from the server, API.md v1.8)
+    holds until the server changes it."""
     if not isinstance(pin, dict) or not pin.get("model"):
         return False
+    if "expires_at" in pin and pin["expires_at"] is None:
+        return True
     try:
         return parse_ts(now) < parse_ts(pin["expires_at"])
     except (KeyError, ValueError, TypeError):
@@ -204,3 +208,133 @@ def set_pin(pins: Optional[dict], process: str, pin: Optional[dict]) -> dict:
         doc["processes"][process] = pin
     doc["processes"] = dict(sorted(doc["processes"].items()))
     return doc
+
+
+# -- server-owned pins (API.md v1.8, TS-307; SPEC.md §2.5) ------------------
+
+SERVER_WINDOW = "server"
+MODE_STABLE = "stable"
+
+
+def _int(value: Any) -> Optional[int]:
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return None
+
+
+def pin_version_of(pin: Optional[dict]) -> int:
+    """A local pin's ``version``; missing or invalid (a pins.json from
+    before v1.8) counts as 0."""
+    if not isinstance(pin, dict):
+        return 0
+    return _int(pin.get("version")) or 0
+
+
+def with_version(pin: dict, version: int) -> dict:
+    """``pin`` with ``version`` set, placed after ``expires_at``."""
+    out: dict = {}
+    for key, value in pin.items():
+        if key == "version":
+            continue
+        out[key] = value
+        if key == "expires_at":
+            out["version"] = version
+    if "version" not in out:
+        out["version"] = version
+    return out
+
+
+def _remote_entry(remote: Optional[dict], process: str) -> Optional[dict]:
+    if not isinstance(remote, dict):
+        return None
+    processes = remote.get("processes")
+    entry = processes.get(process) if isinstance(processes, dict) else None
+    return entry if isinstance(entry, dict) else None
+
+
+def remote_pin_version(remote: Optional[dict], process: str) -> Optional[int]:
+    """The process's ``pin_version`` from remote.json; None (= do not
+    compare) without a remote config, a process entry or the key (v1.7)."""
+    entry = _remote_entry(remote, process)
+    return _int(entry.get("pin_version")) if entry is not None else None
+
+
+def server_pin(remote: Optional[dict], process: str) -> Optional[dict]:
+    """The server's pin for ``process`` in the local pins.json form, or
+    None: only when the remote entry's mode is ``stable`` and its ``pin``
+    names a model."""
+    entry = _remote_entry(remote, process)
+    if entry is None or entry.get("mode") != MODE_STABLE:
+        return None
+    pin = entry.get("pin")
+    if not isinstance(pin, dict):
+        return None
+    model = pin.get("model")
+    if not isinstance(model, str) or not model.strip():
+        return None
+    version = _int(pin.get("version"))
+    if version is None:
+        version = _int(entry.get("pin_version")) or 0
+    pinned_at = pin.get("pinned_at")
+    expires_at = pin.get("expires_at")
+    return {
+        "model": model.strip(),
+        "pinned_at": pinned_at if isinstance(pinned_at, str) else None,
+        "expires_at": expires_at if isinstance(expires_at, str) else None,
+        "version": version,
+        "basis": {"window": SERVER_WINDOW, "events": 0, "counts": {}},
+    }
+
+
+def _reconciled(action: str, pin: Optional[dict], version: Optional[int], pins: dict,
+                write: bool, reason: str) -> dict:
+    return {"action": action, "pin": pin, "version": version, "write": write,
+            "pins": pins, "reason": reason}
+
+
+def reconcile_pin(remote: Optional[dict], pins: Optional[dict], process: str, now: str,
+                  mode: str, mode_source: Optional[str]) -> dict:
+    """Reconcile the local pin of ``process`` with the dashboard (SPEC.md
+    §2.5, TS-307) before a call. Returns ``{"action", "pin", "version",
+    "write", "pins", "reason"}``; ``pins`` is the document after the
+    change, ``write`` says whether pins.json must be written.
+
+    - ``mode`` not ``stable``: ``remove`` (the entry is deleted) when the
+      remote config set that mode (``mode_source == "remote"``) and an
+      entry exists, else ``none``.
+    - remote mode ``stable`` with a server ``pin`` → ``server``: send
+      ``pin.model``; the entry is replaced with it when it differs.
+    - otherwise a local pin whose ``version`` differs from the remote
+      ``pin_version`` is dropped (no ``pin_version`` = do not compare);
+      a valid local pin → ``keep``; else ``evaluate``: the caller runs
+      :func:`evaluate_pin` / :func:`pin_from_first_call` on ``pin`` and
+      stores the new pin with ``version``.
+    """
+    doc = {"schema": PINS_SCHEMA, "processes": dict((pins or {}).get("processes") or {})}
+    current = doc["processes"].get(process)
+    if mode != MODE_STABLE:
+        if mode_source == "remote" and process in doc["processes"]:
+            return _reconciled("remove", None, None, set_pin(doc, process, None), True,
+                               f"remote mode is {mode}")
+        return _reconciled("none", None, None, doc, False, f"mode is {mode}")
+    served = server_pin(remote, process)
+    if served is not None:
+        source = ((_remote_entry(remote, process) or {}).get("pin") or {}).get("source")
+        reason = f"server pin ({source})" if isinstance(source, str) else "server pin"
+        if current == served:
+            return _reconciled("server", served, served["version"], doc, False, reason)
+        return _reconciled("server", served, served["version"],
+                           set_pin(doc, process, served), True, reason)
+    wanted = remote_pin_version(remote, process)
+    write = False
+    reason = None
+    if current is not None and wanted is not None and pin_version_of(current) != wanted:
+        reason = (f"local pin version {pin_version_of(current)} != remote "
+                  f"pin_version {wanted}")
+        doc = set_pin(doc, process, None)
+        current = None
+        write = True
+    if pin_valid(current, now):
+        return _reconciled("keep", current, pin_version_of(current), doc, False, "pin valid")
+    return _reconciled("evaluate", current, wanted or 0, doc, write,
+                       reason or ("pin expired" if current is not None else "no pin"))

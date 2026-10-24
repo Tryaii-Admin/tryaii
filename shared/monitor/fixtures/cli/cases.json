@@ -1020,6 +1020,51 @@
         "stderr": null,
         "exit_code": 0
       }
+    },
+    {
+      "name": "status-key-app-mismatch",
+      "description": "TS-308: the key app line under the source line.",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--app",
+          "keyapp",
+          "--now",
+          "2026-10-25T12:00:00Z"
+        ],
+        "copy_store": [
+          "keyapp"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "status-key-app-mismatch.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "status-key-app-mismatch-json",
+      "description": "TS-308: key_app and key_app_mismatch in the status document.",
+      "input": {
+        "argv": [
+          "monitor",
+          "status",
+          "--app",
+          "keyapp",
+          "--now",
+          "2026-10-25T12:00:00Z",
+          "--json"
+        ],
+        "copy_store": [
+          "keyapp"
+        ]
+      },
+      "expected": {
+        "stdout_golden": "status-key-app-mismatch-json.stdout.golden.txt",
+        "stderr": null,
+        "exit_code": 0
+      }
     }
   ]
 }

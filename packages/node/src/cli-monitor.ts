@@ -265,6 +265,7 @@ export function renderStatus(doc: Record<string, unknown>, offReason: string | n
     lines.push(`realised: ${String(t.swapped_calls)} swapped calls, saved ${money(t.realised_savings_usd)}`);
   }
   lines.push(sourceLine(doc.source as Record<string, unknown>));
+  if (doc.key_app_mismatch === true) lines.push(`  key app: "${String(doc.key_app)}" (differs from the local name)`);
   lines.push(uploadLine(doc.upload as Record<string, unknown>, offReason));
   return lines.join('\n') + '\n';
 }

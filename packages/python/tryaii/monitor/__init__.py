@@ -35,7 +35,13 @@ from tryaii.monitor.events import (
     parse_ts,
 )
 from tryaii.monitor.extract import routing_text
-from tryaii.monitor.pins import PINS_SCHEMA, evaluate_pin, pin_from_first_call, set_pin
+from tryaii.monitor.pins import (
+    PINS_SCHEMA,
+    evaluate_pin,
+    pin_from_first_call,
+    reconcile_pin,
+    set_pin,
+)
 
 #: Version of the CLI and SDK Data Notice built into this SDK: its publication
 #: date (API.md §7.1). Sent as ``notice_version`` with every upload batch; it
@@ -56,6 +62,7 @@ from tryaii.monitor.winner import (
     resolve_anchor,
     route_allowed,
     routed_model,
+    server_pin_target,
     shadow_allowed,
 )
 
@@ -66,9 +73,10 @@ __all__ = [
     "normalize_cache_usage", "normalize_usage",
     "routing_text", "provider_class", "resolve_anchor", "reachable", "allowed_models",
     "native_model_id", "pick_winner", "routed_model", "filter_ranking", "managed_target",
+    "server_pin_target",
     "policy_allowed", "route_allowed", "shadow_allowed",
     "build_event", "build_vector", "estimate_cost", "format_ts", "parse_ts",
-    "evaluate_pin", "pin_from_first_call", "set_pin",
+    "evaluate_pin", "pin_from_first_call", "set_pin", "reconcile_pin",
     "resolve_mode", "resolve_app", "resolve_process", "set_process_mode", "empty_config",
     "aggregate",
     "wrap", "install", "process", "current_process", "Monitor",

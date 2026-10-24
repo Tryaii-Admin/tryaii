@@ -24,6 +24,8 @@ uploader (SPEC.md §3.4) sends them with the app key in ``TRYAII_API_KEY``.
   (category, subcategory, confidence), the Anthropic recommendation in
   ``winner`` (``winner_reachable`` true, ``est_cost_winner_usd`` its price),
   ``route_status`` ``ok`` and the catalog's ``taxonomy_version``;
+- ``call_site.file``: the project label (``reader.project_value``), null for
+  ``unknown`` or an id-like folder name (the dashboard shows "Other");
 - ``cache_cold`` (API.md v1.6): true when a main-thread call was a cold cache
   restart (``sessions``), false for any other main-thread call, null for a
   subagent call. The session itself is never part of an event.
@@ -43,7 +45,7 @@ from typing import Optional
 
 from tryaii.auth.store import write_atomic
 from tryaii.claude_code.pricing import Pricer
-from tryaii.claude_code.reader import Call
+from tryaii.claude_code.reader import Call, project_value
 from tryaii.monitor import store
 from tryaii.monitor.events import build_event, format_ts, normalize_cache_usage
 
@@ -126,7 +128,7 @@ def build_call_event(call: Call, pricer: Pricer, result: Optional[dict] = None,
         taxonomy = taxonomy_version
     return build_event(
         ts=format_ts(call.ts), app=APP, process=call.process,
-        call_site={"file": call.project, "line": None, "function": None},
+        call_site={"file": project_value(call.project), "line": None, "function": None},
         provider=PROVIDER, model_requested=call.model,
         model_resolved=price.catalog_id if price else None, model_used=call.model,
         mode=MODE, winner=winner, winner_reachable=winner is not None, route_status=status,
@@ -154,6 +156,33 @@ def existing_event_ids(data_dir) -> set:
             if isinstance(event.get("event_id"), str):
                 ids.add(event["event_id"])
     return ids
+
+
+def uploaded_events(data_dir) -> dict:
+    """``event_id -> {"ts", "classified"}`` of the app's events the uploader
+    has already sent (the byte prefixes of its cursor, SPEC.md §3.4):
+    ``classified`` is True when the event went up with a task profile."""
+    directory = app_directory(data_dir)
+    cursor = store.read_upload_cursor(directory)
+    out: dict = {}
+    for name, size in ((cursor or {}).get("files") or {}).items():
+        if size <= 0:
+            continue
+        try:
+            with open(directory / name, "rb") as fh:
+                data = fh.read(size)
+        except OSError:
+            continue
+        for raw in data.split(b"\n"):
+            try:
+                event = json.loads(raw)
+            except ValueError:
+                continue
+            if (isinstance(event, dict) and isinstance(event.get("event_id"), str)
+                    and isinstance(event.get("ts"), str)):
+                out[event["event_id"]] = {"ts": event["ts"],
+                                          "classified": event.get("classification") is not None}
+    return out
 
 
 def read_state(data_dir) -> Optional[dict]:

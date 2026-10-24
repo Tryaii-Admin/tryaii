@@ -1,0 +1,11 @@
+tryaii monitor -- app: keyapp (last 24h)
+
+process    mode    pinned             calls  tokens  est cost  at winner  savings  top winner share
+summarize  stable  openai/gpt-5-mini      0       0    0.0000          -        -  -
+
+totals: 0 calls, 0 errors, est cost 0.0000, at winner -, savings -
+realised: 0 swapped calls, saved -
+source: remote etag e-8 fetched 2026-10-25T11:00:01.000Z
+  key app: "shop" (differs from the local name)
+upload: off
+catalog: starter

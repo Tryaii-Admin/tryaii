@@ -210,6 +210,16 @@ class Pricer:
         return parts
 
 
+def claude_code_model(model_id) -> bool:
+    """True for a catalog id Claude Code can be set to: not a ``:<variant>``
+    of another id. The catalog lists variants of a model under the same
+    display name (``anthropic/claude-opus-4.7:batch`` the Batch API,
+    ``:free`` / ``:thinking`` / ``:extended`` router offerings), and Claude
+    Code's ``/model`` or a subagent's ``model:`` reaches none of them, so
+    Claude Code advice never names one."""
+    return isinstance(model_id, str) and bool(model_id) and ":" not in model_id
+
+
 def _version_key(model_id: str) -> tuple:
     return tuple(int(n) for n in re.findall(r"\d+", model_id))
 
@@ -222,7 +232,9 @@ def cheapest_tier_model(pricer: Pricer, family: str = "haiku") -> Optional[str]:
     candidates = [m for m in pricer.registry.model_ids if m.startswith("anthropic/")]
     candidates += list(FALLBACK_LIST_PRICES)
     for model_id in candidates:
-        if f"claude-{family}" not in model_id or pricer.price(model_id) is None:
+        if f"claude-{family}" not in model_id or not claude_code_model(model_id):
+            continue
+        if pricer.price(model_id) is None:
             continue
         if best is None or _version_key(model_id) > _version_key(best):
             best = model_id

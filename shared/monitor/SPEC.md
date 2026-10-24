@@ -21,6 +21,14 @@ human `events` line (§5.5). The wrappers fill the write fields since
 TS-229; the cost estimate learns about them in TS-230; the server stores
 them in TS-231.
 
+API.md v1.8 (2026-10-25, Jira TS-307 / TS-308) moves the stable pin to the
+server: a `stable` call sends the RemoteConfig `pin` first, a local pin
+counts only while its `version` equals the remote `pin_version`, and a
+process whose remote mode is not `stable` loses its local pin (§2.5,
+`reconcile_pin`); `pins.json` gains the optional `version`. The poller warns
+once per local app when the key's app (`app_name`) has another name (§3.3),
+and `monitor status` shows it (§2.7, §5.2).
+
 API.md v1.7 (2026-10-24, Jira TS-245) adds the optional event field
 `usage.reasoning_tokens` (§3.1) and the optional upload-batch field
 `integrations` (§3.4); the Langfuse export that sets it is the section
@@ -173,15 +181,53 @@ id that was sent (anchor native id when `null`).
 The `winner` fixture suite freezes, per case: `winner` (§2.3 on the
 policy-filtered ranking), `winner_reachable`, `routed_winner` (§2.3 on the
 ranking filtered to `route_allowed`), `routed`, `model_to_send` and
-`route_status` (`unreachable_managed` or `null`). Inputs: `provider`,
-`mode`, `anchor`, `scores`, optional `pin_model`, `allowed`,
-`managed_model`.
+`route_status` (`unreachable_managed`, `unreachable_pin` or `null`).
+Inputs: `provider`, `mode`, `anchor`, `scores`, optional `pin_model`,
+`allowed`, `managed_model`, `server_pin_model` (v1.8: a `stable` call with
+the server's pin, §2.5 `server_pin_target`).
 
 ### §2.5 Pins (`pin`)
 
 `pins.json` = `{"schema": "tryaii.monitor.pins/1", "processes": {name: pin}}`
-with `pin = {"model", "pinned_at", "expires_at", "basis": {"window",
-"events", "counts"}}`; processes sorted by name.
+with `pin = {"model", "pinned_at", "expires_at", "version", "basis":
+{"window", "events", "counts"}}`; processes sorted by name. `version`
+(API.md v1.8) is optional: a file from before v1.8 has none and still
+loads (it counts as 0). `expires_at` is `null` only for an owner's pin from
+the server, which `pin_valid` treats as valid until it is replaced.
+
+**The server's pin first (API.md v1.8, TS-307).** Before every call the
+wrapper runs `reconcile_pin(remote, pins, process, now, mode, mode_source)`
+→ `{"action", "pin", "version", "write", "pins", "reason"}` (`pins` = the
+document after the change; `write` = pins.json must be written, so there is
+no write per call):
+
+1. `mode` is not `stable`: when `mode_source` is `remote` (the remote config
+   set the mode — e.g. `off` after an unpin) and the process has an entry →
+   `remove` (the entry is deleted, `reason` `"remote mode is <mode>"`); else
+   `none`. A mode from env `TRYAII_MONITOR_MODE`, `wrap(mode=)` or
+   `config.json` never deletes a pin.
+2. The remote entry of the process has `mode: "stable"` and a `pin` with a
+   `model` → `server`: the call sends `pin.model` with
+   `server_pin_target(provider, anchor, model, registry, allowed)` =
+   `managed_target` (§2.9) with `route_status: "unreachable_pin"` in place
+   of `unreachable_managed` (the anchor is sent when the model cannot be);
+   no in-path routing (the call is still shadow-routed). The entry becomes
+   `{"model", "pinned_at", "expires_at" (the server's, or null), "version":
+   pin.version, "basis": {"window": "server", "events": 0, "counts": {}}}`,
+   written only when it differs. `reason` = `"server pin (<source>)"`.
+3. Otherwise the remote `pin_version` of the process (absent: no remote
+   config, no process entry, or a v1.7 server → do not compare) is compared
+   with the local pin's `version` (missing = 0); a mismatch drops the entry
+   (`write: true`, `reason` `"local pin version <a> != remote pin_version
+   <b>"`).
+4. A remaining valid pin → `keep`. Else `evaluate` with `pin` = the expired
+   pin or null: the wrapper runs `evaluate_pin` below (and, for `none`,
+   `pin_from_first_call`) and stores the new pin with `version` = the remote
+   `pin_version` or 0, placed after `expires_at`.
+
+The `pin` fixture suite freezes `reconcile_pin` (inputs under `reconcile`,
+`pins` inline or `"from_store"`) and the §3.3 warning (inputs under
+`app_name_warning`).
 
 `evaluate_pin(events, pin, now, process, models)`:
 
@@ -274,6 +320,7 @@ now` (`since` ∈ `24h|7d|30d`):
 ```json
 {"schema": "tryaii.monitor.status/1", "app": "shop", "now": "...", "since": "24h",
  "source": {"kind": "local"|"remote", "etag", "fetched_at"},
+ "key_app": "<app_name>", "key_app_mismatch": true|false,   // only with app_name
  "upload": {"state": "off"|"ok"|"error", "events", "last_ok", "last_error"},
  "processes": [{"process", "mode", "mode_source", "managed_model",
                 "pinned": {"model", "expires_at"}|null,
@@ -305,7 +352,12 @@ now` (`since` ∈ `24h|7d|30d`):
   `realised_savings_usd` = Σ max(0, `est_cost_anchor_usd` − `est_cost_usd`)
   over swapped events carrying both; both are `null` when no event in the
   set carries `est_cost_anchor_usd` (slice-1 records).
-- `pinned` only while the pin is valid at `now`.
+- `pinned` only while the pin is valid at `now` (an owner's pin from the
+  server, `expires_at: null`, is valid).
+- `key_app` / `key_app_mismatch` (API.md v1.8, TS-308; right after
+  `source`): when `remote.json` carries a non-empty `app_name`, `key_app` =
+  that name and `key_app_mismatch` = it differs from `app` (exact compare);
+  both keys are omitted otherwise.
 - `errors` = events with a non-null `error`. Token totals sum the numeric
   usage fields (`prompt_tokens`, `completion_tokens`, `total_tokens`; a
   missing or null field counts 0).
@@ -680,6 +732,17 @@ when `TRYAII_API_KEY` is set and `TRYAII_MONITOR_REMOTE` is not `"0"`:
   process wrote applies on the **next call**, with no 5 s delay and no
   reliance on mtime resolution (TS-296). A `remote.json` written by another
   process still applies within ~5 s.
+- **App name** (API.md v1.8, TS-308): when an answer names an `app_name`
+  that differs from the name of an app directory it applies to (exact
+  string compare), the SDK logs ONE warning per local app per OS process,
+  on the monitor's warning channel (Python: logger `tryaii.monitor`,
+  `WARNING`; Node: stderr, like the rejected-key line):
+  `tryaii monitor: app="<local>" uploads to app "<app_name>" (the app of
+  TRYAII_API_KEY). To use a separate app, run: tryaii apps create <local>
+  and use its key.` It is checked on every `200` and, from the cached
+  `remote.json`, on every `304` (a mismatch that never changes is otherwise
+  never answered with a `200` again). The key decides the dashboard app;
+  `app=` is only the local name.
 - **First call** (TS-296): while the poller's first answer has not come,
   the first call(s) of the process wait for it — `200`, `304`, error or
   `401`, whichever — but at most **500 ms**, once per process: the bound
@@ -780,6 +843,10 @@ them. v2 stores: `managed` (v2 event lines with `event_id` /
 `taxonomy_version` / `est_cost_anchor_usd`, a managed process in
 config.json, remote.json with etag `e-42`, an upload cursor covering the
 first two lines) and `flaky` (only an upload cursor with `last_error`).
+v1.8 store: `keyapp` (a `remote.json` whose `app_name` is `shop` and whose
+`summarize` is pinned by the owner, and the matching `pins.json` entry with
+`expires_at: null` and `version: 3`; read by the `status` and `cli`
+suites).
 v2.2 store: `cached` (event lines with the §3.1b cache fields in every
 combination — an OpenAI 30 m write with policy, an Azure read without a
 write field, a 5 m + 1 h breakdown, an OpenRouter zero read, plus one v2
@@ -855,6 +922,11 @@ After each process row its `files` follow as `    -> <file>` lines. A
 window with no events and no configured/pinned processes prints
 `no calls in this window` instead of the table and totals. The totals line
 uses the §2.7 totals with the same money formatting.
+
+v1.8 (TS-308): when the status document has `key_app_mismatch: true`, the
+line `  key app: "<key_app>" (differs from the local name)` (two leading
+spaces) follows the source line. `--json` carries `key_app` /
+`key_app_mismatch` as in §2.7.
 
 TS-294 (catalog contract v1.4): after every block (and after the `classification: off ...`
 line when there is one) comes one machine-wide line naming the catalog this
@@ -1183,7 +1255,17 @@ like any other app's. Python only for now (§10.6). Code:
   reads message text is the opt-in `analyze` (§10.7), on this machine only.
 - The **project label** is the base name of the call's `cwd` (`tryaii-dev`;
   `unknown` without one), never a full path and never the encoded project folder
-  name, which contains the OS user name (TS-226). Paths in human output show the
+  name, which contains the OS user name (TS-226). For a git worktree (a `cwd`
+  whose `.git` is a **file** with `gitdir: <main>/.git/worktrees/<name>`, or
+  `<main>.git/worktrees/<name>` for a bare repository; Claude app worktree
+  folders included) it is the main repository's base name, so all worktrees of
+  a repo are one project. Only `<cwd>/.git` is read, no git process; a `cwd`
+  that no longer exists, a normal checkout or a submodule keeps its base name.
+  A name that looks like an opaque id (an optional short word prefix such as
+  `local_`, then a UUID, 16 or more hex digits or a ULID, with at least one
+  digit) is `unknown`. `report`, `analyze`, `connect` and `sync` use the same
+  label; what leaves the machine is the label or `null` for `unknown`
+  (`reader.project_value`; the dashboard shows `null` as "Other"). Paths in human output show the
   home directory as `~`.
 - The **session** of a call is internal only: the stem of the main file
   (`<session>.jsonl`; a subagent file under `<session>/subagents/` belongs to
@@ -1273,7 +1355,7 @@ event per call in §3.1 key order:
 | `event_id` | uuid5(`NAMESPACE_URL`, `"tryaii:claude-code:" + requestId`), the rule the server applies to live telemetry (§10.8); a call without `requestId` falls back to uuid5(`5b0f6a55-3c1e-4b8e-9d6c-2a7f1c0de001`, call key). Deterministic, so a re-run never duplicates (locally it is skipped, also under its pre-v1.5 fallback id; the server ignores a known `event_id`) |
 | `ts` | the call's time (§1.4 format) |
 | `app` / `process` | `claude-code` / §10.2 |
-| `call_site` | `{"file": <project label>, "line": null, "function": null}` |
+| `call_site` | `{"file": <project label>, "line": null, "function": null}`; `file` is `null` for `unknown` or an id-like name (§10.1) |
 | `provider` | `anthropic` (outside the §2.2 classes; routed like `other`, and marks `prompt_tokens` as excluding the cache, §3.1) |
 | `model_requested`, `model_used` | the log's model id; `model_resolved` = the catalog id or `null` |
 | `mode`, `winner`, `winner_reachable`, `route_status`, `classification`, `taxonomy_version` | `off`, `null`, `false`, `skipped`, `null`, `null`; for a call with an `analyze` result (§10.7): `off`, the Anthropic answer (`null` when the task's model is not in the catalog), `true` when there is one, `ok`, the task profile `{category, subcategory, confidence}`, the catalog's taxonomy version |
@@ -1363,7 +1445,12 @@ spent most on. Two answers per task:
    data-save policy, §2.8) with `qualityScore ≥ anchor − 0.05` and a blended
    price ≤ the anchor's (the §2.3 band) are the task's *good-enough set*; the
    cheapest is the answer (`method: band`, or `anchor` when it is the task's
-   own model). An anchor that is not ranked or unpriced gives no answer
+   own model). Catalog variants (an id with a `:` suffix: `:batch`, `:free`,
+   `:thinking`, `:extended`, ...) are left out of the ranking first: Claude
+   Code cannot be set to one, and a variant shares its model's display name
+   (`pricing.claude_code_model`). An `analysis.json` stored before 0.8.3 is
+   read without them (a process advice that named one is withdrawn until the
+   next run). An anchor that is not ranked or unpriced gives no answer
    (`unranked`);
 2. the **overall winner**: §2.3 `pick_winner` over the policy-filtered
    ranking, any provider. Informational only; it stays on the machine.
@@ -1391,13 +1478,15 @@ model, counts, the per-process advice, `duration_s`, and per call key
 `--json` prints the document without the per-call map; `report` adds it as
 `analysis` and as a text section.
 
-**Uploaded** (by `connect`, §10.5, and for live calls by `sync`, §10.9): only
+**Uploaded** (by `connect`, §10.5, and by `sync`, §10.9): only
 the task profile and the Anthropic answer, in the event's existing fields, and
 (`sync` only) the structured per-process advice, never its sentence. Text, embeddings and hashes of the
 text never leave the machine (`prompt_hash` stays `null`, `vector` `false`);
 the vectors opt-in (TS-168) does not cover this command. Events already
-stored before `analyze` ran keep `classification: null` (event ids are
-deterministic and never rewritten).
+stored before `analyze` ran keep `classification: null` locally (event ids
+are deterministic and never rewritten); once uploaded, `sync` sends their task
+profile as annotations (§10.9). `connect` ends with one line suggesting
+`analyze`, then `sync`, while there is no current consent.
 
 ### §10.8 Live telemetry (v1.5, API.md §8)
 
@@ -1523,9 +1612,10 @@ only from `sync` (§10.9).
 live events of §10.8 with what only the local logs know. Code:
 `tryaii/claude_code/sync.py`.
 
-**Preconditions.** Live telemetry connected with an app key, the backfill
-connected (`connect.json`), and the upload decision (§9.1) on; otherwise it
-prints the reason and exits 0. At most one run per 5 minutes
+**Preconditions.** The backfill connected (`connect.json`), live telemetry
+connected with an app key (without it: only imported calls are annotated,
+with the app key in `TRYAII_API_KEY`), and the upload decision (§9.1) on;
+otherwise it prints the reason and exits 0. At most one run per 5 minutes
 (`sync.json` `last_run_at`) and one at a time (`sync.lock`; a lock older than
 30 minutes is taken over).
 
@@ -1538,7 +1628,18 @@ or `:`, a non-printable value or more than 256 characters), `process` (`main`
 or the real subagent type), and, only with a current `analyze` consent and a
 result for the call: `classification` (category, subcategory, confidence),
 `winner` (the Anthropic answer), `est_cost_winner_usd` and `taxonomy_version`;
-else those four are `null`. Per process of the analysis, one **advice**
+else those four are `null`.
+
+**Imported calls** (v1.6, API.md §9). `connect` uploads its events before
+the user may have run `analyze`, so they carry no task profile. `sync` also
+reads the calls from now − max(N, 30) days and sends one annotation (the same
+fields) per call whose imported event the uploader already sent
+(`upload.json` byte prefixes) with `classification: null` and that `analyze`
+has a result for: `event_id` is the importer's id (§10.5; the pre-v1.5
+fallback id when the event was stored under it), `ts` the stored event's.
+They share the batches (at most 500 calls) and the state with live calls; a
+server that does not annotate imported rows answers them `unmatched`, which is
+retried and dropped like any other (never an error). Per process of the analysis, one **advice**
 document: `process`, `thread`, `window_days`, `generated_at`, `tasks`,
 `calls`, `est_cost_usd`, `classes[]` (`class`, `share`),
 `good_enough_shares[]` (`model`, `share`), `recommendation` (`model`, `alias`,

@@ -19,7 +19,11 @@ from a parsed line -- ``type``, ``message.model``, ``message.id``,
 and only ``agentType`` from a meta file. Message text, tool inputs and outputs
 never leave this module (the parsed line is dropped right away). The project
 is the base name of the session's ``cwd`` (``tryaii-dev``), never a full path
-and never the encoded folder name (it contains the OS user name, TS-226).
+and never the encoded folder name (it contains the OS user name, TS-226). A
+git worktree (a ``cwd`` whose ``.git`` is a FILE pointing into
+``<repo>/.git/worktrees/<name>``) is labelled with the main repository's base
+name, so every worktree of one repo is one project; a base name that looks like
+an opaque id (``local_<uuid>``, a UUID, a long hex string) is ``unknown``.
 
 Each call also gets an internal ``session``: the name of the file holding the
 call's earliest line (``<session>.jsonl``; for ``<session>/subagents/...`` the
@@ -31,6 +35,7 @@ restarts) and is never output, stored or uploaded.
 
 from __future__ import annotations
 
+import functools
 import json
 import math
 import os
@@ -66,19 +71,95 @@ def default_projects_dir(env=None) -> Path:
     return (Path(base) if base else Path.home() / ".claude") / "projects"
 
 
+#: A folder name that is an opaque id, not a project name: an optional short
+#: word prefix (``local_``, ``session-``) and then a UUID, a hex string of at
+#: least 16 digits or a ULID.
+_ID_LIKE = re.compile(
+    r"(?:[a-z][a-z0-9]{0,15}[_-])?"
+    r"(?:[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}"
+    r"|[0-9a-f]{16,}"
+    r"|[0-9a-hjkmnp-tv-z]{26})", re.IGNORECASE)
+_GIT_FILE_MAX = 4096
+_PATH_CHARS = ("/", "\\", ":")
+
+
+def looks_like_id(name: str) -> bool:
+    """True for a folder name that is an opaque id (``local_<uuid>``, a bare
+    UUID, a long hex string, a ULID): it names no project."""
+    if not isinstance(name, str) or not _ID_LIKE.fullmatch(name.strip()):
+        return False
+    return any(ch.isdigit() for ch in name)  # a word of letters only is a name
+
+
+def _split(path: str) -> list:
+    return [p for p in re.split(r"[\\/]", path.strip()) if p]
+
+
+@functools.lru_cache(maxsize=4096)
+def worktree_repo_name(cwd: str) -> Optional[str]:
+    """The main repository's base name when ``cwd`` is a git worktree, else
+    None. Reads only ``<cwd>/.git``: a FILE in a worktree, ``gitdir:
+    <main>/.git/worktrees/<name>`` (``<main>.git/worktrees/<name>`` for a bare
+    repository). No git process and no other file; a missing folder, a normal
+    checkout or a submodule (``.git/modules/...``) gives None."""
+    try:
+        marker = Path(cwd) / ".git"
+        if not marker.is_file():
+            return None
+        with open(marker, encoding="utf-8", errors="replace") as fh:
+            text = fh.read(_GIT_FILE_MAX)
+    except (OSError, ValueError):
+        return None
+    gitdir = next((line[len("gitdir:"):].strip() for line in text.splitlines()
+                   if line.startswith("gitdir:")), "")
+    if not gitdir:
+        return None
+    if not (os.path.isabs(gitdir) or re.match(r"[A-Za-z]:[\\/]", gitdir)):
+        gitdir = os.path.join(cwd, gitdir)
+    parts = _split(os.path.normpath(gitdir))
+    for i in range(len(parts) - 2, 0, -1):
+        if parts[i + 1] != "worktrees" or not parts[i].lower().endswith(".git"):
+            continue
+        name = parts[i - 1] if parts[i].lower() == ".git" else parts[i][:-len(".git")]
+        if not name or re.fullmatch(r"[A-Za-z]:", name):
+            return None
+        return name[:_PROJECT_MAX]
+    return None
+
+
 def project_label(cwd) -> str:
-    """The base name of a working directory (``C:\\x\\tryaii-dev`` -> ``tryaii-dev``);
-    ``unknown`` when there is none. Both separators split, so a Windows path
-    read on another OS is reduced too."""
+    """The project of a working directory: its base name
+    (``C:\\x\\tryaii-dev`` -> ``tryaii-dev``), or the main repository's base
+    name for a git worktree; ``unknown`` when there is none or the name is an
+    opaque id. Both separators split, so a Windows path read on another OS is
+    reduced too. Only a base name is ever returned."""
     if not isinstance(cwd, str):
         return UNKNOWN_PROJECT
-    parts = [p for p in re.split(r"[\\/]", cwd.strip()) if p]
+    parts = _split(cwd)
     if not parts:
         return UNKNOWN_PROJECT
     name = parts[-1]
     if re.fullmatch(r"[A-Za-z]:", name) or name == "~":
         return UNKNOWN_PROJECT  # a drive root names no project
+    name = worktree_repo_name(cwd.strip()) or name
+    if looks_like_id(name):
+        return UNKNOWN_PROJECT
     return name[:_PROJECT_MAX]
+
+
+def project_value(project) -> Optional[str]:
+    """The project label that may leave the machine (sync annotations, an
+    imported event's ``call_site.file``): a plain base name, else None
+    (``unknown``, an id-like name, anything path-like, non-printable or longer
+    than 256 characters; the dashboard shows those as "Other")."""
+    if not isinstance(project, str):
+        return None
+    value = project.strip()
+    if not value or value == UNKNOWN_PROJECT or any(ch in value for ch in _PATH_CHARS):
+        return None
+    if not value.isprintable() or len(value) > _PROJECT_MAX or looks_like_id(value):
+        return None
+    return value
 
 
 def _count(value) -> Optional[int]:

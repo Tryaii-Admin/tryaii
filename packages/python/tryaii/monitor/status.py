@@ -42,6 +42,15 @@ def source_info(remote: Optional[dict]) -> dict:
     return {"kind": "local", "etag": None, "fetched_at": None}
 
 
+def key_app_info(app: str, remote: Optional[dict]) -> dict:
+    """``{"key_app", "key_app_mismatch"}`` when the cached remote.json names
+    the key's app (``app_name``, API.md v1.8, TS-308), else ``{}``."""
+    name = remote.get("app_name") if isinstance(remote, dict) else None
+    if not isinstance(name, str) or not name:
+        return {}
+    return {"key_app": name, "key_app_mismatch": name != app}
+
+
 def upload_info(cursor: Optional[dict], uploaded_events: int = 0) -> dict:
     """``{"state", "events", "last_ok", "last_error"}`` from upload.json:
     ``off`` without a cursor; ``error`` while ``last_error`` is set;
@@ -178,6 +187,7 @@ def aggregate(app: str, events, pins: Optional[dict], config: Optional[dict],
         "now": now,
         "since": since,
         "source": source_info(remote),
+        **key_app_info(app, remote),
         "upload": upload_info(upload_cursor, uploaded_events),
         "processes": processes,
         "totals": {

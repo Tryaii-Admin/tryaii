@@ -401,3 +401,131 @@ def test_poller_first_answer_is_set_by_any_outcome(tmp_path):
     p.stop()
     bad = remote.RemotePoller("not-a-key", BASE, opener=Opener((200, CONFIG_1)))
     assert bad.first_answer.is_set()
+
+
+# --- TS-307: the server owns the stable pin ----------------------------------------
+
+def _stable_config(etag, pin_version, pin=None, mode="stable", app_name="shop"):
+    entry = {"mode": mode, "model": None, "pin_version": pin_version, "pin": pin}
+    return {"schema": "tryaii.monitor.remote/1", "etag": etag, "app_id": "app_abcdefghijkl",
+            "app_name": app_name, "default_mode": None, "processes": {"checkout": entry},
+            "updated_at": "2026-10-12T08:00:00.000Z", "updated_by": "google-sub-1"}
+
+
+def _owner_pin(model, version):
+    return {"model": model, "version": version, "source": "owner",
+            "pinned_at": "2026-10-12T08:00:00.000Z", "expires_at": None}
+
+
+def _pins_of(monitor):
+    return store.read_pins(monitor.dir)["processes"]
+
+
+def _routing_counter():
+    calls = []
+
+    def fn(text):
+        calls.append(text)
+        return SCORES, None, None
+    return fn, calls
+
+
+def test_server_pin_beats_a_valid_local_pin_without_in_path_routing():
+    # The 0.8.2 bug: a local first-call pin (gpt-5-mini) outlived the
+    # dashboard's choice. The server's pin now wins on the next call.
+    fn, routed = _routing_counter()
+    client = FakeClient()
+    monitor = wrap(client, app="shop", process="checkout", route_fn=fn)
+    p, _ = poller((200, _stable_config("e1", 0)), dirs=(monitor.dir,))
+    assert p.poll_once() == "changed"
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    assert client.chat.completions.calls[-1]["model"] == "gpt-5-mini"   # local first-call pin
+    assert _pins_of(monitor)["checkout"]["version"] == 0
+
+    p, _ = poller((200, _stable_config("e2", 1, _owner_pin("openai/gpt-5-nano", 1))),
+                  dirs=(monitor.dir,))
+    assert p.poll_once() == "changed"
+    routed.clear()
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    assert client.chat.completions.calls[-1]["model"] == "gpt-5-nano"
+    assert len(routed) == 1                                 # shadow only, no in-path route
+    assert _pins_of(monitor)["checkout"] == {
+        "model": "openai/gpt-5-nano", "pinned_at": "2026-10-12T08:00:00.000Z",
+        "expires_at": None, "version": 1,
+        "basis": {"window": "server", "events": 0, "counts": {}}}
+    mtime = (monitor.dir / "pins.json").stat().st_mtime_ns
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    assert (monitor.dir / "pins.json").stat().st_mtime_ns == mtime   # no write per call
+    events = store.read_recent_events(monitor.dir, 10)
+    assert [e["route_status"] for e in events] == ["ok", "ok", "ok"]
+
+
+def test_unpin_drops_the_local_pin_and_stable_again_repins():
+    client = FakeClient()
+    monitor = wrap(client, app="shop", process="checkout", route_fn=route_fn)
+    store.write_remote(monitor.dir, _stable_config("e1", 1, _owner_pin("openai/gpt-5-nano", 1)),
+                       FETCHED)
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    assert "checkout" in _pins_of(monitor)
+    # Unpin: the dashboard saves off and bumps pin_version.
+    store.write_remote(monitor.dir, _stable_config("e2", 2, None, mode="off"), FETCHED)
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    assert client.chat.completions.calls[-1]["model"] == "gpt-5.5"
+    assert _pins_of(monitor) == {}
+    # Stable again, no winner on the server yet: a fresh local pin, version 3.
+    store.write_remote(monitor.dir, _stable_config("e3", 3), FETCHED)
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    assert client.chat.completions.calls[-1]["model"] == "gpt-5-mini"
+    pin = _pins_of(monitor)["checkout"]
+    assert pin["model"] == "openai/gpt-5-mini" and pin["version"] == 3
+    assert list(pin) == ["model", "pinned_at", "expires_at", "version", "basis"]
+
+
+def test_env_mode_never_deletes_a_pin(monkeypatch):
+    client = FakeClient()
+    monitor = wrap(client, app="shop", process="checkout", route_fn=route_fn)
+    store.write_remote(monitor.dir, _stable_config("e1", 1, _owner_pin("openai/gpt-5-nano", 1)),
+                       FETCHED)
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    monkeypatch.setenv("TRYAII_MONITOR_MODE", "off")
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    assert "checkout" in _pins_of(monitor)
+
+
+def test_unreachable_server_pin_sends_the_anchor_with_its_status():
+    client = FakeClient()
+    monitor = wrap(client, app="shop", process="checkout", route_fn=route_fn)
+    store.write_remote(monitor.dir, _stable_config(
+        "e1", 1, _owner_pin("anthropic/claude-haiku-4.5", 1)), FETCHED)
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    assert client.chat.completions.calls[-1]["model"] == "gpt-5.5"
+    [event] = store.read_recent_events(monitor.dir, 10)
+    assert event["mode"] == "stable" and event["route_status"] == "unreachable_pin"
+
+
+# --- TS-308: the key decides the dashboard app ------------------------------------
+
+def test_app_name_mismatch_warns_once_per_app(tmp_path, caplog):
+    remote.reset_app_name_warnings()
+    a, b = tmp_path / "summarizer", tmp_path / "shop"
+    a.mkdir()
+    b.mkdir()
+    cfg = _stable_config("e1", 0)
+    p, _ = poller((200, cfg), (304, None), (200, dict(cfg, etag="e2")), dirs=(a, b))
+    with caplog.at_level(logging.WARNING, logger="tryaii.monitor"):
+        assert [p.poll_once() for _ in range(3)] == ["changed", "unchanged", "changed"]
+    lines = [r.getMessage() for r in caplog.records if "uploads to app" in r.getMessage()]
+    assert lines == [
+        'tryaii monitor: app="summarizer" uploads to app "shop" (the app of TRYAII_API_KEY). '
+        "To use a separate app, run: tryaii apps create summarizer and use its key."]
+    remote.reset_app_name_warnings()
+
+
+def test_app_name_mismatch_warns_from_the_cached_answer_on_304(tmp_path, caplog):
+    remote.reset_app_name_warnings()
+    store.write_remote(tmp_path, _stable_config("e1", 0, app_name="other"), FETCHED)
+    p, _ = poller((304, None), dirs=(tmp_path,))
+    with caplog.at_level(logging.WARNING, logger="tryaii.monitor"):
+        assert p.poll_once() == "unchanged"
+    assert sum("uploads to app \"other\"" in r.getMessage() for r in caplog.records) == 1
+    remote.reset_app_name_warnings()
