@@ -255,6 +255,8 @@ def render_status(doc: dict, off_reason: Optional[str] = None) -> str:
         lines.append(f"realised: {t['swapped_calls']} swapped calls, "
                      f"saved {_money(t['realised_savings_usd'])}")
     lines.append(_source_line(doc["source"]))
+    if doc.get("key_app_mismatch"):
+        lines.append(f'  key app: "{doc["key_app"]}" (differs from the local name)')
     lines.append(_upload_line(doc["upload"], off_reason))
     return "\n".join(lines) + "\n"
 

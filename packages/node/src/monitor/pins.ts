@@ -25,8 +25,11 @@ export interface PinBasis {
 
 export interface Pin {
   model: string;
-  pinned_at: string;
-  expires_at: string;
+  pinned_at: string | null;
+  /** null: an owner's pin from the server (API.md v1.8), held until changed. */
+  expires_at: string | null;
+  /** The remote `pin_version` the pin belongs to (v1.8; missing = 0). */
+  version?: number;
   basis: PinBasis;
 }
 
@@ -161,9 +164,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-/** True while `now` is before the pin's `expires_at`. */
+/**
+ * True while `now` is before the pin's `expires_at`; a pin whose
+ * `expires_at` is null (an owner's pin from the server, API.md v1.8) holds
+ * until the server changes it.
+ */
 export function pinValid(pin: unknown, now: string): pin is Pin {
   if (!isRecord(pin) || !pin.model) return false;
+  if ('expires_at' in pin && pin.expires_at === null) return true;
   try {
     return parseTs(now) < parseTs(pin.expires_at);
   } catch {
@@ -271,4 +279,158 @@ export function setPin(pins: Partial<PinsDoc> | null | undefined, process: strin
   if (pin === null) delete processes[process];
   else processes[process] = pin;
   return { schema: PINS_SCHEMA, processes: sortedByKey(processes) };
+}
+
+// -- server-owned pins (API.md v1.8, TS-307; SPEC.md §2.5) ------------------
+
+export const SERVER_WINDOW = 'server';
+const STABLE = 'stable';
+
+function nonNegInt(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+/** A local pin's `version`; missing or invalid (a pins.json from before v1.8) counts as 0. */
+export function pinVersionOf(pin: unknown): number {
+  if (!isRecord(pin)) return 0;
+  return nonNegInt(pin.version) ?? 0;
+}
+
+/** `pin` with `version` set, placed after `expires_at`. */
+export function withVersion(pin: Pin, version: number): Pin {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(pin)) {
+    if (key === 'version') continue;
+    out[key] = value;
+    if (key === 'expires_at') out.version = version;
+  }
+  if (!('version' in out)) out.version = version;
+  return out as unknown as Pin;
+}
+
+function remoteEntry(remote: unknown, process: string): Record<string, unknown> | null {
+  if (!isRecord(remote)) return null;
+  const processes = remote.processes;
+  if (!isRecord(processes)) return null;
+  const entry = Object.prototype.hasOwnProperty.call(processes, process) ? processes[process] : undefined;
+  return isRecord(entry) ? entry : null;
+}
+
+/**
+ * The process's `pin_version` from remote.json; null (= do not compare)
+ * without a remote config, a process entry or the key (v1.7).
+ */
+export function remotePinVersion(remote: unknown, process: string): number | null {
+  const entry = remoteEntry(remote, process);
+  return entry === null ? null : nonNegInt(entry.pin_version);
+}
+
+/**
+ * The server's pin for `process` in the local pins.json form, or null: only
+ * when the remote entry's mode is `stable` and its `pin` names a model.
+ */
+export function serverPin(remote: unknown, process: string): Pin | null {
+  const entry = remoteEntry(remote, process);
+  if (entry === null || entry.mode !== STABLE) return null;
+  const pin = entry.pin;
+  if (!isRecord(pin)) return null;
+  const model = pin.model;
+  if (typeof model !== 'string' || !model.trim()) return null;
+  const version = nonNegInt(pin.version) ?? nonNegInt(entry.pin_version) ?? 0;
+  return {
+    model: model.trim(),
+    pinned_at: typeof pin.pinned_at === 'string' ? pin.pinned_at : null,
+    expires_at: typeof pin.expires_at === 'string' ? pin.expires_at : null,
+    version,
+    basis: { window: SERVER_WINDOW, events: 0, counts: {} },
+  };
+}
+
+export interface PinReconciliation {
+  action: 'server' | 'keep' | 'evaluate' | 'remove' | 'none';
+  pin: Pin | null;
+  version: number | null;
+  write: boolean;
+  pins: PinsDoc;
+  reason: string;
+}
+
+/** Python's `==` on JSON values (key order ignored). */
+function jsonEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((v, i) => jsonEqual(v, b[i]));
+  }
+  if (!isRecord(a) || !isRecord(b)) return false;
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  return ka.every((k) => Object.prototype.hasOwnProperty.call(b, k) && jsonEqual(a[k], b[k]));
+}
+
+function reconciled(
+  action: PinReconciliation['action'],
+  pin: Pin | null,
+  version: number | null,
+  pins: PinsDoc,
+  write: boolean,
+  reason: string,
+): PinReconciliation {
+  return { action, pin, version, write, pins, reason };
+}
+
+/**
+ * Reconcile the local pin of `process` with the dashboard (SPEC.md §2.5,
+ * TS-307) before a call. Mirrors pins.py `reconcile_pin`:
+ * - `mode` not `stable`: `remove` when the remote config set that mode
+ *   (`modeSource === 'remote'`) and an entry exists, else `none`;
+ * - remote mode `stable` with a server `pin` → `server` (the entry is
+ *   replaced when it differs);
+ * - else a local pin whose `version` differs from the remote `pin_version`
+ *   is dropped (no `pin_version` = do not compare); a valid pin → `keep`;
+ *   otherwise `evaluate` (new pins store `version`).
+ */
+export function reconcilePin(
+  remote: unknown,
+  pins: Partial<PinsDoc> | null | undefined,
+  process: string,
+  now: string,
+  mode: string,
+  modeSource: string | null | undefined,
+): PinReconciliation {
+  const processes = isRecord(pins?.processes) ? { ...(pins?.processes as Record<string, Pin>) } : {};
+  let doc: PinsDoc = { schema: PINS_SCHEMA, processes };
+  const has = Object.prototype.hasOwnProperty.call(processes, process);
+  let current: Pin | null = has ? (processes[process] ?? null) : null;
+  if (mode !== STABLE) {
+    if (modeSource === 'remote' && has) {
+      return reconciled('remove', null, null, setPin(doc, process, null), true, `remote mode is ${mode}`);
+    }
+    return reconciled('none', null, null, doc, false, `mode is ${mode}`);
+  }
+  const served = serverPin(remote, process);
+  if (served !== null) {
+    const source = (remoteEntry(remote, process)?.pin as Record<string, unknown> | undefined)?.source;
+    const reason = typeof source === 'string' ? `server pin (${source})` : 'server pin';
+    if (jsonEqual(current, served)) return reconciled('server', served, served.version ?? 0, doc, false, reason);
+    return reconciled('server', served, served.version ?? 0, setPin(doc, process, served), true, reason);
+  }
+  const wanted = remotePinVersion(remote, process);
+  let write = false;
+  let reason: string | null = null;
+  if (current !== null && wanted !== null && pinVersionOf(current) !== wanted) {
+    reason = `local pin version ${pinVersionOf(current)} != remote pin_version ${wanted}`;
+    doc = setPin(doc, process, null);
+    current = null;
+    write = true;
+  }
+  if (pinValid(current, now)) return reconciled('keep', current, pinVersionOf(current), doc, false, 'pin valid');
+  return reconciled(
+    'evaluate',
+    current,
+    wanted ?? 0,
+    doc,
+    write,
+    reason ?? (current !== null ? 'pin expired' : 'no pin'),
+  );
 }

@@ -53,10 +53,12 @@ import {
   evaluatePin,
   modelFacts,
   pinFromFirstCall,
-  pinValid,
+  reconcilePin,
   setPin,
+  withVersion,
   type ModelFactsMap,
   type Pin,
+  type PinReconciliation,
   type PinsDoc,
 } from './pins.js';
 import * as store from './store.js';
@@ -86,6 +88,7 @@ import {
   resolveAnchor,
   routeAllowed,
   routedModel,
+  serverPinTarget,
   shadowAllowed,
   type EventProvider,
   type Mode,
@@ -348,7 +351,7 @@ export class Monitor {
       const [text, digest] = routingText(params.messages);
       const policy = this.transportRef.policyAllowed();
       const ids = registry.modelIds;
-      return {
+      const plan: CallPlan = {
         ts: formatTs(clock.now()),
         app: this.app,
         process: proc,
@@ -377,9 +380,25 @@ export class Monitor {
         cacheTtlPolicy: cacheTtlPolicyFromRequest(params),
         otel: this.callOtel(),
       };
+      this.dropStalePin(plan);
+      return plan;
     } catch (err) {
       debug('before() failed', err);
       return null;
+    }
+  }
+
+  /**
+   * When the remote config sets this process to a mode other than `stable`
+   * (unpin on the dashboard saves `off`), delete its entry from pins.json
+   * (SPEC.md §2.5, TS-307). A mode from env / args / config.json never
+   * deletes a pin. Never throws.
+   */
+  dropStalePin(plan: CallPlan): void {
+    try {
+      if (plan.mode !== MODE_STABLE && plan.modeSource === 'remote') this.reconcile(plan);
+    } catch (err) {
+      debug('dropStalePin() failed', err);
     }
   }
 
@@ -429,6 +448,7 @@ export class Monitor {
     } catch (err) {
       debug('settleMode() failed', err);
     }
+    this.dropStalePin(plan);
   }
 
   // -- 2. decide -------------------------------------------------------
@@ -482,17 +502,52 @@ export class Monitor {
     return this.winner(o, plan.anchor);
   }
 
+  /**
+   * `reconcilePin` against the cached remote.json and pins.json; writes
+   * pins.json only when the entry changed. Synchronous from read to write,
+   * so no other call can interleave (the Node twin of Python's pins lock).
+   */
+  private reconcile(plan: CallPlan): PinReconciliation {
+    const result = reconcilePin(
+      this.remoteDoc.get(),
+      this.pinsDoc.get() as Partial<PinsDoc>,
+      plan.process,
+      plan.ts,
+      plan.mode,
+      plan.modeSource,
+    );
+    if (result.write) {
+      store.writePins(this.dir, result.pins);
+      this.pinsDoc.set(result.pins as PinsDoc & Record<string, unknown>);
+    }
+    return result;
+  }
+
+  /**
+   * SPEC.md §2.5: the server's pin first (no in-path routing), else the
+   * local pin while it is valid and its version matches the remote
+   * `pin_version`, else a new local pin from history or this call.
+   */
   private async stableTarget(plan: CallPlan): Promise<string | null> {
-    const pins = this.pinsDoc.get();
-    const processes = isObject(pins.processes) ? pins.processes : {};
-    const pin = processes[plan.process];
-    if (pinValid(pin, plan.ts)) {
-      return routedModel(MODE_STABLE, plan.provider, plan.anchor, null, pin.model, plan.policy);
+    const state = this.reconcile(plan);
+    if (state.action === 'server' && state.pin !== null) {
+      const decision = serverPinTarget(
+        plan.provider,
+        plan.anchor,
+        state.pin.model,
+        this.transportRef.registry(),
+        plan.policy,
+      );
+      plan.statusOverride = decision.route_status;
+      return decision.target;
+    }
+    if (state.action === 'keep' && state.pin !== null) {
+      return routedModel(MODE_STABLE, plan.provider, plan.anchor, null, state.pin.model, plan.policy);
     }
     const events = store.readEvents(this.dir, plan.ts, PIN_HISTORY_S);
     const decision = evaluatePin(
       events as Parameters<typeof evaluatePin>[0],
-      pin,
+      state.pin,
       plan.ts,
       plan.process,
       this.modelFacts(),
@@ -506,7 +561,13 @@ export class Monitor {
       if (!winner || !reachable(plan.provider, winner, plan.anchor)) return null;
       newPin = pinFromFirstCall(winner, plan.ts);
     }
-    const doc = setPin(pins, plan.process, newPin);
+    // Re-read after the await: other calls may have changed pins.json while
+    // this one routed. Read, set and write run synchronously (no interleaving).
+    const doc = setPin(
+      this.pinsDoc.get() as Partial<PinsDoc>,
+      plan.process,
+      withVersion(newPin, state.version ?? 0),
+    );
     store.writePins(this.dir, doc);
     this.pinsDoc.set(doc as PinsDoc & Record<string, unknown>);
     return routedModel(MODE_STABLE, plan.provider, plan.anchor, null, newPin.model, plan.policy);

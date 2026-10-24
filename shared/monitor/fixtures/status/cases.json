@@ -764,6 +764,73 @@
           "realised_savings_usd": 0
         }
       }
+    },
+    {
+      "name": "keyapp-server-pin-mismatch",
+      "description": "API.md v1.8: remote.json names the key's app (shop), not the local one (keyapp): key_app / key_app_mismatch; the server's owner pin (expires_at null) shows as pinned.",
+      "input": {
+        "store": "keyapp",
+        "now": "2026-10-25T12:00:00.000Z",
+        "since": "24h"
+      },
+      "expected": {
+        "schema": "tryaii.monitor.status/1",
+        "app": "keyapp",
+        "now": "2026-10-25T12:00:00.000Z",
+        "since": "24h",
+        "source": {
+          "kind": "remote",
+          "etag": "e-8",
+          "fetched_at": "2026-10-25T11:00:01.000Z"
+        },
+        "key_app": "shop",
+        "key_app_mismatch": true,
+        "upload": {
+          "state": "off",
+          "events": 0,
+          "last_ok": null,
+          "last_error": null
+        },
+        "processes": [
+          {
+            "process": "summarize",
+            "mode": "stable",
+            "mode_source": "remote",
+            "managed_model": null,
+            "pinned": {
+              "model": "openai/gpt-5-mini",
+              "expires_at": null
+            },
+            "calls": 0,
+            "errors": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "cached_tokens": null,
+            "cache_write_tokens": null,
+            "est_cost_usd": 0,
+            "est_cost_winner_usd": null,
+            "savings_usd": null,
+            "swapped_calls": 0,
+            "est_cost_anchor_usd": null,
+            "realised_savings_usd": null,
+            "top_winner": null,
+            "files": []
+          }
+        ],
+        "totals": {
+          "calls": 0,
+          "errors": 0,
+          "cached_tokens": null,
+          "cache_write_tokens": null,
+          "est_cost_usd": 0,
+          "est_cost_winner_usd": null,
+          "savings_usd": null,
+          "swapped_calls": 0,
+          "est_cost_anchor_usd": null,
+          "realised_savings_usd": null
+        }
+      }
     }
   ]
 }

@@ -62,6 +62,16 @@ export function sourceInfo(remote: unknown): Record<string, unknown> {
 }
 
 /**
+ * `{key_app, key_app_mismatch}` when the cached remote.json names the key's
+ * app (`app_name`, API.md v1.8, TS-308), else `{}`.
+ */
+export function keyAppInfo(app: string, remote: unknown): Record<string, unknown> {
+  const name = isRecord(remote) ? remote.app_name : undefined;
+  if (typeof name !== 'string' || !name) return {};
+  return { key_app: name, key_app_mismatch: name !== app };
+}
+
+/**
  * `{state, events, last_ok, last_error}` from upload.json: `off` without a
  * cursor; `error` while `last_error` is set; else `ok`. `events` = the event
  * lines the cursor covers.
@@ -239,6 +249,7 @@ export function aggregate(
     now,
     since,
     source: sourceInfo(remote),
+    ...keyAppInfo(app, remote),
     upload: uploadInfo(uploadCursor, uploadedEvents),
     processes,
     totals: {

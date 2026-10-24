@@ -21,7 +21,7 @@ mon = monitor.wrap(client, app="shop", process=None, mode=None)
 | Argument | Default | Meaning |
 |---|---|---|
 | `client` | — | An `openai.OpenAI` or `openai.AsyncOpenAI` (anything with `base_url` and `chat.completions.create`), or an `anthropic` client (`Anthropic`, `AsyncAnthropic`, `AnthropicBedrock`, `AnthropicVertex` and their async twins: anything with `messages.create` and no `chat`). Patched **in place**: `client.chat.completions.create` (or `client.messages.create` and `client.messages.stream`) becomes the monitored function. |
-| `app` | `TRYAII_APP`, else the working directory's name | Where records go: `<data dir>/monitor/<app>/` |
+| `app` | `TRYAII_APP`, else the working directory's name | Where records go: `<data dir>/monitor/<app>/`. Only the local name: the dashboard app is the one of `TRYAII_API_KEY` (see below) |
 | `process` | `None` | Default sub-process name for this client (below the per-call tag and `process()` block) |
 | `mode` | `None` | `off`, `stable`, `dynamic` or `managed` for this client, below `TRYAII_MONITOR_MODE` and the dashboard config, above `config.json` (`managed` here has no model, so the model in your code is sent — assign the model in `config.json` or on the dashboard) |
 | `cachelint` | `False` | Also run the [runtime cache lint](client/cache-lint.md) on every call and add its result to the event (the `cache` block, [below](#cache-fields)). Python prints the warn-only lint lines too; Node records the `cache` block only (no stderr lines yet) |
@@ -115,7 +115,8 @@ apply. What differs:
   model is never swapped. Shadow routing still runs and records the
   winner (`winner_reachable: false`); `stable` and `dynamic` record their
   decision and send the model in your code; `managed` with another model is
-  recorded as `unreachable_managed`.
+  recorded as `unreachable_managed`, a dashboard `stable` pin to another
+  model as `unreachable_pin`.
 - **Routing text**: the top-level `system` (string or text blocks) is the
   system message, then the last `user` message.
 - **Usage** (contract v1.5, SPEC.md §3.1b, `anthropic` row):
@@ -165,6 +166,26 @@ A `managed` sub-process sends the model assigned to it in `remote.json` or
 `config.json` (`"model"` next to `"mode"`) when the client can reach it and
 your data-save policy allows it; otherwise the model in your code is sent and
 the event carries `route_status: "unreachable_managed"`.
+
+**The key decides the dashboard app; `app=` is only the local name.** Events
+go to the app of `TRYAII_API_KEY`, whatever `wrap(app=)` says. When the
+dashboard's name for that app differs from the local one, the monitor logs
+one warning per app and process (`tryaii monitor: app="summarizer" uploads to
+app "shop" ...`) and `tryaii monitor status` shows a `key app` line. To give a
+program its own dashboard app, run `tryaii apps create <name>` and use that
+key.
+
+**Stable pins come from the dashboard first** (0.8.3, contract v1.8). When
+you set a sub-process to `stable` on the dashboard, the server pins it: to
+the model you chose, or to the current winner for 24 hours. The next call
+(after the config poll) sends that model, without routing in-path, and
+stores it in `pins.json`; when the client cannot reach it, the model in your
+code is sent with `route_status: "unreachable_pin"`. Without a server pin
+the SDK pins locally as before, but a local pin counts only while it belongs
+to the dashboard's latest choice (its `version` equals the process's
+`pin_version`). Unpin (the dashboard saves `off`) deletes the local pin on
+the next call of that sub-process. A mode from `TRYAII_MONITOR_MODE`,
+`wrap(mode=)` or `config.json` never deletes a pin.
 
 ## Data-save policy
 
@@ -561,7 +582,7 @@ specified in `shared/monitor/SPEC.md`:
 | `provider_class`, `resolve_anchor`, `reachable`, `allowed_models`, `native_model_id` | `providerClass`, `resolveAnchor`, `reachable`, `allowedModels`, `nativeModelId` | Provider class from `base_url`, anchor resolution, what this client can send |
 | `pick_winner(scores, anchor_id, registry, allowed=None)`, `routed_model(...)`, `managed_target(...)` | `pickWinner`, `routedModel`, `managedTarget` | Best-for-less winner (policy-filtered); the model actually sent per mode; the managed decision |
 | `policy_allowed`, `route_allowed`, `shadow_allowed`, `filter_ranking` | `policyAllowed`, `routeAllowed`, `shadowAllowed`, `filterRanking` | The policy's allowed ids and the candidate lists of the in-path and shadow route requests |
-| `evaluate_pin`, `pin_from_first_call`, `set_pin` | `evaluatePin`, `pinFromFirstCall`, `setPin` | The 24 h pin rule |
+| `evaluate_pin`, `pin_from_first_call`, `set_pin`, `reconcile_pin`, `server_pin_target` | `evaluatePin`, `pinFromFirstCall`, `setPin`, `reconcilePin`, `serverPinTarget` | The 24 h pin rule; the dashboard's pin first (server pin, `pin_version` check, removal after unpin) |
 | `resolve_mode`, `resolve_app`, `resolve_process`, `set_process_mode` | `resolveMode`, `resolveApp`, `resolveProcess`, `setProcessMode` | Config precedence |
 | `aggregate(app, events, pins, config, now, since, env, remote, upload_cursor, uploaded_events)` | `aggregate` | The `status` document |
 | `build_event`, `build_vector`, `estimate_cost`, `format_ts`, `parse_ts` | `buildEvent`, `buildVector`, `estimateCost`, `formatTs`, `parseTs` | Event and vector lines, cost from catalog pricing |

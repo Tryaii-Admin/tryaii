@@ -16,7 +16,8 @@ Verbs:
   analyze     opt-in: classify your Claude Code tasks on this machine and say
               which model is good enough for each kind (SPEC.md §10.7)
   sync        send the project, subagent type and (with analyze) task profile of
-              calls that came by live telemetry, and the per-process advice
+              calls that came by live telemetry, the task profile of imported
+              calls uploaded before analyze, and the per-process advice
               (SPEC.md §10.9); the plugin's SessionEnd hook runs it
   disconnect  remove the local state ``connect`` and ``analyze`` created
 """
@@ -86,9 +87,11 @@ Verbs:
                 connect sends only the task profile and the recommendation
   sync          For calls that came by live telemetry: send, per call, the project
                 folder's name, the subagent type and, if you ran analyze, the task
-                type and recommended model; plus the per-process advice of analyze.
-                Never text. Needs backfill and live telemetry connected; at most
-                once every 5 minutes. The TryAii plugin runs it when a Claude Code
+                type and recommended model; for imported calls uploaded before
+                analyze (last 30 days): the task type and recommended model; plus
+                the per-process advice of analyze. Never text. Needs the backfill
+                connected (and live telemetry, or TRYAII_API_KEY); at most once
+                every 5 minutes. The TryAii plugin runs it when a Claude Code
                 session ends (--background --quiet)
   disconnect    Remove what connect and analyze stored on this machine, and exactly
                 the settings keys connect added to Claude Code's user settings
@@ -97,8 +100,9 @@ Verbs:
                 nothing on stdout when not connected
 
 Options:
-  --days N              Window in days (default 30; connect: at most 90; sync: default 7,
-                        never before live telemetry was turned on)
+  --days N              Window in days (default 30; connect: at most 90; sync: default 7
+                        for live calls, never before live telemetry was turned on;
+                        imported calls: at least 30)
   --json                report/analyze: machine-readable output
   --projects-dir PATH   Claude Code's projects directory (default ~/.claude/projects)
   --claude-dir PATH     Claude Code's config directory (default ~/.claude, or
@@ -403,6 +407,16 @@ def _verb_connect(argv: list) -> None:
         declined += not _run_live(live, opts, data_dir)
     if asked and declined == asked:
         sys.exit(2)
+    from tryaii.claude_code import analysis
+
+    if analysis.read_consent(data_dir) is None:
+        print(ANALYZE_HINT)
+
+
+#: The last line of ``connect`` while ``analyze`` has no consent: without a task
+#: profile the dashboard's model advice and savings stay empty.
+ANALYZE_HINT = ("next: run 'tryaii claude-code analyze' (task types and model advice, on this "
+                "machine), then 'tryaii claude-code sync' to add them to the uploaded calls")
 
 
 # --- connect: backfill (log import) -----------------------------------------------------
@@ -904,15 +918,26 @@ def _sync_ready(data_dir: Path) -> dict:
 
     state = telemetry.read_state(data_dir)
     key = telemetry.read_key(data_dir) if state else None
-    if not state or not api.is_app_key(key):
-        raise _SyncSkipError("sync: live telemetry is not connected (tryaii claude-code connect)")
-    if importer.read_state(data_dir) is None:
+    live = bool(state) and api.is_app_key(key)
+    imported = importer.read_state(data_dir) is not None
+    if not live:
+        # Without live telemetry only the imported calls are annotated, with
+        # the app key the import uploads with.
+        key = api.api_key()
+        if not imported:
+            raise _SyncSkipError("sync: live telemetry is not connected (tryaii claude-code "
+                                 "connect)")
+        if not api.is_app_key(key):
+            raise _SyncSkipError("sync: live telemetry is not connected and TRYAII_API_KEY "
+                                 "holds no app key")
+    elif not imported:
         raise _SyncSkipError("sync: the log import is not connected (tryaii claude-code connect "
                         "--no-live)")
     enabled, reason = privacy.upload_decision(None, store.monitor_root(data_dir))
     if not enabled:
         raise _SyncSkipError(f"sync: upload is off ({reason})")
-    return {"state": state, "key": key, "live_since": telemetry.live_since(state)}
+    return {"state": state if live else {}, "key": key, "live": live,
+            "live_since": telemetry.live_since(state) if live else None}
 
 
 def _sync_base_url(state: dict) -> str:
@@ -1010,15 +1035,17 @@ def _sync(opts: dict) -> None:
                "no_consent": "no task profiles (run tryaii claude-code analyze for model "
                              "advice)",
                "none": "no task profiles (analyze has no result yet)"}[how]
+    imported = (f"; {counts['imported']:,} of them imported calls" if counts["imported"]
+                else "")
     say(f"sync: {counts['annotations']:,} calls annotated ({counts['matched']:,} matched, "
-        f"{counts['unmatched']:,} not found yet, retried for 24 h); "
+        f"{counts['unmatched']:,} not found yet, retried for 24 h{imported}); "
         f"{counts['advice']:,} process advice documents; {profile}")
 
 
 def _sync_run(opts: dict, data_dir: Path, ready: dict, state: dict, now: datetime,
               days: int) -> tuple[dict, str]:
     from tryaii import __version__
-    from tryaii.claude_code import sync
+    from tryaii.claude_code import importer, sync
     from tryaii.claude_code.reader import read_calls
     from tryaii.monitor.events import parse_ts
 
@@ -1028,7 +1055,10 @@ def _sync_run(opts: dict, data_dir: Path, ready: dict, state: dict, now: datetim
     since = now - timedelta(days=days)
     if ready["live_since"]:
         since = max(since, parse_ts(ready["live_since"]))
-    calls = read_calls(root, since=since, until=now).calls
+    # Imported calls (before live_since) are annotated back to IMPORT_DAYS.
+    import_since = now - timedelta(days=max(days, sync.IMPORT_DAYS))
+    read = read_calls(root, since=import_since, until=now).calls
+    calls = [c for c in read if c.ts >= since] if ready["live"] else []
 
     def reanalyze(consent: dict, previous: Optional[dict]) -> dict:
         window = ((previous or {}).get("window") or {}).get("days") or DEFAULT_DAYS
@@ -1038,9 +1068,10 @@ def _sync_run(opts: dict, data_dir: Path, ready: dict, state: dict, now: datetim
                                   consent=consent)
 
     doc, how = sync.choose_analysis(data_dir, now, reanalyze)
-    counts = sync.run(data_dir, calls, pricer=_pricer(), now=now, since=since,
+    counts = sync.run(data_dir, calls, pricer=_pricer(), now=now, since=import_since,
                       key=ready["key"], base_url=_sync_base_url(ready["state"]),
-                      version=__version__, analysis_doc=doc, state=state)
+                      version=__version__, analysis_doc=doc, state=state,
+                      imported_calls=read, uploaded=importer.uploaded_events(data_dir))
     return counts, how
 
 

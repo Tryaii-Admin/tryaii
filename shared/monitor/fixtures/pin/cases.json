@@ -1,6 +1,6 @@
 {
   "suite": "pin",
-  "target": "tryaii.monitor.pins.evaluate_pin / pin_from_first_call",
+  "target": "tryaii.monitor.pins.evaluate_pin / pin_from_first_call / reconcile_pin / remote.app_name_warning",
   "cases": [
     {
       "name": "expired-pin-repinned-from-24h-history",
@@ -642,6 +642,1229 @@
         },
         "not/in-catalog": null
       }
+    },
+    {
+      "name": "server-pin-wins-over-valid-local-pin",
+      "description": "TS-307: the dashboard pins summarize to gpt-5-mini (owner, version 3); the valid local pin of another model is replaced and the server's model is sent.",
+      "input": {
+        "reconcile": {
+          "remote": {
+            "schema": "tryaii.monitor.remote/1",
+            "etag": "e-7",
+            "app_id": "app_abcdefghijkl",
+            "app_name": "shop",
+            "default_mode": null,
+            "processes": {
+              "summarize": {
+                "mode": "stable",
+                "model": null,
+                "pin_version": 3,
+                "pin": {
+                  "model": "openai/gpt-5-mini",
+                  "version": 3,
+                  "source": "owner",
+                  "pinned_at": "2026-10-25T11:00:00.000Z",
+                  "expires_at": null
+                }
+              }
+            },
+            "updated_at": "2026-10-25T11:00:00.000Z",
+            "updated_by": "google-sub-1",
+            "fetched_at": "2026-10-25T11:00:01.000Z"
+          },
+          "pins": {
+            "schema": "tryaii.monitor.pins/1",
+            "processes": {
+              "summarize": {
+                "model": "openai/gpt-5.4",
+                "pinned_at": "2026-10-25T10:00:00.000Z",
+                "expires_at": "2026-10-26T10:00:00.000Z",
+                "version": 2,
+                "basis": {
+                  "window": "first_call",
+                  "events": 1,
+                  "counts": {
+                    "openai/gpt-5.4": 1
+                  }
+                }
+              }
+            }
+          },
+          "mode": "stable",
+          "mode_source": "remote",
+          "now": "2026-10-25T12:00:00.000Z",
+          "process": "summarize"
+        }
+      },
+      "expected": {
+        "action": "server",
+        "pin": {
+          "model": "openai/gpt-5-mini",
+          "pinned_at": "2026-10-25T11:00:00.000Z",
+          "expires_at": null,
+          "version": 3,
+          "basis": {
+            "window": "server",
+            "events": 0,
+            "counts": {}
+          }
+        },
+        "version": 3,
+        "write": true,
+        "pins": {
+          "schema": "tryaii.monitor.pins/1",
+          "processes": {
+            "summarize": {
+              "model": "openai/gpt-5-mini",
+              "pinned_at": "2026-10-25T11:00:00.000Z",
+              "expires_at": null,
+              "version": 3,
+              "basis": {
+                "window": "server",
+                "events": 0,
+                "counts": {}
+              }
+            }
+          }
+        },
+        "reason": "server pin (owner)"
+      }
+    },
+    {
+      "name": "server-winner-pin-keeps-its-expiry",
+      "description": "A winner pin from the server carries expires_at; the local entry takes it and the server window.",
+      "input": {
+        "reconcile": {
+          "remote": {
+            "schema": "tryaii.monitor.remote/1",
+            "etag": "e-7",
+            "app_id": "app_abcdefghijkl",
+            "app_name": "shop",
+            "default_mode": null,
+            "processes": {
+              "summarize": {
+                "mode": "stable",
+                "model": null,
+                "pin_version": 1,
+                "pin": {
+                  "model": "openai/gpt-5-mini",
+                  "version": 1,
+                  "source": "winner",
+                  "pinned_at": "2026-10-25T11:00:00.000Z",
+                  "expires_at": "2026-10-26T11:00:00.000Z"
+                }
+              }
+            },
+            "updated_at": "2026-10-25T11:00:00.000Z",
+            "updated_by": "google-sub-1",
+            "fetched_at": "2026-10-25T11:00:01.000Z"
+          },
+          "pins": null,
+          "mode": "stable",
+          "mode_source": "remote",
+          "now": "2026-10-25T12:00:00.000Z",
+          "process": "summarize"
+        }
+      },
+      "expected": {
+        "action": "server",
+        "pin": {
+          "model": "openai/gpt-5-mini",
+          "pinned_at": "2026-10-25T11:00:00.000Z",
+          "expires_at": "2026-10-26T11:00:00.000Z",
+          "version": 1,
+          "basis": {
+            "window": "server",
+            "events": 0,
+            "counts": {}
+          }
+        },
+        "version": 1,
+        "write": true,
+        "pins": {
+          "schema": "tryaii.monitor.pins/1",
+          "processes": {
+            "summarize": {
+              "model": "openai/gpt-5-mini",
+              "pinned_at": "2026-10-25T11:00:00.000Z",
+              "expires_at": "2026-10-26T11:00:00.000Z",
+              "version": 1,
+              "basis": {
+                "window": "server",
+                "events": 0,
+                "counts": {}
+              }
+            }
+          }
+        },
+        "reason": "server pin (winner)"
+      }
+    },
+    {
+      "name": "server-pin-already-stored-no-write",
+      "description": "The local entry already equals the server pin: no pins.json write (no write per call).",
+      "input": {
+        "reconcile": {
+          "remote": {
+            "schema": "tryaii.monitor.remote/1",
+            "etag": "e-7",
+            "app_id": "app_abcdefghijkl",
+            "app_name": "shop",
+            "default_mode": null,
+            "processes": {
+              "summarize": {
+                "mode": "stable",
+                "model": null,
+                "pin_version": 3,
+                "pin": {
+                  "model": "openai/gpt-5-mini",
+                  "version": 3,
+                  "source": "owner",
+                  "pinned_at": "2026-10-25T11:00:00.000Z",
+                  "expires_at": null
+                }
+              }
+            },
+            "updated_at": "2026-10-25T11:00:00.000Z",
+            "updated_by": "google-sub-1",
+            "fetched_at": "2026-10-25T11:00:01.000Z"
+          },
+          "pins": {
+            "schema": "tryaii.monitor.pins/1",
+            "processes": {
+              "summarize": {
+                "model": "openai/gpt-5-mini",
+                "pinned_at": "2026-10-25T11:00:00.000Z",
+                "expires_at": null,
+                "version": 3,
+                "basis": {
+                  "window": "server",
+                  "events": 0,
+                  "counts": {}
+                }
+              }
+            }
+          },
+          "mode": "stable",
+          "mode_source": "remote",
+          "now": "2026-10-25T12:00:00.000Z",
+          "process": "summarize"
+        }
+      },
+      "expected": {
+        "action": "server",
+        "pin": {
+          "model": "openai/gpt-5-mini",
+          "pinned_at": "2026-10-25T11:00:00.000Z",
+          "expires_at": null,
+          "version": 3,
+          "basis": {
+            "window": "server",
+            "events": 0,
+            "counts": {}
+          }
+        },
+        "version": 3,
+        "write": false,
+        "pins": {
+          "schema": "tryaii.monitor.pins/1",
+          "processes": {
+            "summarize": {
+              "model": "openai/gpt-5-mini",
+              "pinned_at": "2026-10-25T11:00:00.000Z",
+              "expires_at": null,
+              "version": 3,
+              "basis": {
+                "window": "server",
+                "events": 0,
+                "counts": {}
+              }
+            }
+          }
+        },
+        "reason": "server pin (owner)"
+      }
+    },
+    {
+      "name": "server-pin-used-when-env-sets-stable",
+      "description": "TRYAII_MONITOR_MODE=stable and the remote entry is stable with a pin: the server pin is still used.",
+      "input": {
+        "reconcile": {
+          "remote": {
+            "schema": "tryaii.monitor.remote/1",
+            "etag": "e-7",
+            "app_id": "app_abcdefghijkl",
+            "app_name": "shop",
+            "default_mode": null,
+            "processes": {
+              "summarize": {
+                "mode": "stable",
+                "model": null,
+                "pin_version": 2,
+                "pin": {
+                  "model": "openai/gpt-5-nano",
+                  "version": 2,
+                  "source": "owner",
+                  "pinned_at": "2026-10-25T11:00:00.000Z",
+                  "expires_at": null
+                }
+              }
+            },
+            "updated_at": "2026-10-25T11:00:00.000Z",
+            "updated_by": "google-sub-1",
+            "fetched_at": "2026-10-25T11:00:01.000Z"
+          },
+          "pins": null,
+          "mode": "stable",
+          "mode_source": "env",
+          "now": "2026-10-25T12:00:00.000Z",
+          "process": "summarize"
+        }
+      },
+      "expected": {
+        "action": "server",
+        "pin": {
+          "model": "openai/gpt-5-nano",
+          "pinned_at": "2026-10-25T11:00:00.000Z",
+          "expires_at": null,
+          "version": 2,
+          "basis": {
+            "window": "server",
+            "events": 0,
+            "counts": {}
+          }
+        },
+        "version": 2,
+        "write": true,
+        "pins": {
+          "schema": "tryaii.monitor.pins/1",
+          "processes": {
+            "summarize": {
+              "model": "openai/gpt-5-nano",
+              "pinned_at": "2026-10-25T11:00:00.000Z",
+              "expires_at": null,
+              "version": 2,
+              "basis": {
+                "window": "server",
+                "events": 0,
+                "counts": {}
+              }
+            }
+          }
+        },
+        "reason": "server pin (owner)"
+      }
+    },
+    {
+      "name": "unpin-remote-off-removes-local-pin",
+      "description": "Unpin on the dashboard saves mode off: the next call of the process deletes its pins.json entry; other entries stay.",
+      "input": {
+        "reconcile": {
+          "remote": {
+            "schema": "tryaii.monitor.remote/1",
+            "etag": "e-7",
+            "app_id": "app_abcdefghijkl",
+            "app_name": "shop",
+            "default_mode": null,
+            "processes": {
+              "summarize": {
+                "mode": "off",
+                "model": null,
+                "pin_version": 4,
+                "pin": null
+              }
+            },
+            "updated_at": "2026-10-25T11:00:00.000Z",
+            "updated_by": "google-sub-1",
+            "fetched_at": "2026-10-25T11:00:01.000Z"
+          },
+          "pins": {
+            "schema": "tryaii.monitor.pins/1",
+            "processes": {
+              "summarize": {
+                "model": "openai/gpt-5.4",
+                "pinned_at": "2026-10-25T10:00:00.000Z",
+                "expires_at": "2026-10-26T10:00:00.000Z",
+                "version": 3,
+                "basis": {
+                  "window": "first_call",
+                  "events": 1,
+                  "counts": {
+                    "openai/gpt-5.4": 1
+                  }
+                }
+              },
+              "checkout": {
+                "model": "openai/gpt-5-mini",
+                "pinned_at": "2026-10-25T10:00:00.000Z",
+                "expires_at": "2026-10-26T10:00:00.000Z",
+                "version": 0,
+                "basis": {
+                  "window": "first_call",
+                  "events": 1,
+                  "counts": {
+                    "openai/gpt-5-mini": 1
+                  }
+                }
+              }
+            }
+          },
+          "mode": "off",
+          "mode_source": "remote",
+          "now": "2026-10-25T12:00:00.000Z",
+          "process": "summarize"
+        }
+      },
+      "expected": {
+        "action": "remove",
+        "pin": null,
+        "version": null,
+        "write": true,
+        "pins": {
+          "schema": "tryaii.monitor.pins/1",
+          "processes": {
+            "checkout": {
+              "model": "openai/gpt-5-mini",
+              "pinned_at": "2026-10-25T10:00:00.000Z",
+              "expires_at": "2026-10-26T10:00:00.000Z",
+              "version": 0,
+              "basis": {
+                "window": "first_call",
+                "events": 1,
+                "counts": {
+                  "openai/gpt-5-mini": 1
+                }
+              }
+            }
+          }
+        },
+        "reason": "remote mode is off"
+      }
+    },
+    {
+      "name": "unpin-from-store",
+      "description": "Removal over the shop store: checkout is set to dynamic remotely; purchase item stays.",
+      "input": {
+        "reconcile": {
+          "remote": {
+            "schema": "tryaii.monitor.remote/1",
+            "etag": "e-7",
+            "app_id": "app_abcdefghijkl",
+            "app_name": "shop",
+            "default_mode": null,
+            "processes": {
+              "checkout": {
+                "mode": "dynamic",
+                "model": null,
+                "pin_version": 1,
+                "pin": null
+              }
+            },
+            "updated_at": "2026-10-25T11:00:00.000Z",
+            "updated_by": "google-sub-1",
+            "fetched_at": "2026-10-25T11:00:01.000Z"
+          },
+          "pins": "from_store",
+          "store": "shop",
+          "process": "checkout",
+          "mode": "dynamic",
+          "mode_source": "remote",
+          "now": "2026-10-25T12:00:00.000Z"
+        }
+      },
+      "expected": {
+        "action": "remove",
+        "pin": null,
+        "version": null,
+        "write": true,
+        "pins": {
+          "schema": "tryaii.monitor.pins/1",
+          "processes": {
+            "purchase item": {
+              "model": "openai/gpt-5-mini",
+              "pinned_at": "2026-10-10T06:00:00.000Z",
+              "expires_at": "2026-10-11T06:00:00.000Z",
+              "basis": {
+                "window": "7d",
+                "events": 6,
+                "counts": {
+                  "openai/gpt-5-mini": 6
+                }
+              }
+            }
+          }
+        },
+        "reason": "remote mode is dynamic"
+      }
+    },
+    {
+      "name": "env-mode-off-does-not-remove",
+      "description": "The env overrides the mode (off): a local override never deletes a pin.",
+      "input": {
+        "reconcile": {
+          "remote": {
+            "schema": "tryaii.monitor.remote/1",
+            "etag": "e-7",
+            "app_id": "app_abcdefghijkl",
+            "app_name": "shop",
+            "default_mode": null,
+            "processes": {
+              "summarize": {
+                "mode": "stable",
+                "model": null,
+                "pin_version": 3,
+                "pin": null
+              }
+            },
+            "updated_at": "2026-10-25T11:00:00.000Z",
+            "updated_by": "google-sub-1",
+            "fetched_at": "2026-10-25T11:00:01.000Z"
+          },
+          "pins": {
+            "schema": "tryaii.monitor.pins/1",
+            "processes": {
+              "summarize": {
+                "model": "openai/gpt-5.4",
+                "pinned_at": "2026-10-25T10:00:00.000Z",
+                "expires_at": "2026-10-26T10:00:00.000Z",
+                "version": 3,
+                "basis": {
+                  "window": "first_call",
+                  "events": 1,
+                  "counts": {
+                    "openai/gpt-5.4": 1
+                  }
+                }
+              }
+            }
+          },
+          "mode": "off",
+          "mode_source": "env",
+          "now": "2026-10-25T12:00:00.000Z",
+          "process": "summarize"
+        }
+      },
+      "expected": {
+        "action": "none",
+        "pin": null,
+        "version": null,
+        "write": false,
+        "pins": {
+          "schema": "tryaii.monitor.pins/1",
+          "processes": {
+            "summarize": {
+              "model": "openai/gpt-5.4",
+              "pinned_at": "2026-10-25T10:00:00.000Z",
+              "expires_at": "2026-10-26T10:00:00.000Z",
+              "version": 3,
+              "basis": {
+                "window": "first_call",
+                "events": 1,
+                "counts": {
+                  "openai/gpt-5.4": 1
+                }
+              }
+            }
+          }
+        },
+        "reason": "mode is off"
+      }
+    },
+    {
+      "name": "remote-off-without-local-pin",
+      "description": "Nothing to remove: no write.",
+      "input": {
+        "reconcile": {
+          "remote": {
+            "schema": "tryaii.monitor.remote/1",
+            "etag": "e-7",
+            "app_id": "app_abcdefghijkl",
+            "app_name": "shop",
+            "default_mode": null,
+            "processes": {
+              "summarize": {
+                "mode": "off",
+                "model": null,
+                "pin_version": 1,
+                "pin": null
+              }
+            },
+            "updated_at": "2026-10-25T11:00:00.000Z",
+            "updated_by": "google-sub-1",
+            "fetched_at": "2026-10-25T11:00:01.000Z"
+          },
+          "pins": null,
+          "mode": "off",
+          "mode_source": "remote",
+          "now": "2026-10-25T12:00:00.000Z",
+          "process": "summarize"
+        }
+      },
+      "expected": {
+        "action": "none",
+        "pin": null,
+        "version": null,
+        "write": false,
+        "pins": {
+          "schema": "tryaii.monitor.pins/1",
+          "processes": {}
+        },
+        "reason": "mode is off"
+      }
+    },
+    {
+      "name": "version-bump-invalidates-local-pin",
+      "description": "Stable chosen after an unpin, no winner yet (pin null, pin_version 4): the valid local pin of version 3 is dropped and re-evaluated; the new pin stores version 4.",
+      "input": {
+        "reconcile": {
+          "remote": {
+            "schema": "tryaii.monitor.remote/1",
+            "etag": "e-7",
+            "app_id": "app_abcdefghijkl",
+            "app_name": "shop",
+            "default_mode": null,
+            "processes": {
+              "summarize": {
+                "mode": "stable",
+                "model": null,
+                "pin_version": 4,
+                "pin": null
+              }
+            },
+            "updated_at": "2026-10-25T11:00:00.000Z",
+            "updated_by": "google-sub-1",
+            "fetched_at": "2026-10-25T11:00:01.000Z"
+          },
+          "pins": {
+            "schema": "tryaii.monitor.pins/1",
+            "processes": {
+              "summarize": {
+                "model": "openai/gpt-5.4",
+                "pinned_at": "2026-10-25T10:00:00.000Z",
+                "expires_at": "2026-10-26T10:00:00.000Z",
+                "version": 3,
+                "basis": {
+                  "window": "first_call",
+                  "events": 1,
+                  "counts": {
+                    "openai/gpt-5.4": 1
+                  }
+                }
+              }
+            }
+          },
+          "mode": "stable",
+          "mode_source": "remote",
+          "now": "2026-10-25T12:00:00.000Z",
+          "process": "summarize"
+        }
+      },
+      "expected": {
+        "action": "evaluate",
+        "pin": null,
+        "version": 4,
+        "write": true,
+        "pins": {
+          "schema": "tryaii.monitor.pins/1",
+          "processes": {}
+        },
+        "reason": "local pin version 3 != remote pin_version 4"
+      }
+    },
+    {
+      "name": "version-match-keeps-local-pin",
+      "description": "pin_version equals the local version and the pin is valid: kept.",
+      "input": {
+        "reconcile": {
+          "remote": {
+            "schema": "tryaii.monitor.remote/1",
+            "etag": "e-7",
+            "app_id": "app_abcdefghijkl",
+            "app_name": "shop",
+            "default_mode": null,
+            "processes": {
+              "summarize": {
+                "mode": "stable",
+                "model": null,
+                "pin_version": 2,
+                "pin": null
+              }
+            },
+            "updated_at": "2026-10-25T11:00:00.000Z",
+            "updated_by": "google-sub-1",
+            "fetched_at": "2026-10-25T11:00:01.000Z"
+          },
+          "pins": {
+            "schema": "tryaii.monitor.pins/1",
+            "processes": {
+              "summarize": {
+                "model": "openai/gpt-5.4",
+                "pinned_at": "2026-10-25T10:00:00.000Z",
+                "expires_at": "2026-10-26T10:00:00.000Z",
+                "version": 2,
+                "basis": {
+                  "window": "first_call",
+                  "events": 1,
+                  "counts": {
+                    "openai/gpt-5.4": 1
+                  }
+                }
+              }
+            }
+          },
+          "mode": "stable",
+          "mode_source": "remote",
+          "now": "2026-10-25T12:00:00.000Z",
+          "process": "summarize"
+        }
+      },
+      "expected": {
+        "action": "keep",
+        "pin": {
+          "model": "openai/gpt-5.4",
+          "pinned_at": "2026-10-25T10:00:00.000Z",
+          "expires_at": "2026-10-26T10:00:00.000Z",
+          "version": 2,
+          "basis": {
+            "window": "first_call",
+            "events": 1,
+            "counts": {
+              "openai/gpt-5.4": 1
+            }
+          }
+        },
+        "version": 2,
+        "write": false,
+        "pins": {
+          "schema": "tryaii.monitor.pins/1",
+          "processes": {
+            "summarize": {
+              "model": "openai/gpt-5.4",
+              "pinned_at": "2026-10-25T10:00:00.000Z",
+              "expires_at": "2026-10-26T10:00:00.000Z",
+              "version": 2,
+              "basis": {
+                "window": "first_call",
+                "events": 1,
+                "counts": {
+                  "openai/gpt-5.4": 1
+                }
+              }
+            }
+          }
+        },
+        "reason": "pin valid"
+      }
+    },
+    {
+      "name": "v17-remote-without-pin-version-keeps-today",
+      "description": "A v1.7 server sends no pin_version and no pin: no compare, the valid local pin is kept (the 0.8.2 behaviour).",
+      "input": {
+        "reconcile": {
+          "remote": {
+            "schema": "tryaii.monitor.remote/1",
+            "etag": "e-7",
+            "app_id": "app_abcdefghijkl",
+            "default_mode": null,
+            "processes": {
+              "summarize": {
+                "mode": "stable",
+                "model": null
+              }
+            },
+            "updated_at": "2026-10-25T11:00:00.000Z",
+            "updated_by": "google-sub-1",
+            "fetched_at": "2026-10-25T11:00:01.000Z"
+          },
+          "pins": {
+            "schema": "tryaii.monitor.pins/1",
+            "processes": {
+              "summarize": {
+                "model": "openai/gpt-5.4",
+                "pinned_at": "2026-10-25T10:00:00.000Z",
+                "expires_at": "2026-10-26T10:00:00.000Z",
+                "version": 7,
+                "basis": {
+                  "window": "first_call",
+                  "events": 1,
+                  "counts": {
+                    "openai/gpt-5.4": 1
+                  }
+                }
+              }
+            }
+          },
+          "mode": "stable",
+          "mode_source": "remote",
+          "now": "2026-10-25T12:00:00.000Z",
+          "process": "summarize"
+        }
+      },
+      "expected": {
+        "action": "keep",
+        "pin": {
+          "model": "openai/gpt-5.4",
+          "pinned_at": "2026-10-25T10:00:00.000Z",
+          "expires_at": "2026-10-26T10:00:00.000Z",
+          "version": 7,
+          "basis": {
+            "window": "first_call",
+            "events": 1,
+            "counts": {
+              "openai/gpt-5.4": 1
+            }
+          }
+        },
+        "version": 7,
+        "write": false,
+        "pins": {
+          "schema": "tryaii.monitor.pins/1",
+          "processes": {
+            "summarize": {
+              "model": "openai/gpt-5.4",
+              "pinned_at": "2026-10-25T10:00:00.000Z",
+              "expires_at": "2026-10-26T10:00:00.000Z",
+              "version": 7,
+              "basis": {
+                "window": "first_call",
+                "events": 1,
+                "counts": {
+                  "openai/gpt-5.4": 1
+                }
+              }
+            }
+          }
+        },
+        "reason": "pin valid"
+      }
+    },
+    {
+      "name": "old-pins-json-without-version-counts-as-0",
+      "description": "A pins.json from before v1.8 (no version) matches pin_version 0.",
+      "input": {
+        "reconcile": {
+          "remote": {
+            "schema": "tryaii.monitor.remote/1",
+            "etag": "e-7",
+            "app_id": "app_abcdefghijkl",
+            "app_name": "shop",
+            "default_mode": null,
+            "processes": {
+              "summarize": {
+                "mode": "stable",
+                "model": null,
+                "pin_version": 0,
+                "pin": null
+              }
+            },
+            "updated_at": "2026-10-25T11:00:00.000Z",
+            "updated_by": "google-sub-1",
+            "fetched_at": "2026-10-25T11:00:01.000Z"
+          },
+          "pins": {
+            "schema": "tryaii.monitor.pins/1",
+            "processes": {
+              "summarize": {
+                "model": "openai/gpt-5.4",
+                "pinned_at": "2026-10-25T10:00:00.000Z",
+                "expires_at": "2026-10-26T10:00:00.000Z",
+                "basis": {
+                  "window": "first_call",
+                  "events": 1,
+                  "counts": {
+                    "openai/gpt-5.4": 1
+                  }
+                }
+              }
+            }
+          },
+          "mode": "stable",
+          "mode_source": "remote",
+          "now": "2026-10-25T12:00:00.000Z",
+          "process": "summarize"
+        }
+      },
+      "expected": {
+        "action": "keep",
+        "pin": {
+          "model": "openai/gpt-5.4",
+          "pinned_at": "2026-10-25T10:00:00.000Z",
+          "expires_at": "2026-10-26T10:00:00.000Z",
+          "basis": {
+            "window": "first_call",
+            "events": 1,
+            "counts": {
+              "openai/gpt-5.4": 1
+            }
+          }
+        },
+        "version": 0,
+        "write": false,
+        "pins": {
+          "schema": "tryaii.monitor.pins/1",
+          "processes": {
+            "summarize": {
+              "model": "openai/gpt-5.4",
+              "pinned_at": "2026-10-25T10:00:00.000Z",
+              "expires_at": "2026-10-26T10:00:00.000Z",
+              "basis": {
+                "window": "first_call",
+                "events": 1,
+                "counts": {
+                  "openai/gpt-5.4": 1
+                }
+              }
+            }
+          }
+        },
+        "reason": "pin valid"
+      }
+    },
+    {
+      "name": "old-pins-json-without-version-dropped-on-bump",
+      "description": "A pins.json without version (0) against pin_version 1: dropped, re-evaluated.",
+      "input": {
+        "reconcile": {
+          "remote": {
+            "schema": "tryaii.monitor.remote/1",
+            "etag": "e-7",
+            "app_id": "app_abcdefghijkl",
+            "app_name": "shop",
+            "default_mode": null,
+            "processes": {
+              "summarize": {
+                "mode": "stable",
+                "model": null,
+                "pin_version": 1,
+                "pin": null
+              }
+            },
+            "updated_at": "2026-10-25T11:00:00.000Z",
+            "updated_by": "google-sub-1",
+            "fetched_at": "2026-10-25T11:00:01.000Z"
+          },
+          "pins": {
+            "schema": "tryaii.monitor.pins/1",
+            "processes": {
+              "summarize": {
+                "model": "openai/gpt-5.4",
+                "pinned_at": "2026-10-25T10:00:00.000Z",
+                "expires_at": "2026-10-26T10:00:00.000Z",
+                "basis": {
+                  "window": "first_call",
+                  "events": 1,
+                  "counts": {
+                    "openai/gpt-5.4": 1
+                  }
+                }
+              }
+            }
+          },
+          "mode": "stable",
+          "mode_source": "remote",
+          "now": "2026-10-25T12:00:00.000Z",
+          "process": "summarize"
+        }
+      },
+      "expected": {
+        "action": "evaluate",
+        "pin": null,
+        "version": 1,
+        "write": true,
+        "pins": {
+          "schema": "tryaii.monitor.pins/1",
+          "processes": {}
+        },
+        "reason": "local pin version 0 != remote pin_version 1"
+      }
+    },
+    {
+      "name": "no-remote-config-expired-pin-evaluates",
+      "description": "No remote.json: the expired pin goes to evaluate_pin, the new pin stores version 0, nothing written yet.",
+      "input": {
+        "reconcile": {
+          "remote": null,
+          "pins": {
+            "schema": "tryaii.monitor.pins/1",
+            "processes": {
+              "summarize": {
+                "model": "openai/gpt-5.4",
+                "pinned_at": "2026-10-24T10:00:00.000Z",
+                "expires_at": "2026-10-25T10:00:00.000Z",
+                "basis": {
+                  "window": "first_call",
+                  "events": 1,
+                  "counts": {
+                    "openai/gpt-5.4": 1
+                  }
+                }
+              }
+            }
+          },
+          "mode": "stable",
+          "mode_source": "args",
+          "now": "2026-10-25T12:00:00.000Z",
+          "process": "summarize"
+        }
+      },
+      "expected": {
+        "action": "evaluate",
+        "pin": {
+          "model": "openai/gpt-5.4",
+          "pinned_at": "2026-10-24T10:00:00.000Z",
+          "expires_at": "2026-10-25T10:00:00.000Z",
+          "basis": {
+            "window": "first_call",
+            "events": 1,
+            "counts": {
+              "openai/gpt-5.4": 1
+            }
+          }
+        },
+        "version": 0,
+        "write": false,
+        "pins": {
+          "schema": "tryaii.monitor.pins/1",
+          "processes": {
+            "summarize": {
+              "model": "openai/gpt-5.4",
+              "pinned_at": "2026-10-24T10:00:00.000Z",
+              "expires_at": "2026-10-25T10:00:00.000Z",
+              "basis": {
+                "window": "first_call",
+                "events": 1,
+                "counts": {
+                  "openai/gpt-5.4": 1
+                }
+              }
+            }
+          }
+        },
+        "reason": "pin expired"
+      }
+    },
+    {
+      "name": "owner-pin-without-expiry-stays-valid",
+      "description": "A stored owner pin (expires_at null) holds while nothing newer arrives (here: no remote.json).",
+      "input": {
+        "reconcile": {
+          "remote": null,
+          "pins": {
+            "schema": "tryaii.monitor.pins/1",
+            "processes": {
+              "summarize": {
+                "model": "openai/gpt-5-mini",
+                "pinned_at": "2026-10-20T11:00:00.000Z",
+                "expires_at": null,
+                "version": 3,
+                "basis": {
+                  "window": "server",
+                  "events": 0,
+                  "counts": {}
+                }
+              }
+            }
+          },
+          "mode": "stable",
+          "mode_source": "config",
+          "now": "2026-10-25T12:00:00.000Z",
+          "process": "summarize"
+        }
+      },
+      "expected": {
+        "action": "keep",
+        "pin": {
+          "model": "openai/gpt-5-mini",
+          "pinned_at": "2026-10-20T11:00:00.000Z",
+          "expires_at": null,
+          "version": 3,
+          "basis": {
+            "window": "server",
+            "events": 0,
+            "counts": {}
+          }
+        },
+        "version": 3,
+        "write": false,
+        "pins": {
+          "schema": "tryaii.monitor.pins/1",
+          "processes": {
+            "summarize": {
+              "model": "openai/gpt-5-mini",
+              "pinned_at": "2026-10-20T11:00:00.000Z",
+              "expires_at": null,
+              "version": 3,
+              "basis": {
+                "window": "server",
+                "events": 0,
+                "counts": {}
+              }
+            }
+          }
+        },
+        "reason": "pin valid"
+      }
+    },
+    {
+      "name": "default-mode-stable-no-process-entry",
+      "description": "Stable comes from default_mode (no process entry, so no pin_version): no compare, the valid local pin is kept.",
+      "input": {
+        "reconcile": {
+          "remote": {
+            "schema": "tryaii.monitor.remote/1",
+            "etag": "e-7",
+            "app_id": "app_abcdefghijkl",
+            "app_name": "shop",
+            "default_mode": "stable",
+            "processes": {},
+            "updated_at": "2026-10-25T11:00:00.000Z",
+            "updated_by": "google-sub-1",
+            "fetched_at": "2026-10-25T11:00:01.000Z"
+          },
+          "pins": {
+            "schema": "tryaii.monitor.pins/1",
+            "processes": {
+              "summarize": {
+                "model": "openai/gpt-5.4",
+                "pinned_at": "2026-10-25T10:00:00.000Z",
+                "expires_at": "2026-10-26T10:00:00.000Z",
+                "version": 5,
+                "basis": {
+                  "window": "first_call",
+                  "events": 1,
+                  "counts": {
+                    "openai/gpt-5.4": 1
+                  }
+                }
+              }
+            }
+          },
+          "mode": "stable",
+          "mode_source": "remote",
+          "now": "2026-10-25T12:00:00.000Z",
+          "process": "summarize"
+        }
+      },
+      "expected": {
+        "action": "keep",
+        "pin": {
+          "model": "openai/gpt-5.4",
+          "pinned_at": "2026-10-25T10:00:00.000Z",
+          "expires_at": "2026-10-26T10:00:00.000Z",
+          "version": 5,
+          "basis": {
+            "window": "first_call",
+            "events": 1,
+            "counts": {
+              "openai/gpt-5.4": 1
+            }
+          }
+        },
+        "version": 5,
+        "write": false,
+        "pins": {
+          "schema": "tryaii.monitor.pins/1",
+          "processes": {
+            "summarize": {
+              "model": "openai/gpt-5.4",
+              "pinned_at": "2026-10-25T10:00:00.000Z",
+              "expires_at": "2026-10-26T10:00:00.000Z",
+              "version": 5,
+              "basis": {
+                "window": "first_call",
+                "events": 1,
+                "counts": {
+                  "openai/gpt-5.4": 1
+                }
+              }
+            }
+          }
+        },
+        "reason": "pin valid"
+      }
+    },
+    {
+      "name": "app-name-mismatch-warns",
+      "description": "TS-308: wrap(app=\"summarizer\") with a key of the app \"shop\": the one warning line.",
+      "input": {
+        "app_name_warning": {
+          "app": "summarizer",
+          "remote": {
+            "schema": "tryaii.monitor.remote/1",
+            "etag": "e-7",
+            "app_id": "app_abcdefghijkl",
+            "app_name": "shop",
+            "default_mode": null,
+            "processes": {},
+            "updated_at": "2026-10-25T11:00:00.000Z",
+            "updated_by": "google-sub-1",
+            "fetched_at": "2026-10-25T11:00:01.000Z"
+          }
+        }
+      },
+      "expected": "tryaii monitor: app=\"summarizer\" uploads to app \"shop\" (the app of TRYAII_API_KEY). To use a separate app, run: tryaii apps create summarizer and use its key."
+    },
+    {
+      "name": "app-name-match-is-quiet",
+      "description": "Same name: no warning.",
+      "input": {
+        "app_name_warning": {
+          "app": "shop",
+          "remote": {
+            "schema": "tryaii.monitor.remote/1",
+            "etag": "e-7",
+            "app_id": "app_abcdefghijkl",
+            "app_name": "shop",
+            "default_mode": null,
+            "processes": {},
+            "updated_at": "2026-10-25T11:00:00.000Z",
+            "updated_by": "google-sub-1",
+            "fetched_at": "2026-10-25T11:00:01.000Z"
+          }
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "app-name-exact-compare",
+      "description": "Exact string compare: \"Shop\" differs from \"shop\".",
+      "input": {
+        "app_name_warning": {
+          "app": "shop",
+          "remote": {
+            "schema": "tryaii.monitor.remote/1",
+            "etag": "e-7",
+            "app_id": "app_abcdefghijkl",
+            "app_name": "Shop",
+            "default_mode": null,
+            "processes": {},
+            "updated_at": "2026-10-25T11:00:00.000Z",
+            "updated_by": "google-sub-1",
+            "fetched_at": "2026-10-25T11:00:01.000Z"
+          }
+        }
+      },
+      "expected": "tryaii monitor: app=\"shop\" uploads to app \"Shop\" (the app of TRYAII_API_KEY). To use a separate app, run: tryaii apps create shop and use its key."
+    },
+    {
+      "name": "app-name-absent-v17-is-quiet",
+      "description": "A v1.7 server sends no app_name: no warning.",
+      "input": {
+        "app_name_warning": {
+          "app": "summarizer",
+          "remote": {
+            "schema": "tryaii.monitor.remote/1",
+            "etag": "e-7",
+            "app_id": "app_abcdefghijkl",
+            "default_mode": null,
+            "processes": {},
+            "updated_at": "2026-10-25T11:00:00.000Z",
+            "updated_by": "google-sub-1",
+            "fetched_at": "2026-10-25T11:00:01.000Z"
+          }
+        }
+      },
+      "expected": null
     }
   ]
 }

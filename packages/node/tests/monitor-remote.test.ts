@@ -401,3 +401,133 @@ describe('TS-296: first calls and remote changes', () => {
     expect(bad.answered).toBe(true);
   });
 });
+
+// --- TS-307: the server owns the stable pin ---------------------------------------
+
+function stableConfig(etag: string, pinVersion: number, pin: unknown = null, mode = 'stable', appName = 'shop') {
+  return {
+    schema: 'tryaii.monitor.remote/1',
+    etag,
+    app_id: 'app_abcdefghijkl',
+    app_name: appName,
+    default_mode: null,
+    processes: { checkout: { mode, model: null, pin_version: pinVersion, pin } },
+    updated_at: '2026-10-12T08:00:00.000Z',
+    updated_by: 'google-sub-1',
+  };
+}
+
+function ownerPin(model: string, version: number) {
+  return { model, version, source: 'owner', pinned_at: '2026-10-12T08:00:00.000Z', expires_at: null };
+}
+
+function pinsOf(monitor: Monitor): Record<string, Record<string, unknown>> {
+  return store.readPins(monitor.dir).processes as unknown as Record<string, Record<string, unknown>>;
+}
+
+describe('TS-307: server-owned stable pins', () => {
+  it('the server pin beats a valid local pin, without in-path routing', async () => {
+    const routed: string[] = [];
+    const counting = (text: string): [unknown[], unknown, unknown] => {
+      routed.push(text);
+      return [SCORES, null, null];
+    };
+    const client = new FakeClient();
+    const monitor = wrap(client, { app: 'shop', process: 'checkout', routeFn: counting });
+    let [p] = poller([[200, stableConfig('e1', 0)]], [monitor.dir]);
+    expect(await p.pollOnce()).toBe('changed');
+    await call(client, monitor);
+    expect(client.calls.at(-1)?.model).toBe('gpt-5-mini'); // local first-call pin
+    expect(pinsOf(monitor).checkout.version).toBe(0);
+
+    [p] = poller([[200, stableConfig('e2', 1, ownerPin('openai/gpt-5-nano', 1))]], [monitor.dir]);
+    expect(await p.pollOnce()).toBe('changed');
+    routed.length = 0;
+    await call(client, monitor);
+    expect(client.calls.at(-1)?.model).toBe('gpt-5-nano');
+    expect(routed.length).toBe(1); // shadow only
+    expect(JSON.stringify(pinsOf(monitor).checkout)).toBe(
+      JSON.stringify({
+        model: 'openai/gpt-5-nano',
+        pinned_at: '2026-10-12T08:00:00.000Z',
+        expires_at: null,
+        version: 1,
+        basis: { window: 'server', events: 0, counts: {} },
+      }),
+    );
+    const before = readFileSync(join(monitor.dir, 'pins.json'), 'utf-8');
+    await call(client, monitor);
+    expect(readFileSync(join(monitor.dir, 'pins.json'), 'utf-8')).toBe(before);
+    const events = store.readRecentEvents(monitor.dir, 10);
+    expect(events.map((e) => e.route_status)).toEqual(['ok', 'ok', 'ok']);
+  });
+
+  it('unpin drops the local pin; stable again re-pins with the new version', async () => {
+    const client = new FakeClient();
+    const monitor = wrap(client, { app: 'shop', process: 'checkout', routeFn });
+    store.writeRemote(monitor.dir, stableConfig('e1', 1, ownerPin('openai/gpt-5-nano', 1)), FETCHED);
+    await call(client, monitor);
+    expect(Object.keys(pinsOf(monitor))).toEqual(['checkout']);
+    store.writeRemote(monitor.dir, stableConfig('e2', 2, null, 'off'), FETCHED);
+    await call(client, monitor);
+    expect(client.calls.at(-1)?.model).toBe('gpt-5.5');
+    expect(pinsOf(monitor)).toEqual({});
+    store.writeRemote(monitor.dir, stableConfig('e3', 3), FETCHED);
+    await call(client, monitor);
+    expect(client.calls.at(-1)?.model).toBe('gpt-5-mini');
+    const pin = pinsOf(monitor).checkout;
+    expect(pin.model).toBe('openai/gpt-5-mini');
+    expect(pin.version).toBe(3);
+    expect(Object.keys(pin)).toEqual(['model', 'pinned_at', 'expires_at', 'version', 'basis']);
+  });
+
+  it('an env mode never deletes a pin', async () => {
+    const client = new FakeClient();
+    const monitor = wrap(client, { app: 'shop', process: 'checkout', routeFn });
+    store.writeRemote(monitor.dir, stableConfig('e1', 1, ownerPin('openai/gpt-5-nano', 1)), FETCHED);
+    await call(client, monitor);
+    process.env.TRYAII_MONITOR_MODE = 'off';
+    await call(client, monitor);
+    expect(Object.keys(pinsOf(monitor))).toEqual(['checkout']);
+  });
+
+  it('an unreachable server pin sends the anchor with route_status unreachable_pin', async () => {
+    const client = new FakeClient();
+    const monitor = wrap(client, { app: 'shop', process: 'checkout', routeFn });
+    store.writeRemote(monitor.dir, stableConfig('e1', 1, ownerPin('anthropic/claude-haiku-4.5', 1)), FETCHED);
+    await call(client, monitor);
+    expect(client.calls.at(-1)?.model).toBe('gpt-5.5');
+    const [event] = store.readRecentEvents(monitor.dir, 10);
+    expect(event.mode).toBe('stable');
+    expect(event.route_status).toBe('unreachable_pin');
+  });
+});
+
+// --- TS-308: the key decides the dashboard app -------------------------------------
+
+describe('TS-308: app name warning', () => {
+  it('warns once per local app, from a 200 and not again', async () => {
+    remote.resetAppNameWarnings();
+    const a = join(dataDir, 'summarizer');
+    const b = join(dataDir, 'shop');
+    mkdirSync(a);
+    mkdirSync(b);
+    const cfg = stableConfig('e1', 0);
+    const [p] = poller([[200, cfg], [304, null], [200, { ...cfg, etag: 'e2' }]], [a, b]);
+    expect([await p.pollOnce(), await p.pollOnce(), await p.pollOnce()]).toEqual(['changed', 'unchanged', 'changed']);
+    expect(warned.filter((w) => w.includes('uploads to app'))).toEqual([
+      'tryaii monitor: app="summarizer" uploads to app "shop" (the app of TRYAII_API_KEY). ' +
+        'To use a separate app, run: tryaii apps create summarizer and use its key.\n',
+    ]);
+    remote.resetAppNameWarnings();
+  });
+
+  it('warns from the cached answer on a 304', async () => {
+    remote.resetAppNameWarnings();
+    store.writeRemote(dataDir, stableConfig('e1', 0, null, 'stable', 'other'), FETCHED);
+    const [p] = poller([[304, null]], [dataDir]);
+    expect(await p.pollOnce()).toBe('unchanged');
+    expect(warned.filter((w) => w.includes('uploads to app "other"')).length).toBe(1);
+    remote.resetAppNameWarnings();
+  });
+});

@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import Optional
 
 from tryaii.auth.store import write_atomic
-from tryaii.claude_code.pricing import Pricer
+from tryaii.claude_code.pricing import Pricer, claude_code_model
 from tryaii.claude_code.tasks import KIND_MAIN, TaskRead
 from tryaii.diagnose.modelfit import SWAP_QUALITY_EPSILON, _blended_price
 from tryaii.monitor.events import format_ts
@@ -143,7 +143,8 @@ def classify_tasks(calls: list, read: TaskRead, pricer: Pricer, route_fn: RouteF
         if c.subagent and c.run:
             by_run.setdefault(c.run, []).append(c)
     costs = {c.key: pricer.cost(c) for c in calls}
-    anthropic = [m for m in pricer.registry.model_ids if m.startswith(ANTHROPIC_PREFIX)]
+    anthropic = [m for m in pricer.registry.model_ids
+                 if m.startswith(ANTHROPIC_PREFIX) and claude_code_model(m)]
     if policy_allowed is not None:
         only = set(policy_allowed)
         anthropic = [m for m in anthropic if m in only]
@@ -161,6 +162,8 @@ def classify_tasks(calls: list, read: TaskRead, pricer: Pricer, route_fn: RouteF
         if progress:
             progress(n, len(work))
         scores, cls = route_fn(task.text)
+        # Variants (``:batch``, ``:free``, ...) are not models Claude Code can use.
+        scores = [s for s in scores or [] if claude_code_model(score_id(s))]
         model = _anchor_model(mine, costs)
         anchor_id = pricer.resolve(model)
         overall = pick_winner(scores, anchor_id, pricer.registry, policy_allowed)
@@ -390,7 +393,47 @@ def write_analysis(data_dir, doc: dict) -> Path:
 
 
 def read_analysis(data_dir) -> Optional[dict]:
-    return _read_json(analysis_path(data_dir), ANALYSIS_SCHEMA)
+    doc = _read_json(analysis_path(data_dir), ANALYSIS_SCHEMA)
+    return drop_variants(doc) if doc else None
+
+
+def drop_variants(doc: dict) -> dict:
+    """An analysis without catalog variants Claude Code cannot use
+    (``pricing.claude_code_model``): an analysis stored before 0.8.3 may name
+    ``anthropic/claude-opus-4.7:batch`` beside ``anthropic/claude-opus-4.7``
+    (one display name twice). Variants leave the good-enough lists; a call
+    whose answer was a variant gets the cheapest usable model of its list (or
+    its own model); a process advice that named one is withdrawn until the
+    next ``analyze``."""
+    for result in (doc.get("calls") or {}).values():
+        if not isinstance(result, dict):
+            continue
+        good = [m for m in result.get("good_enough") or [] if claude_code_model(m)]
+        result["good_enough"] = good
+        rec = result.get("recommended")
+        if rec is not None and not claude_code_model(rec):
+            result["recommended"] = good[0] if good else result.get("anchor")
+            result["method"] = "band" if result["recommended"] != result.get("anchor") \
+                else "anchor"
+        if result.get("overall_winner") is not None \
+                and not claude_code_model(result["overall_winner"]):
+            result["overall_winner"] = None
+    for row in doc.get("processes") or []:
+        if not isinstance(row, dict):
+            continue
+        row["good_enough_shares"] = [g for g in row.get("good_enough_shares") or []
+                                     if isinstance(g, dict)
+                                     and claude_code_model(g.get("model"))]
+        for name in ("best_candidate", "overall_winner"):
+            value = row.get(name)
+            if isinstance(value, dict) and not claude_code_model(value.get("model")):
+                row[name] = None
+        rec = row.get("recommendation")
+        if isinstance(rec, dict) and not claude_code_model(rec.get("model")):
+            row["recommendation"] = None
+            row["advice"] = ("no advice: this analysis named a model variant Claude Code "
+                             "cannot use; run tryaii claude-code analyze again")
+    return doc
 
 
 def call_results(data_dir) -> dict:

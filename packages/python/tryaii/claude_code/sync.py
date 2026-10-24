@@ -11,12 +11,24 @@ live event it already holds:
 - ``event_id`` = ``importer.request_event_id(requestId)``: the id the server
   gave the live event (a call without ``requestId`` cannot be matched and is
   skipped); ``ts`` the log time (the server matches within minutes of it);
-- ``project``: the base name of the session's working directory, or null for
-  anything path-like; ``process``: ``main`` or the real subagent type (live
-  events of a custom subagent arrive as ``custom``);
+- ``project``: the base name of the session's working directory (the main
+  repository's for a git worktree), or null for ``unknown``, an id-like name
+  or anything path-like (``reader.project_value``); ``process``: ``main`` or
+  the real subagent type (live events of a custom subagent arrive as
+  ``custom``);
 - with a current ``analyze`` consent only: ``classification`` (category,
   subcategory, confidence), ``winner``, ``est_cost_winner_usd`` and
   ``taxonomy_version`` -- never text.
+
+**Imported calls** (``connect``'s log import, uploaded before ``analyze``
+ran, so without a task profile) get the same annotation once ``analyze`` has
+classified them (``plan_imported``, at most ``IMPORT_DAYS`` back): the
+importer's event id (``importer.event_id``, or the fallback id the event was
+stored under) and the stored event's ``ts``. Only events the uploader already
+sent count (``importer.uploaded_events``). A server without annotations of
+imported rows answers them ``unmatched``: retried for a day, then dropped,
+never an error. Without live telemetry, ``sync`` annotates imported calls only,
+with the app key in ``TRYAII_API_KEY``.
 
 Calls younger than ``SETTLE_S`` are left for the next run (their live event
 may not be stored yet). With a current analysis, the request also carries
@@ -44,8 +56,8 @@ from typing import Callable, Optional
 
 from tryaii.auth.store import write_atomic
 from tryaii.claude_code import analysis as analysis_mod
-from tryaii.claude_code.importer import STATE_DIR, request_event_id
-from tryaii.claude_code.reader import UNKNOWN_PROJECT
+from tryaii.claude_code.importer import STATE_DIR, event_id, legacy_event_id, request_event_id
+from tryaii.claude_code.reader import project_value
 from tryaii.monitor.events import format_ts, parse_ts
 
 ROUTE = "/v1/monitor/claude-code/annotations"
@@ -65,7 +77,8 @@ MIN_INTERVAL_S = 300
 LOCK_STALE_S = 1800
 #: analysis.json younger than this is reused; older is re-run (with consent).
 ANALYSIS_MAX_AGE_S = 24 * 3600
-_PATH_CHARS = ("/", "\\", ":")
+#: Imported calls (``connect``'s log import) are annotated this far back.
+IMPORT_DAYS = 30
 #: The server's limits on an advice document (longer entries would fail the request).
 ADVICE_MAX_LIST = 20
 CLASS_MAX = 64
@@ -77,22 +90,13 @@ class SyncError(Exception):
 
 # --- payload ----------------------------------------------------------------------
 
-def project_value(project) -> Optional[str]:
-    """The project label to send: a plain base name, else None."""
-    if not isinstance(project, str):
-        return None
-    value = project.strip()
-    if not value or value == UNKNOWN_PROJECT or any(ch in value for ch in _PATH_CHARS):
-        return None
-    if not value.isprintable() or len(value) > 256:
-        return None
-    return value
-
-
-def annotation(call, pricer, result: Optional[dict], taxonomy_version: Optional[str]) -> dict:
+def annotation(call, pricer, result: Optional[dict], taxonomy_version: Optional[str], *,
+               eid: Optional[str] = None, ts: Optional[str] = None) -> dict:
     """The annotation of one call (``result``: its stored analysis result or
-    None: then project and process only)."""
-    doc = {"event_id": request_event_id(call.request_id), "ts": format_ts(call.ts),
+    None: then project and process only). ``eid`` / ``ts``: the id and time
+    of the stored event (an imported call); default the live event's id and
+    the log time."""
+    doc = {"event_id": eid or request_event_id(call.request_id), "ts": ts or format_ts(call.ts),
            "project": project_value(call.project), "process": call.process,
            "classification": None, "winner": None, "est_cost_winner_usd": None,
            "taxonomy_version": None}
@@ -341,13 +345,13 @@ def choose_analysis(data_dir, now: datetime,
 # --- one run ----------------------------------------------------------------------
 
 def plan(calls: list, state: dict, results: dict, pricer, taxonomy: Optional[str],
-         now: datetime) -> list:
+         now: datetime, seen: Optional[set] = None) -> list:
     """The annotations to send: settled calls with a request id that are not
     applied yet (or applied without the task profile they now have) and not
     dropped."""
     settled = now - timedelta(seconds=SETTLE_S)
     out = []
-    seen = set()
+    seen = set() if seen is None else seen
     for call in calls:
         if not call.request_id or call.ts > settled:
             continue
@@ -360,6 +364,31 @@ def plan(calls: list, state: dict, results: dict, pricer, taxonomy: Optional[str
         if applied and (applied.get("classified") or doc["classification"] is None):
             continue
         out.append(doc)
+    return out
+
+
+def plan_imported(calls: list, uploaded: dict, state: dict, results: dict, pricer,
+                  taxonomy: Optional[str], seen: Optional[set] = None) -> list:
+    """The annotations of IMPORTED calls (``connect``'s log import): a call
+    whose event the uploader already sent WITHOUT a task profile (``uploaded``:
+    ``importer.uploaded_events``) and that ``analyze`` has classified since.
+    The event id is the importer's (``importer.event_id``, or the pre-v1.5
+    fallback id the event was stored under) and ``ts`` the stored event's.
+    Ids already applied with a profile, or dropped, are not sent again."""
+    out = []
+    seen = set() if seen is None else seen
+    for call in calls:
+        result = results.get(call.key)
+        if not (isinstance(result, dict) and result.get("category")):
+            continue
+        eid = next((i for i in (event_id(call), legacy_event_id(call)) if i in uploaded), None)
+        if eid is None or uploaded[eid]["classified"] or eid in seen or eid in state["dropped"]:
+            continue
+        seen.add(eid)
+        if (state["applied"].get(eid) or {}).get("classified"):
+            continue
+        out.append(annotation(call, pricer, result, taxonomy, eid=eid,
+                              ts=uploaded[eid]["ts"]))
     return out
 
 
@@ -404,20 +433,28 @@ def apply_response(state: dict, sent: list, response: dict, now: datetime) -> tu
 
 def run(data_dir, calls: list, *, pricer, now: datetime, since: datetime, key: str,
         base_url: str, version: str, analysis_doc: Optional[dict], state: dict,
-        opener=None) -> dict:
+        opener=None, imported_calls: Optional[list] = None,
+        uploaded: Optional[dict] = None) -> dict:
     """Send the annotations and advice; updates ``state`` (the caller writes
-    it). Returns counts; raises SyncError on the first failed request (what was
-    answered before it is kept)."""
+    it). ``calls``: the live window's calls; ``imported_calls`` with
+    ``uploaded``: the import window's calls and the uploaded imported events
+    (``plan_imported``); ``since``: the start of the earliest window. Returns
+    counts; raises SyncError on the first failed request (what was answered
+    before it is kept)."""
     prune(state, since)
     results = (analysis_doc or {}).get("calls") if analysis_doc else None
     results = results if isinstance(results, dict) else {}
     taxonomy = (analysis_doc or {}).get("taxonomy_version")
-    todo = plan(calls, state, results, pricer, taxonomy, now)
+    seen: set = set()
+    todo = plan(calls, state, results, pricer, taxonomy, now, seen)
+    imported = plan_imported(imported_calls or [], uploaded or {}, state, results, pricer,
+                             taxonomy, seen)
+    todo += imported
     advice = advice_docs(analysis_doc)
     if advice and state.get("advice_generated_at") == (analysis_doc or {}).get("created_at"):
         advice = []
-    counts = {"annotations": len(todo), "matched": 0, "unmatched": 0, "advice": len(advice),
-              "advice_stored": 0, "requests": 0}
+    counts = {"annotations": len(todo), "imported": len(imported), "matched": 0,
+              "unmatched": 0, "advice": len(advice), "advice_stored": 0, "requests": 0}
     for part_calls, part_advice in batches(todo, advice):
         response = send(body(part_calls, part_advice, version), key=key, base_url=base_url,
                         opener=opener)

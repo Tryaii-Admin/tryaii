@@ -44,6 +44,8 @@ import {
   pickWinner,
   pinFromFirstCall,
   policyAllowed,
+  reconcilePin,
+  serverPinTarget,
   providerClass,
   reachable,
   resolveAnchor,
@@ -59,6 +61,7 @@ import {
   windowSeconds,
   type ModelFactsMap,
 } from '../src/monitor/index.js';
+import { appNameWarning } from '../src/monitor/remote.js';
 import { ModelPolicy } from '../src/policy.js';
 import { ModelRegistry } from '../src/registry/models.js';
 
@@ -146,6 +149,11 @@ function genWinner(inp: Record<string, any>): unknown {
     const decision = managedTarget(provider, anchor, inp.managed_model ?? null, reg, allowed);
     routed = decision.target;
     status = decision.route_status;
+  } else if (mode === 'stable' && 'server_pin_model' in inp) {
+    // SPEC.md §2.5 (TS-307): the server's pin is sent like a managed model.
+    const decision = serverPinTarget(provider, anchor, inp.server_pin_model, reg, allowed);
+    routed = decision.target;
+    status = decision.route_status;
   } else {
     routed = routedModel(mode, provider, anchor, routedWinner.winner, inp.pin_model ?? null, allowed);
   }
@@ -166,6 +174,18 @@ function pinModels(spec: unknown): ModelFactsMap | null {
 }
 
 function genPin(inp: Record<string, any>): unknown {
+  if ('reconcile' in inp) {
+    // SPEC.md §2.5 (TS-307): server pin first, version rule, removal.
+    const r = inp.reconcile;
+    let pins = r.pins ?? null;
+    if (pins === 'from_store') pins = store.readPins(storeDir(r.store));
+    return reconcilePin(r.remote ?? null, pins, r.process, r.now, r.mode, r.mode_source ?? null);
+  }
+  if ('app_name_warning' in inp) {
+    // SPEC.md §3.3 (TS-308): the one warning line, or null.
+    const w = inp.app_name_warning;
+    return appNameWarning(w.app, w.remote ?? null);
+  }
   if ('facts_of' in inp) {
     const facts = modelFacts(starterBundle());
     const out: Record<string, unknown> = {};

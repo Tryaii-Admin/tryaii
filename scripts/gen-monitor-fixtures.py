@@ -215,6 +215,7 @@ def gen_winner(inp):
         reachable,
         route_allowed,
         routed_model,
+        server_pin_target,
     )
 
     registry = _registry()
@@ -231,6 +232,11 @@ def gen_winner(inp):
     if mode == "managed":
         decision = managed_target(provider, anchor, inp.get("managed_model"), registry,
                                   allowed=allowed)
+        routed, status = decision["target"], decision["route_status"]
+    elif mode == "stable" and "server_pin_model" in inp:
+        # SPEC.md §2.5 (TS-307): the server's pin is sent like a managed model.
+        decision = server_pin_target(provider, anchor, inp["server_pin_model"], registry,
+                                     allowed=allowed)
         routed, status = decision["target"], decision["route_status"]
     else:
         routed = routed_model(mode, provider, anchor, routed_winner["winner"],
@@ -257,8 +263,22 @@ def _pin_models(spec):
 
 
 def gen_pin(inp):
-    from tryaii.monitor.pins import evaluate_pin, pin_from_first_call
+    from tryaii.monitor.pins import evaluate_pin, pin_from_first_call, reconcile_pin
 
+    if "reconcile" in inp:
+        # SPEC.md §2.5 (TS-307): server pin first, version rule, removal.
+        r = inp["reconcile"]
+        pins = r.get("pins")
+        if pins == "from_store":
+            pins = _store_pins(r["store"])
+        return reconcile_pin(r.get("remote"), pins, r["process"], r["now"], r["mode"],
+                             r.get("mode_source"))
+    if "app_name_warning" in inp:
+        # SPEC.md §3.3 (TS-308): the one warning line, or null.
+        from tryaii.monitor.remote import app_name_warning
+
+        w = inp["app_name_warning"]
+        return app_name_warning(w["app"], w.get("remote"))
     if "facts_of" in inp:
         facts = _pin_models("starter")
         return {mid: facts.get(mid) for mid in inp["facts_of"]}

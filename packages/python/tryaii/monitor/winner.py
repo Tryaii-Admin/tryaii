@@ -36,6 +36,9 @@ MODES = (MODE_OFF, MODE_STABLE, MODE_DYNAMIC, MODE_MANAGED)
 
 #: ``route_status`` when a managed model could not be sent (SPEC.md §2.9).
 STATUS_UNREACHABLE_MANAGED = "unreachable_managed"
+#: ``route_status`` when the server's stable pin could not be sent (SPEC.md
+#: §2.5, API.md v1.8).
+STATUS_UNREACHABLE_PIN = "unreachable_pin"
 
 
 def provider_class(base_url: Optional[str]) -> str:
@@ -259,3 +262,15 @@ def managed_target(provider: str, anchor_id: Optional[str], model: Optional[str]
         return {"model": resolved, "target": None,
                 "route_status": STATUS_UNREACHABLE_MANAGED}
     return {"model": resolved, "target": target, "route_status": None}
+
+
+def server_pin_target(provider: str, anchor_id: Optional[str], model: Optional[str],
+                      registry, allowed=None) -> dict:
+    """What a ``stable`` call sends when the server pins the process
+    (SPEC.md §2.5, API.md v1.8): :func:`managed_target` applied to
+    ``pin.model``, with ``route_status`` = ``"unreachable_pin"`` when the
+    pinned model cannot be sent (the anchor is sent instead)."""
+    decision = managed_target(provider, anchor_id, model, registry, allowed=allowed)
+    if decision["route_status"] is not None:
+        decision = {**decision, "route_status": STATUS_UNREACHABLE_PIN}
+    return decision

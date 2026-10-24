@@ -1,0 +1,16 @@
+{
+  "schema": "tryaii.monitor.pins/1",
+  "processes": {
+    "summarize": {
+      "model": "openai/gpt-5-mini",
+      "pinned_at": "2026-10-25T11:00:00.000Z",
+      "expires_at": null,
+      "version": 3,
+      "basis": {
+        "window": "server",
+        "events": 0,
+        "counts": {}
+      }
+    }
+  }
+}

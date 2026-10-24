@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.8.3 (2026-10-25)
+
+- **Claude Code: task profiles for imported calls.** `connect` uploads the
+  imported calls before you may have run `analyze`, so the dashboard's model
+  advice and savings stayed at $0 for them. `tryaii claude-code sync` now also
+  sends an annotation (task type, recommended model and its cost, taxonomy
+  version) for each imported call of the last 30 days that was uploaded
+  without a task profile and that `analyze` has classified (the importer's
+  event id and time; at most 500 calls per request; applied ids are not sent
+  again). A server that does not annotate imported rows yet answers them as
+  `unmatched`, which is harmless. Without live telemetry `sync` annotates
+  imported calls only, with the app key in `TRYAII_API_KEY`. `connect` ends
+  with one line suggesting `analyze`, then `sync`, while `analyze` has no
+  consent. Contract: `shared/monitor/API.md` §9.
+
+- **Claude Code: advice names only models Claude Code can use.** Catalog
+  variants with a `:` suffix (`:batch`, `:free`, `:thinking`, `:extended`)
+  are left out of `analyze`'s good-enough lists, recommendations and overall
+  winner, the `report` Haiku estimate and the advice `sync` sends; a stored
+  analysis is read without them. This also removes the duplicate entries
+  ("Claude Opus 4.7" twice: the model and its `:batch` variant share one
+  display name).
+
+- **Claude Code: project = repository.** The project of a call made in a git
+  worktree (including the Claude app's worktree folders) is the main
+  repository's folder name, read from the worktree's `.git` file only; a
+  folder that no longer exists keeps its name. A folder name that looks like
+  an id (`local_<uuid>`, a UUID, a long hex string) gives no project: `null`
+  is sent (imported events' `call_site.file`, `sync` annotations) and the
+  dashboard shows "Other". `report`, `analyze`, `connect` and `sync` use the
+  same label.
+
+- **Monitor: the dashboard owns the stable pin (TS-307, contract
+  `shared/monitor/API.md` v1.8).** A `stable` sub-process now sends the
+  model the server pinned (the owner's choice, or the current winner for
+  24 hours) on its next call, without routing in-path, in both SDKs; an
+  unreachable pin sends the model in your code with `route_status:
+  "unreachable_pin"`. A local pin counts only while its new `version`
+  equals the process's remote `pin_version`, so a new dashboard pin
+  replaces it, and unpin (remote mode `off`) deletes it from `pins.json` on
+  the next call. A mode from `TRYAII_MONITOR_MODE`, `wrap(mode=)` or
+  `config.json` never deletes a pin. Older `pins.json` files and v1.7
+  servers keep the 0.8.2 behaviour. New helpers: `reconcile_pin` /
+  `reconcilePin` and `server_pin_target` / `serverPinTarget`.
+
+- **Monitor: warn when `wrap(app=...)` differs from the key's app
+  (TS-308).** When the dashboard config names an `app_name` other than the
+  local app, the monitor logs one warning per app and process, and
+  `tryaii monitor status` adds a `key app` line (`--json`: `key_app`,
+  `key_app_mismatch`). The key decides the dashboard app; `app=` is only
+  the local name.
+
 ## 0.8.2 (2026-10-24)
 
 - **Monitor: cache writes and lifetimes on every event (TS-229, contract
