@@ -24,6 +24,7 @@ import inspect
 import logging
 import os
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -55,8 +56,9 @@ from tryaii.monitor.pins import (
     evaluate_pin,
     model_facts,
     pin_from_first_call,
-    pin_valid,
+    reconcile_pin,
     set_pin,
+    with_version,
 )
 from tryaii.monitor.transport import (
     STATUS_QUEUE_FULL,
@@ -80,6 +82,7 @@ from tryaii.monitor.winner import (
     resolve_anchor,
     route_allowed,
     routed_model,
+    server_pin_target,
     shadow_allowed,
 )
 
@@ -230,6 +233,8 @@ class Monitor:
         self._remote = _CachedDoc(self.dir / store.REMOTE_FILE, store.read_remote,
                                   store.remote_generation)
         self._pins = _CachedDoc(self.dir / store.PINS_FILE, store.read_pins)
+        #: Guards every read-modify-write of pins.json (calls run on many threads).
+        self._pins_lock = threading.Lock()
         try:
             self._transport.register_app(self.dir)
         except Exception:  # noqa: BLE001 - fail-open
@@ -270,7 +275,7 @@ class Monitor:
             text, digest = routing_text(kwargs.get("messages"))
             policy = self._transport.policy_allowed()
             ids = registry.model_ids
-            return CallPlan(
+            plan = CallPlan(
                 ts=format_ts(_utcnow()), app=self.app, process=process,
                 mode=resolved["mode"], provider=self.provider,
                 model_requested=model_requested, anchor=anchor,
@@ -285,6 +290,19 @@ class Monitor:
         except Exception:  # noqa: BLE001 - fail-open
             logger.debug("monitor: before() failed", exc_info=True)
             return None
+        self.drop_stale_pin(plan)
+        return plan
+
+    def drop_stale_pin(self, plan: CallPlan) -> None:
+        """When the remote config sets this process to a mode other than
+        ``stable`` (unpin on the dashboard saves ``off``), delete its entry
+        from pins.json (SPEC.md §2.5, TS-307). A mode from env / args /
+        config.json never deletes a pin. Never raises."""
+        try:
+            if plan.mode != MODE_STABLE and plan.mode_source == "remote":
+                self._reconcile(plan)
+        except Exception:  # noqa: BLE001 - fail-open
+            logger.debug("monitor: drop_stale_pin() failed", exc_info=True)
 
     def langfuse_parent(self, plan: Optional[CallPlan], target: Any) -> None:
         """With the Langfuse export on, Langfuse's OpenAI integration on the
@@ -334,6 +352,7 @@ class Monitor:
             plan.mode_source = resolved["source"]
         except Exception:  # noqa: BLE001 - fail-open: keep the mode from before()
             logger.debug("monitor: settle_mode() failed", exc_info=True)
+        self.drop_stale_pin(plan)
 
     # -- 2. decide -------------------------------------------------------
 
@@ -378,14 +397,33 @@ class Monitor:
             plan.outcome = outcome
         return self._winner(outcome, plan.anchor)
 
+    def _reconcile(self, plan: CallPlan) -> dict:
+        """:func:`reconcile_pin` against the cached remote.json and
+        pins.json; writes pins.json only when the entry changed. The
+        read-modify-write holds the monitor's pins lock."""
+        with self._pins_lock:
+            result = reconcile_pin(self._remote.get(), self._pins.get(), plan.process, plan.ts,
+                                   plan.mode, plan.mode_source)
+            if result["write"]:
+                store.write_pins(self.dir, result["pins"])
+                self._pins.set(result["pins"])
+        return result
+
     def _stable_target(self, plan: CallPlan) -> Optional[str]:
-        pins = self._pins.get()
-        pin = (pins.get("processes") or {}).get(plan.process)
-        if pin_valid(pin, plan.ts):
-            return routed_model(MODE_STABLE, plan.provider, plan.anchor, None, pin["model"],
-                                allowed=plan.policy)
+        """SPEC.md §2.5: the server's pin first (no in-path routing), else
+        the local pin while it is valid and its version matches the remote
+        ``pin_version``, else a new local pin from history or this call."""
+        state = self._reconcile(plan)
+        if state["action"] == "server":
+            decision = server_pin_target(plan.provider, plan.anchor, state["pin"]["model"],
+                                         self._transport.registry(), allowed=plan.policy)
+            plan.status_override = decision["route_status"]
+            return decision["target"]
+        if state["action"] == "keep":
+            return routed_model(MODE_STABLE, plan.provider, plan.anchor, None,
+                                state["pin"]["model"], allowed=plan.policy)
         events = store.read_events(self.dir, plan.ts, PIN_HISTORY.total_seconds())
-        decision = evaluate_pin(events, pin, plan.ts, plan.process, self._model_facts())
+        decision = evaluate_pin(events, state["pin"], plan.ts, plan.process, self._model_facts())
         if decision["action"] == "pin":
             new_pin = decision["pin"]
         else:
@@ -394,9 +432,12 @@ class Monitor:
             if not winner or not reachable(plan.provider, winner, plan.anchor):
                 return None
             new_pin = pin_from_first_call(winner, plan.ts)
-        doc = set_pin(pins, plan.process, new_pin)
-        store.write_pins(self.dir, doc)
-        self._pins.set(doc)
+        # Re-read under the lock: other calls may have changed pins.json
+        # while this one routed.
+        with self._pins_lock:
+            doc = set_pin(self._pins.get(), plan.process, with_version(new_pin, state["version"]))
+            store.write_pins(self.dir, doc)
+            self._pins.set(doc)
         return routed_model(MODE_STABLE, plan.provider, plan.anchor, None, new_pin["model"],
                             allowed=plan.policy)
 

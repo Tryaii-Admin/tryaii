@@ -40,6 +40,8 @@ export type Mode = (typeof MODES)[number];
 
 /** `route_status` when a managed model could not be sent (SPEC.md §2.9). */
 export const STATUS_UNREACHABLE_MANAGED = 'unreachable_managed';
+/** `route_status` when the server's stable pin could not be sent (SPEC.md §2.5, API.md v1.8). */
+export const STATUS_UNREACHABLE_PIN = 'unreachable_pin';
 
 /** The policy's allowed ids (any iterable), or null = unconstrained. */
 export type Allowed = Iterable<string> | null | undefined;
@@ -311,4 +313,22 @@ export function managedTarget(
   const target = sendable(provider, anchorId, resolved, allowed);
   if (target === null) return { model: resolved, target: null, route_status: STATUS_UNREACHABLE_MANAGED };
   return { model: resolved, target, route_status: null };
+}
+
+/**
+ * What a `stable` call sends when the server pins the process (SPEC.md
+ * §2.5, API.md v1.8): `managedTarget` applied to `pin.model`, with
+ * `route_status` = `unreachable_pin` when the pinned model cannot be sent
+ * (the anchor is sent instead).
+ */
+export function serverPinTarget(
+  provider: string,
+  anchorId: string | null | undefined,
+  model: unknown,
+  registry: ModelRegistry,
+  allowed: Allowed = null,
+): ManagedDecision {
+  const decision = managedTarget(provider, anchorId, model, registry, allowed);
+  if (decision.route_status !== null) return { ...decision, route_status: STATUS_UNREACHABLE_PIN };
+  return decision;
 }

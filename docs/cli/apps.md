@@ -11,6 +11,11 @@ background:
 - following the modes you set per sub-process on the dashboard
   (`off`, `stable`, `dynamic`, `managed`).
 
+The key decides the dashboard app; `wrap(app=...)` is only the local name.
+When the two names differ, the monitor warns once per app and process; to
+give a program its own dashboard app, run `tryaii apps create <name>` and use
+its key.
+
 ```bash
 tryaii login                                   # once: your tryaii.com account
 tryaii apps create shop                        # prints the app id and the full key ONCE

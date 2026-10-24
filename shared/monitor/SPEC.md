@@ -21,6 +21,14 @@ human `events` line (§5.5). The wrappers fill the write fields since
 TS-229; the cost estimate learns about them in TS-230; the server stores
 them in TS-231.
 
+API.md v1.8 (2026-10-25, Jira TS-307 / TS-308) moves the stable pin to the
+server: a `stable` call sends the RemoteConfig `pin` first, a local pin
+counts only while its `version` equals the remote `pin_version`, and a
+process whose remote mode is not `stable` loses its local pin (§2.5,
+`reconcile_pin`); `pins.json` gains the optional `version`. The poller warns
+once per local app when the key's app (`app_name`) has another name (§3.3),
+and `monitor status` shows it (§2.7, §5.2).
+
 API.md v1.7 (2026-10-24, Jira TS-245) adds the optional event field
 `usage.reasoning_tokens` (§3.1) and the optional upload-batch field
 `integrations` (§3.4); the Langfuse export that sets it is the section
@@ -173,15 +181,53 @@ id that was sent (anchor native id when `null`).
 The `winner` fixture suite freezes, per case: `winner` (§2.3 on the
 policy-filtered ranking), `winner_reachable`, `routed_winner` (§2.3 on the
 ranking filtered to `route_allowed`), `routed`, `model_to_send` and
-`route_status` (`unreachable_managed` or `null`). Inputs: `provider`,
-`mode`, `anchor`, `scores`, optional `pin_model`, `allowed`,
-`managed_model`.
+`route_status` (`unreachable_managed`, `unreachable_pin` or `null`).
+Inputs: `provider`, `mode`, `anchor`, `scores`, optional `pin_model`,
+`allowed`, `managed_model`, `server_pin_model` (v1.8: a `stable` call with
+the server's pin, §2.5 `server_pin_target`).
 
 ### §2.5 Pins (`pin`)
 
 `pins.json` = `{"schema": "tryaii.monitor.pins/1", "processes": {name: pin}}`
-with `pin = {"model", "pinned_at", "expires_at", "basis": {"window",
-"events", "counts"}}`; processes sorted by name.
+with `pin = {"model", "pinned_at", "expires_at", "version", "basis":
+{"window", "events", "counts"}}`; processes sorted by name. `version`
+(API.md v1.8) is optional: a file from before v1.8 has none and still
+loads (it counts as 0). `expires_at` is `null` only for an owner's pin from
+the server, which `pin_valid` treats as valid until it is replaced.
+
+**The server's pin first (API.md v1.8, TS-307).** Before every call the
+wrapper runs `reconcile_pin(remote, pins, process, now, mode, mode_source)`
+→ `{"action", "pin", "version", "write", "pins", "reason"}` (`pins` = the
+document after the change; `write` = pins.json must be written, so there is
+no write per call):
+
+1. `mode` is not `stable`: when `mode_source` is `remote` (the remote config
+   set the mode — e.g. `off` after an unpin) and the process has an entry →
+   `remove` (the entry is deleted, `reason` `"remote mode is <mode>"`); else
+   `none`. A mode from env `TRYAII_MONITOR_MODE`, `wrap(mode=)` or
+   `config.json` never deletes a pin.
+2. The remote entry of the process has `mode: "stable"` and a `pin` with a
+   `model` → `server`: the call sends `pin.model` with
+   `server_pin_target(provider, anchor, model, registry, allowed)` =
+   `managed_target` (§2.9) with `route_status: "unreachable_pin"` in place
+   of `unreachable_managed` (the anchor is sent when the model cannot be);
+   no in-path routing (the call is still shadow-routed). The entry becomes
+   `{"model", "pinned_at", "expires_at" (the server's, or null), "version":
+   pin.version, "basis": {"window": "server", "events": 0, "counts": {}}}`,
+   written only when it differs. `reason` = `"server pin (<source>)"`.
+3. Otherwise the remote `pin_version` of the process (absent: no remote
+   config, no process entry, or a v1.7 server → do not compare) is compared
+   with the local pin's `version` (missing = 0); a mismatch drops the entry
+   (`write: true`, `reason` `"local pin version <a> != remote pin_version
+   <b>"`).
+4. A remaining valid pin → `keep`. Else `evaluate` with `pin` = the expired
+   pin or null: the wrapper runs `evaluate_pin` below (and, for `none`,
+   `pin_from_first_call`) and stores the new pin with `version` = the remote
+   `pin_version` or 0, placed after `expires_at`.
+
+The `pin` fixture suite freezes `reconcile_pin` (inputs under `reconcile`,
+`pins` inline or `"from_store"`) and the §3.3 warning (inputs under
+`app_name_warning`).
 
 `evaluate_pin(events, pin, now, process, models)`:
 
@@ -274,6 +320,7 @@ now` (`since` ∈ `24h|7d|30d`):
 ```json
 {"schema": "tryaii.monitor.status/1", "app": "shop", "now": "...", "since": "24h",
  "source": {"kind": "local"|"remote", "etag", "fetched_at"},
+ "key_app": "<app_name>", "key_app_mismatch": true|false,   // only with app_name
  "upload": {"state": "off"|"ok"|"error", "events", "last_ok", "last_error"},
  "processes": [{"process", "mode", "mode_source", "managed_model",
                 "pinned": {"model", "expires_at"}|null,
@@ -305,7 +352,12 @@ now` (`since` ∈ `24h|7d|30d`):
   `realised_savings_usd` = Σ max(0, `est_cost_anchor_usd` − `est_cost_usd`)
   over swapped events carrying both; both are `null` when no event in the
   set carries `est_cost_anchor_usd` (slice-1 records).
-- `pinned` only while the pin is valid at `now`.
+- `pinned` only while the pin is valid at `now` (an owner's pin from the
+  server, `expires_at: null`, is valid).
+- `key_app` / `key_app_mismatch` (API.md v1.8, TS-308; right after
+  `source`): when `remote.json` carries a non-empty `app_name`, `key_app` =
+  that name and `key_app_mismatch` = it differs from `app` (exact compare);
+  both keys are omitted otherwise.
 - `errors` = events with a non-null `error`. Token totals sum the numeric
   usage fields (`prompt_tokens`, `completion_tokens`, `total_tokens`; a
   missing or null field counts 0).
@@ -680,6 +732,17 @@ when `TRYAII_API_KEY` is set and `TRYAII_MONITOR_REMOTE` is not `"0"`:
   process wrote applies on the **next call**, with no 5 s delay and no
   reliance on mtime resolution (TS-296). A `remote.json` written by another
   process still applies within ~5 s.
+- **App name** (API.md v1.8, TS-308): when an answer names an `app_name`
+  that differs from the name of an app directory it applies to (exact
+  string compare), the SDK logs ONE warning per local app per OS process,
+  on the monitor's warning channel (Python: logger `tryaii.monitor`,
+  `WARNING`; Node: stderr, like the rejected-key line):
+  `tryaii monitor: app="<local>" uploads to app "<app_name>" (the app of
+  TRYAII_API_KEY). To use a separate app, run: tryaii apps create <local>
+  and use its key.` It is checked on every `200` and, from the cached
+  `remote.json`, on every `304` (a mismatch that never changes is otherwise
+  never answered with a `200` again). The key decides the dashboard app;
+  `app=` is only the local name.
 - **First call** (TS-296): while the poller's first answer has not come,
   the first call(s) of the process wait for it — `200`, `304`, error or
   `401`, whichever — but at most **500 ms**, once per process: the bound
@@ -780,6 +843,10 @@ them. v2 stores: `managed` (v2 event lines with `event_id` /
 `taxonomy_version` / `est_cost_anchor_usd`, a managed process in
 config.json, remote.json with etag `e-42`, an upload cursor covering the
 first two lines) and `flaky` (only an upload cursor with `last_error`).
+v1.8 store: `keyapp` (a `remote.json` whose `app_name` is `shop` and whose
+`summarize` is pinned by the owner, and the matching `pins.json` entry with
+`expires_at: null` and `version: 3`; read by the `status` and `cli`
+suites).
 v2.2 store: `cached` (event lines with the §3.1b cache fields in every
 combination — an OpenAI 30 m write with policy, an Azure read without a
 write field, a 5 m + 1 h breakdown, an OpenRouter zero read, plus one v2
@@ -855,6 +922,11 @@ After each process row its `files` follow as `    -> <file>` lines. A
 window with no events and no configured/pinned processes prints
 `no calls in this window` instead of the table and totals. The totals line
 uses the §2.7 totals with the same money formatting.
+
+v1.8 (TS-308): when the status document has `key_app_mismatch: true`, the
+line `  key app: "<key_app>" (differs from the local name)` (two leading
+spaces) follows the source line. `--json` carries `key_app` /
+`key_app_mismatch` as in §2.7.
 
 TS-294 (catalog contract v1.4): after every block (and after the `classification: off ...`
 line when there is one) comes one machine-wide line naming the catalog this

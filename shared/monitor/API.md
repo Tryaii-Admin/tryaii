@@ -1,4 +1,6 @@
-# monitor upload and dashboard API — contract v1.7 (2026-10-24)
+# monitor upload and dashboard API — contract v1.8 (2026-10-25)
+
+v1.8 (2026-10-25, Jira TS-307 / TS-308; it follows v1.7, Langfuse): the server owns the stable pin. RemoteConfig (section 3.3) gains the top-level `app_name` (the app's display name, TS-308) and, per process, `pin_version` (a counter that never goes down) and `pin` (the model a `stable` process is pinned to, chosen by the owner or the current winner, TS-307); the summary (section 3.4) gains `processes[].config_pin`. A config PUT that changes a process's mode or model (or removes the process) bumps its `pin_version`, so an SDK drops a local pin that no longer belongs to the dashboard's choice (unpin, a new pinned model), and an SDK of 0.8.3 or newer sends the server's `pin.model` without routing in-path (`SPEC.md` section 2.5). All additive: the schema id stays `tryaii.monitor.remote/1`, and a reader must tolerate the new keys' absence (a v1.7 server); an SDK then keeps the v1.7 behaviour.
 
 v1.7 (2026-10-24, Jira TS-245 / TS-249, epic "Works with Langfuse"; it follows v1.6, Claude Code sessions, TS-297 / TS-290): two optional event fields and one optional batch field (section 3.2.4). `usage.reasoning_tokens` is the reasoning share of `completion_tokens` (included in it, never added on top), read from `usage.completion_tokens_details.reasoning_tokens`. `otel` is the OpenTelemetry span the call belongs to (`{trace_id, span_id}`, plus `origin: "tryaii"` when the SDK made that span itself), written only when there is one, so the SDK's Langfuse export can put its span in the same trace as the developer's own (`SPEC.md` section "Langfuse export"). The upload batch gains `integrations: ["langfuse"]` while the SDK's Langfuse export is on, so the funnel can be measured. All three are optional; the schema ids stay `tryaii.monitor.event/1` and `tryaii.monitor.upload/1`, older events and batches stay valid, and the batch carries the event fields exactly as stored. The server stores `usage.reasoning_tokens` as `events.reasoning_tokens`, keeps the known names of `integrations` per app in `app_integrations` (section 4) and ignores `otel`. Nothing in v1.7 changes a v1.6 field.
 
@@ -476,13 +478,69 @@ RemoteConfig = {
   "schema": "tryaii.monitor.remote/1",
   "etag": "<opaque string>",
   "app_id": "app_...",
+  "app_name": "<the app's display name>",               // v1.8 (TS-308); always sent by a v1.8 server
   "default_mode": "off"|"stable"|"dynamic"|"managed"|null,
   "processes": {
-    "<process name>": {"mode": "off"|"stable"|"dynamic"|"managed", "model": "<catalog id>"|null}
+    "<process name>": {
+      "mode": "off"|"stable"|"dynamic"|"managed",
+      "model": "<catalog id>"|null,                     // managed only; null for stable (the pin carries it)
+      "pin_version": <int >= 0>,                        // v1.8 (TS-307); always sent by a v1.8 server
+      "pin": {"model": "<catalog id>",                  // v1.8 (TS-307); non-null only when mode == "stable"
+              "version": <int, == pin_version>,
+              "source": "owner"|"winner",
+              "pinned_at": "...Z",
+              "expires_at": "...Z"|null}|null
+    }
   },
   "updated_at": "...Z", "updated_by": "<user id>"|null
 }
 ```
+
+Key order is as shown: `app_name` after `app_id`; `pin_version` and `pin` after
+`model`. A reader must tolerate their absence (a v1.7 server).
+
+**Server-owned stable pin (v1.8, TS-307).**
+
+1. `pin_version` is a per-process counter stored with the config. It never goes
+   down and survives the process going to `off` or being removed (it stays in
+   storage; when the process reappears it continues from the stored value).
+2. A PUT that changes a process's `mode` or `model` bumps that process's
+   `pin_version` by 1 — including unpin (the dashboard saves `off`) — and so
+   does removing the process (set to `null`). A PUT that leaves the mode and
+   model unchanged does not; in particular re-saving `stable` without a model
+   re-pins the current `pin_candidate` and bumps `pin_version` only when that
+   winner is a different model than the stored pin.
+3. Saving `stable`: with `model` (validated like `managed`: a non-empty
+   string) →
+   `pin = {model, version, source: "owner", pinned_at: now, expires_at: null}`,
+   held until the owner changes it; without `model` → the current
+   `pin_candidate` (section 3.4) with `source: "winner"` and `expires_at = now +
+   24h`; no candidate → `pin: null` (the SDK then pins locally). The response's
+   `model` stays `null` for `stable`.
+4. Refresh of a `winner` pin (lazy, no cron): whenever a RemoteConfig is built
+   (long poll and dashboard GET), a `stable` process whose pin is `null` (winner
+   pending) or whose `winner` pin has `expires_at <= now` gets `pin_candidate`
+   recomputed: a new model → a new pin and `pin_version + 1`; the same model →
+   same version, `pinned_at = now`, `expires_at = now + 24h`; still no candidate
+   → unchanged. Any stored change bumps the etag. An `owner` pin is never
+   refreshed. The recompute is cached per app (about 60 s) or runs only when
+   expired.
+5. `pin` is `null` for every mode other than `stable`.
+6. Only a process entry carries a pin. A process that is `stable` only through
+   `default_mode` (no entry in `processes`) gets no server pin and no
+   `pin_version`; the SDK pins it locally, as in v1.7.
+
+**SDK side** (`SPEC.md` section 2.5): a `stable` call with a remote `pin` sends
+`pin.model` (reachability as for `managed`; unreachable → the anchor with
+`route_status: "unreachable_pin"`) and stores it in `pins.json` (`basis.window:
+"server"`); without one, a local pin counts only while its `version` equals the
+process's `pin_version`; a process whose remote mode is not `stable` loses its
+local pin on its next call.
+
+**`app_name` (v1.8, TS-308)** is the app's current display name (the one the
+dashboard shows and `tryaii apps create <name>` sets). The key, not `wrap(app=)`,
+decides which dashboard app the events reach; an SDK warns once per local app when
+the two names differ (`SPEC.md` section 3.3).
 
 - The SDK keeps the last answer in `<data_dir>/monitor/<app>/remote.json`
   (same shape plus `"fetched_at"`), re-polls immediately after a 200/304, waits
@@ -514,6 +572,7 @@ GET /v1/monitor/apps/{app_id}/summary?since=24h|7d|30d|90d       (90d: v1.6)
      "cached_tokens"|null, "cache_write_tokens"|null,   // v1.5: sums over the window; null when no event reported them
      "top_winner": "<model id>"|null, "top_winner_share": 0..1,
      "pin_candidate": {model, window, events, counts}|null,   // TS-295, see below
+     "config_pin": RemoteConfig pin|null,  // v1.8 (TS-307): processes.<p>.pin of section 3.3
      "anchor": "<model id>"|null, "traffic_light": "green"|"yellow"|"red"|"grey",
      "models": [{model, calls, share, cost_usd, wins, win_share, reachable,
                  aliases}],             // aliases: v1.6, see "Model ids" below
@@ -538,8 +597,10 @@ GET /v1/monitor/apps/{app_id}/config               -> 200 RemoteConfig
 PUT /v1/monitor/apps/{app_id}/config
     {"default_mode"?: ..., "processes": {"<name>": {"mode": ..., "model"?: ...}}}
 -> 200 RemoteConfig   (merges per process; a process set to null is removed; writes an audit row;
-                       bumps etag; wakes long-polls)
--> 400 {"error":"bad_config","detail":"..."}  (managed without model, unknown mode)
+                       bumps etag; wakes long-polls; v1.8: a changed mode/model bumps the process's
+                       pin_version, and stable sets the pin, section 3.3)
+-> 400 {"error":"bad_config","detail":"..."}  (managed without model, unknown mode; v1.8: stable
+                                               with a model that is not a non-empty string)
 GET /v1/monitor/apps/{app_id}/audit?limit=50    -> 200 {"entries":[{at, user_id, change}]}
 GET /v1/monitor/models?app_id=...              -> 200 {"models":[{id, provider, quality, blended_price_usd_per_m, reachable}]}
 GET /v1/monitor/apps/{app_id}/layout           -> 200 Layout                  (v1.4, section 3.4.1)
@@ -712,7 +773,15 @@ events whose winner is reachable and that were **not** swapped
 `Σ max(0, est_cost_anchor_usd − est_cost_usd)` over swapped events
 (`model_used != model_requested`), 0 for events without `est_cost_anchor_usd`.
 
-Stable pins (TS-295; additive, a reader must tolerate their absence):
+Stable pins (TS-295, v1.8 TS-307; additive, a reader must tolerate their absence). Since
+v1.8 the pin comes from the server first: `config_pin` is the configured pin and `pin`
+is what the events show, so a dashboard can tell when an app still sends another model
+(an SDK older than 0.8.3, or one that has not made its next call yet):
+
+- `config_pin` (v1.8) — the same object as RemoteConfig `processes.<p>.pin` (section
+  3.3) or `null`: the model the server pinned (`source: "owner"` or `"winner"`, with
+  `expires_at`). Present for every process; `null` unless the mode is `stable` and a
+  pin is set.
 
 - `pin_candidate` — `{"model", "window": "24h"|"7d", "events", "counts": {id: n}}` or
   `null`: the model a stable pin made now would hold, by the SDK's own rule (SDK
@@ -725,8 +794,8 @@ Stable pins (TS-295; additive, a reader must tolerate their absence):
   reachable winners. The dashboard names this model for "Pin X · stable" / "Today
   that is X". It equals the SDK's pin when the SDK sees the same events (one
   instance with uploads on) and the same catalog release.
-- `pin` — pins live only in the SDK's `pins.json` (never uploaded), so the server
-  reports what the events show: when the process's mode is `stable` and its latest
+- `pin` — the observed pin. `pins.json` is never uploaded, so the server reports
+  what the events show: when the process's mode is `stable` and its latest
   event of the last 24 h was a `stable` call sent to another model than the one in
   the code (`model_used != model_requested`), `{"model": <catalog id where it can be
   told, else model_used>, "expires_at": null, "observed_at": <that call's ts>}`;
@@ -835,6 +904,8 @@ apps(app_id pk, owner_user_id, org_id null, name, created_at, deleted_at)
 api_keys(key_id pk, app_id fk, secret_hash, scopes text[], label, created_at, created_by,
          last_used_at, revoked_at, expires_at)
 app_config(app_id pk, etag, default_mode, processes jsonb, updated_at, updated_by)
+       -- v1.8: each process's pin_version and pin are stored with the config; a removed
+       --       process keeps its pin_version (section 3.3); the columns are the server's choice
 config_audit(id, app_id, at, user_id, change jsonb)
 batches(batch_id pk, app_id, key_id, received_at, event_count, sdk jsonb, notice_version)
        -- sdk = {lang, version} (+ "source": "import" for a Claude Code import batch, v1.6)
@@ -898,6 +969,7 @@ tryaii apps keys <app_id> --revoke <key_id>
 tryaii apps check                  -> validates TRYAII_API_KEY (or --key) and prints app + scopes
 tryaii monitor set <process> managed --model <id>   (local config; the dashboard is the usual way)
 tryaii monitor status              -> gains a "source" line: local | remote (etag, fetched_at) and the upload cursor state
+                                      v1.8: a "key app" line when remote.json's app_name differs from the local app
 ```
 
 `apps create|list|keys` need the user JWT (`tryaii login`); `apps check` needs

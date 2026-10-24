@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.8.3 (2026-10-25)
+
+- **Monitor: the dashboard owns the stable pin (TS-307, contract
+  `shared/monitor/API.md` v1.8).** A `stable` sub-process now sends the
+  model the server pinned (the owner's choice, or the current winner for
+  24 hours) on its next call, without routing in-path, in both SDKs; an
+  unreachable pin sends the model in your code with `route_status:
+  "unreachable_pin"`. A local pin counts only while its new `version`
+  equals the process's remote `pin_version`, so a new dashboard pin
+  replaces it, and unpin (remote mode `off`) deletes it from `pins.json` on
+  the next call. A mode from `TRYAII_MONITOR_MODE`, `wrap(mode=)` or
+  `config.json` never deletes a pin. Older `pins.json` files and v1.7
+  servers keep the 0.8.2 behaviour. New helpers: `reconcile_pin` /
+  `reconcilePin` and `server_pin_target` / `serverPinTarget`.
+
+- **Monitor: warn when `wrap(app=...)` differs from the key's app
+  (TS-308).** When the dashboard config names an `app_name` other than the
+  local app, the monitor logs one warning per app and process, and
+  `tryaii monitor status` adds a `key app` line (`--json`: `key_app`,
+  `key_app_mismatch`). The key decides the dashboard app; `app=` is only
+  the local name.
+
 ## 0.8.2 (2026-10-24)
 
 - **Monitor: cache writes and lifetimes on every event (TS-229, contract

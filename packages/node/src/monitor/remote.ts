@@ -23,19 +23,55 @@
  * once.
  */
 
+import { basename } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
 import * as api from './api.js';
 import { REMOTE_SCHEMA } from './config.js';
 import { formatTs } from './events.js';
 import * as store from './store.js';
-import { logKeyRejected } from './upload.js';
+import { logKeyRejected, warnings } from './upload.js';
 
 export const ENV_REMOTE = 'TRYAII_MONITOR_REMOTE';
 export const WAIT_S = 25;
 export const HTTP_TIMEOUT_MS = 35_000;
 export const ERROR_WAIT_MS = 30_000;
 export const MIN_INTERVAL_MS = 1000;
+
+const appNameWarned = new Set<string>();
+
+/**
+ * The TS-308 warning when the key's app (RemoteConfig `app_name`, API.md
+ * v1.8) differs from the local app name (exact compare), else null (also
+ * without `app_name`: a v1.7 server).
+ */
+export function appNameWarning(localApp: string, remote: unknown): string | null {
+  if (!isRecord(remote)) return null;
+  const name = remote.app_name;
+  if (typeof name !== 'string' || !name || name === localApp) return null;
+  return (
+    `tryaii monitor: app="${localApp}" uploads to app "${name}" (the app of ` +
+    `TRYAII_API_KEY). To use a separate app, run: tryaii apps create ${localApp} ` +
+    'and use its key.'
+  );
+}
+
+/** Log `appNameWarning` once per local app per OS process. Never throws. */
+export function warnAppName(localApp: string, remote: unknown): void {
+  const text = appNameWarning(localApp, remote);
+  if (text === null || appNameWarned.has(localApp)) return;
+  appNameWarned.add(localApp);
+  try {
+    warnings.write(text + '\n'); // the monitor's warning channel (upload.ts)
+  } catch {
+    // fail-open
+  }
+}
+
+/** Forget which apps were warned about (tests). */
+export function resetAppNameWarnings(): void {
+  appNameWarned.clear();
+}
 
 /** False when `TRYAII_MONITOR_REMOTE` is `"0"`. */
 export function remoteEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -142,7 +178,12 @@ export class RemotePoller {
     } catch {
       return 'error';
     }
-    if (resp.status === 304) return 'unchanged';
+    if (resp.status === 304) {
+      // The cached answer still holds: warn from it (TS-308), since a
+      // long-lived mismatch is never answered with a 200 again.
+      for (const directory of this.dirs) warnAppName(basename(directory), store.readRemote(directory));
+      return 'unchanged';
+    }
     if (resp.status === 401) {
       this.disabled = true;
       logKeyRejected();
@@ -157,6 +198,7 @@ export class RemotePoller {
       return 'error';
     }
     this.etag = typeof body.etag === 'string' ? body.etag : null;
+    for (const directory of this.dirs) warnAppName(basename(directory), body);
     return 'changed';
   }
 
