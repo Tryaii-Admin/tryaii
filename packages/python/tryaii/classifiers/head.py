@@ -31,8 +31,9 @@ import copy
 import hashlib
 import json
 import time
+from collections.abc import Collection, Iterable
 from pathlib import Path
-from typing import Collection, Iterable, Optional
+from typing import Optional
 
 import numpy as np
 

@@ -61,7 +61,7 @@ permissions:
 jobs:
   test:
     if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # 26.04 images have no Python 3.9
     env:
       CI_FULL: ${{ github.repository != 'Tryaii-Admin/tryaii-dev' || inputs.full == true || contains(github.event.pull_request.labels.*.name, 'full-ci') }}
     strategy:
