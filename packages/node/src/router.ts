@@ -9,9 +9,12 @@
  *   console.log(result.bestModel);   // e.g., "openai/gpt-5.2"
  *   console.log(result.scores);      // Top models with scores and reasoning
  *
- * The default `LocalEmbeddingProvider` is async-only, so `route()` itself is
- * async. Callers that have injected a sync embedding provider can use the
- * niche `routeSync()` method for a blocking call.
+ * The default router is H4 (`TRYAII_ROUTER`, default `h4`): a static
+ * embedding model + classification head from the `tryaii-router-h4` package,
+ * sync and dependency-free. With `TRYAII_ROUTER=minilm`, or when the H4
+ * package is missing or broken, the router falls back to MiniLM centroids on
+ * the async-only `LocalEmbeddingProvider`. `route()` is async either way;
+ * `routeSync()` works under H4 or with an injected sync provider.
  */
 
 import { BenchmarkRegistry, BenchmarkDefinition } from './benchmarks/registry.js';
@@ -23,7 +26,9 @@ import { NormalizationRange } from './scoring/benchmarks.js';
 import { CentroidLoader } from './centroids/loader.js';
 import { ClassificationResult } from './classifiers/base.js';
 import { EmbeddingClassifier } from './classifiers/embedding.js';
-import { TryaiiDreConfig, createDefaultConfig, centroidFilePath } from './config.js';
+import { HeadClassifier } from './classifiers/head.js';
+import { loadH4Classifier } from './classifiers/selection.js';
+import { TryaiiDreConfig, createDefaultConfig, centroidFilePath, usesH4 } from './config.js';
 import { BaseEmbeddingProvider } from './embeddings/base.js';
 import { LocalEmbeddingProvider } from './embeddings/local.js';
 import {
@@ -115,7 +120,7 @@ export class Router {
   private _scoringEngine!: ScoringEngine;
   private _embeddingProvider: BaseEmbeddingProvider | null;
   private _centroidLoader: CentroidLoader | null = null;
-  private _classifier: EmbeddingClassifier | null = null;
+  private _classifier: EmbeddingClassifier | HeadClassifier | null = null;
   private _catalogMode: CatalogMode;
   /**
    * True once the catalog check is done (explicit bundle, 'starter', or
@@ -138,6 +143,13 @@ export class Router {
     config?: Partial<TryaiiDreConfig>;
     registry?: ModelRegistry;
     benchmarkRegistry?: BenchmarkRegistry;
+    /**
+     * Custom embedding provider. Default: the H4 router (`TRYAII_ROUTER`,
+     * default `h4`): a static model + classification head, no centroids; with
+     * `TRYAII_ROUTER=minilm`, or when the H4 package is missing or broken,
+     * MiniLM (`@xenova/transformers`) against catalog centroids. A custom
+     * provider always means centroid routing.
+     */
     embeddingProvider?: BaseEmbeddingProvider;
     /**
      * The catalog bundle to route on (a CatalogBundle or a bundle directory).
@@ -253,9 +265,25 @@ export class Router {
     return this._centroidLoader;
   }
 
-  /** Lazy-initialize the embedding classifier on first use. */
-  private _ensureClassifier(): EmbeddingClassifier {
+  /**
+   * Lazy-initialize the classifier on first use: H4 when it applies and loads
+   * (see classifiers/selection.ts), else the embedding classifier on
+   * centroids.
+   */
+  private _ensureClassifier(): EmbeddingClassifier | HeadClassifier {
     if (this._classifier !== null) return this._classifier;
+
+    if (this._embeddingProvider === null && usesH4(this._config)) {
+      const head = loadH4Classifier(this._config, this._bundle, {
+        embeddingCacheSize: this._config.cache.embeddingCacheSize,
+        classificationCacheSize: this._config.cache.classificationCacheSize,
+        ttlSeconds: this._config.cache.ttlSeconds,
+      });
+      if (head !== null) {
+        this._classifier = head;
+        return head;
+      }
+    }
 
     const centroidLoader = this._ensureCentroidLoader();
     // `_embeddingProvider` is non-null after _ensureCentroidLoader returns.
@@ -336,8 +364,54 @@ export class Router {
     // Bracket access reaches the classifier's private cached embedder on
     // purpose: the LRU it keeps is exactly what makes this call free after
     // route(). Mirrors the Python Router.embed_prompt.
-    const vector = await classifier['_getEmbeddingAsync'](prompt);
+    const vector =
+      classifier instanceof HeadClassifier
+        ? classifier._getEmbeddingSync(prompt)
+        : await classifier['_getEmbeddingAsync'](prompt);
     return vector.map((x) => Number(x));
+  }
+
+  /**
+   * The model that classifies prompts: `h4-he-en` for H4, else the embedding
+   * model id (builds the classifier).
+   */
+  get routerId(): string {
+    const classifier = this._ensureClassifier();
+    if (classifier instanceof HeadClassifier) return classifier.modelId;
+    return (this._embeddingProvider as BaseEmbeddingProvider).modelName;
+  }
+
+  /**
+   * The router that classifies prompts as "<id>@<version>": "h4-he-en@<meta.json
+   * version>" for H4 (the loaded payload, not the config), "minilm@<embedding
+   * model id>" for the MiniLM centroids path; null when neither applies.
+   * Recorded on monitor events (`router`).
+   */
+  get routerTag(): string | null {
+    const classifier = this._ensureClassifier();
+    if (classifier instanceof HeadClassifier) {
+      const version = classifier.provider.meta.version;
+      return `${classifier.modelId}@${typeof version === 'string' && version ? version : 'unknown'}`;
+    }
+    if (classifier instanceof EmbeddingClassifier) {
+      const model = this._embeddingProvider?.modelName;
+      return typeof model === 'string' && model ? `minilm@${model}` : null;
+    }
+    return null;
+  }
+
+  /**
+   * Under H4 the head has a fixed set of classes: a custom benchmark gets no
+   * score from it (route with TRYAII_ROUTER=minilm to use one). True (and a
+   * warning) when that is the case.
+   */
+  private _customBenchmarkUnscored(name: string): boolean {
+    if (!(this._ensureClassifier() instanceof HeadClassifier)) return false;
+    process.stderr.write(
+      `tryaii: custom benchmark ${name} is not scored by the H4 router; ` +
+        'set TRYAII_ROUTER=minilm to route on custom benchmarks\n',
+    );
+    return true;
   }
 
   /**
@@ -359,9 +433,11 @@ export class Router {
 
   /** Shared post-classification path: filter models, score, return RouteResult. */
   private _buildResult(
-    classification: ClassificationResult,
+    classified: ClassificationResult,
     opts?: RouteOptions,
   ): RouteResult {
+    // A copy: the classifier may hand back its cached object.
+    const classification: ClassificationResult = { ...classified, router: this.routerTag };
     const priorities = opts?.priorities ?? DEFAULT_PRIORITIES;
     const topK = opts?.topK ?? 5;
 
@@ -461,6 +537,7 @@ export class Router {
   ): Promise<void> {
     await this.ready();
     this._registerBenchmark(name, queries, description, minScore, maxScore);
+    if (this._customBenchmarkUnscored(name)) return;
     const loader = this._ensureCentroidLoader();
     await loader.addBenchmarkCentroidAsync(name, queries);
   }
@@ -482,6 +559,7 @@ export class Router {
   ): void {
     this._customized = true; // a customized router keeps its catalog
     this._registerBenchmark(name, queries, description, minScore, maxScore);
+    if (this._customBenchmarkUnscored(name)) return;
     const loader = this._ensureCentroidLoader();
     if (this._embeddingProvider !== null && !this._embeddingProvider.supportsSync) {
       throw new Error(

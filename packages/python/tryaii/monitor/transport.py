@@ -393,8 +393,20 @@ class Transport:
         never on the hot path. Without it no daemon is started and the wrapper
         behaves exactly as without a daemon: metadata-only events, the model
         in your code is sent. The warning is logged at most once per machine
-        per day, and ``tryaii monitor status`` shows the state (TS-252)."""
+        per day, and ``tryaii monitor status`` shows the state (TS-252).
+
+        With the H4 router (the default) a verified ``tryaii-router-h4``
+        payload is enough; without one the daemon falls back to MiniLM, so
+        the MiniLM file is checked as before (and the H4 fallback is recorded
+        in ``router-model.json``)."""
         from tryaii.embeddings import model_store
+
+        if self._config.uses_h4:
+            from tryaii.classifiers.selection import h4_ready
+
+            if h4_ready(self._config, log=logger):
+                model_store.clear_unavailable(self._config.data_dir, log=logger)
+                return True
 
         model = self._config.embedding_model
         if not model_store.is_onnx_model(model):

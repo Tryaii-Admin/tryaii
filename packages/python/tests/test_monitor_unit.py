@@ -49,7 +49,16 @@ def test_routing_text_truncates_to_router_limit():
 def test_routing_text_is_deterministic():
     msgs = [{"role": "system", "content": "s"}, {"role": "user", "content": "u"}]
     assert routing_text(msgs) == routing_text(list(msgs))
-    assert routing_text(msgs)[0] == "s\n\nu"
+    # H4: the last user message alone is routed; system text never is.
+    assert routing_text(msgs)[0] == "u"
+
+
+def test_routing_text_is_the_last_user_message_only():
+    msgs = [{"role": "developer", "content": "d"}, {"role": "user", "content": "first"},
+            {"role": "assistant", "content": "a"}, {"role": "system", "content": "s2"},
+            {"role": "user", "content": [{"type": "text", "text": "last"}]}]
+    assert routing_text(msgs) == ("last", prompt_hash("last"))
+    assert routing_text([{"role": "system", "content": "s"}]) == ("", prompt_hash(""))
 
 
 # --- timestamps -------------------------------------------------------------
@@ -454,15 +463,30 @@ def test_uploaded_event_count_counts_lines_in_the_prefix(tmp_path):
     assert store.uploaded_event_count(tmp_path, None) == 0
 
 
+def test_pending_event_count_counts_non_blank_lines_after_the_cursor(tmp_path):
+    # SCRUM-227: "N events not uploaded yet" -- complete non-blank lines after
+    # the offset; a file not in the cursor counts whole; a partial last line
+    # waits; a file shorter than its offset counts from 0.
+    (tmp_path / "events-2026-10-12.jsonl").write_bytes(b'{"a":1}\n{"b":2}\n\n  \n{"c":3}\n{"d"')
+    (tmp_path / "events-2026-10-13.jsonl").write_bytes(b'{"e":5}\n')
+    (tmp_path / "events-2026-10-14.jsonl").write_bytes(b'{"f":6}\n')
+    cursor = {"files": {"events-2026-10-12.jsonl": 8, "events-2026-10-14.jsonl": 99}}
+    assert store.pending_event_count(tmp_path, cursor) == 4
+    assert store.pending_event_count(tmp_path, {"files": {}}) == 5
+    assert store.pending_event_count(tmp_path, None) == 0
+
+
 def test_status_source_and_upload_blocks():
     from tryaii.monitor.status import source_info, upload_info
 
     assert source_info(None) == {"kind": "local", "etag": None, "fetched_at": None}
     assert source_info({"etag": "e", "fetched_at": "t"}) == {
         "kind": "remote", "etag": "e", "fetched_at": "t"}
-    assert upload_info(None) == {"state": "off", "events": 0, "last_ok": None,
+    assert upload_info(None) == {"state": "off", "events": 0, "pending": 0, "last_ok": None,
                                  "last_error": None}
     assert upload_info({"last_ok": "t", "last_error": None}, 7)["state"] == "ok"
+    assert upload_info({"last_ok": "t", "last_error": None}, 7, 3) == {
+        "state": "ok", "events": 7, "pending": 3, "last_ok": "t", "last_error": None}
     assert upload_info({"last_ok": "t", "last_error": "http 503"}, 7)["state"] == "error"
 
 

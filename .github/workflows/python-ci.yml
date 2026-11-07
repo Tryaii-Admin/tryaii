@@ -29,6 +29,7 @@ on:
     paths:
       - "packages/python/**"
       - "packages/python-model/**"
+      - "packages/python-router-h4-model/**"
       - "shared/**"
       - "scripts/**"
       - ".github/workflows/python-ci.yml"
@@ -60,7 +61,7 @@ permissions:
 jobs:
   test:
     if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # 26.04 images have no Python 3.9
     env:
       CI_FULL: ${{ github.repository != 'Tryaii-Admin/tryaii-dev' || inputs.full == true || contains(github.event.pull_request.labels.*.name, 'full-ci') }}
     strategy:
@@ -82,11 +83,12 @@ jobs:
           cache: pip
           cache-dependency-path: packages/python/pyproject.toml
 
-      # tryaii pins tryaii-minilm-int8 (the embedding model file); install the
-      # repository's copy so CI never depends on what is on PyPI. No torch:
-      # the default embeddings run on onnxruntime (TS-252).
-      - name: Install the model package
-        run: pip install ../python-model
+      # tryaii pins tryaii-minilm-int8 (the embedding model file) and
+      # tryaii-router-h4 (the H4 router payload); install the repository's
+      # copies so CI never depends on what is on PyPI. No torch: the default
+      # embeddings run on onnxruntime (TS-252), H4 on numpy.
+      - name: Install the model packages
+        run: pip install ../python-model ../python-router-h4-model
 
       - name: Install dependencies
         run: pip install -e ".[dev]"
@@ -147,8 +149,13 @@ jobs:
       - name: Build sdist and wheel
         run: python -m build
 
-      - name: Build the model package
-        run: python -m build ../python-model --outdir ../python-model/dist
+      - name: Build the model packages
+        run: |
+          python -m build ../python-model --outdir ../python-model/dist
+          python -m build ../python-router-h4-model --outdir ../python-router-h4-model/dist
+
+      - name: Validate the model distributions
+        run: twine check ../python-model/dist/* ../python-router-h4-model/dist/*
 
       - name: Validate distributions
         run: twine check dist/*
@@ -156,21 +163,37 @@ jobs:
       - name: Smoke test -- install wheel in clean env
         run: |
           python -m venv /tmp/smoke-env
-          /tmp/smoke-env/bin/pip install ../python-model/dist/*.whl dist/*.whl
+          /tmp/smoke-env/bin/pip install ../python-model/dist/*.whl ../python-router-h4-model/dist/*.whl dist/*.whl
           /tmp/smoke-env/bin/tryaii --help >/dev/null
           /tmp/smoke-env/bin/python - <<'PY'
           import sys
 
           from tryaii import Router
 
-          # The real model from the tryaii-minilm-int8 wheel, on onnxruntime.
+          # The default router: H4 from the tryaii-router-h4 wheel (numpy
+          # only). "head" proves H4 loaded and did not fall back to MiniLM.
           router = Router()
           result = router.route("Write a Python function to merge sorted arrays")
           assert result.best_model, "No model returned"
-          assert result.classification.classifier_used == "embedding"
+          assert result.classification.classifier_used == "head", result.classification.classifier_used
           assert "torch" not in sys.modules, "torch was imported"
           assert "sentence_transformers" not in sys.modules
-          print(f"Smoke test passed: best_model={result.best_model}")
+          print(f"Smoke test passed (H4): best_model={result.best_model}")
+          PY
+          TRYAII_ROUTER=minilm /tmp/smoke-env/bin/python - <<'PY'
+          import sys
+
+          from tryaii import Router
+
+          # The fallback router: the real model from the tryaii-minilm-int8
+          # wheel, on onnxruntime.
+          router = Router()
+          result = router.route("Write a Python function to merge sorted arrays")
+          assert result.best_model, "No model returned"
+          assert result.classification.classifier_used == "embedding", result.classification.classifier_used
+          assert "torch" not in sys.modules, "torch was imported"
+          assert "sentence_transformers" not in sys.modules
+          print(f"Smoke test passed (MiniLM): best_model={result.best_model}")
           PY
 
       - name: Smoke test -- cachelint (heuristic path WITHOUT tiktoken, then exact path)

@@ -62,6 +62,7 @@ export {
   estimateCost,
   formatTs,
   newEventId,
+  routerFromWire,
   normalizeCacheTtlPolicy,
   normalizeCacheUsage,
   normalizeCacheWrites,

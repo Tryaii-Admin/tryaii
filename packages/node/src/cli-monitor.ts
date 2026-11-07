@@ -17,7 +17,11 @@ import * as privacy from './monitor/privacy.js';
 import { aggregate, windowSeconds } from './monitor/status.js';
 import * as store from './monitor/store.js';
 import { MODES } from './monitor/winner.js';
-import { readState as readModelState } from './embeddings/modelStore.js';
+import {
+  DEFAULT_ONNX_MODEL,
+  ROUTER_STATE_FILE,
+  readState as readModelState,
+} from './embeddings/modelStore.js';
 import { catalogInUse } from './catalog/client.js';
 
 export const VERBS = ['status', 'set', 'apps', 'events', 'upload'] as const;
@@ -243,6 +247,20 @@ export function classificationLine(dataDir: string): string | null {
   return `classification: off since ${state.since || '-'} (${state.reason || 'embedding model not available'})`;
 }
 
+/**
+ * `router: h4-he-en unavailable since <ts> (<reason>); routing with <MiniLM
+ * id>` when the H4 router was last found unavailable on this machine (it
+ * falls back to MiniLM), else null. Machine-wide, like Python's.
+ */
+export function routerLine(dataDir: string): string | null {
+  const state = readModelState(dataDir, ROUTER_STATE_FILE);
+  if (state === null) return null;
+  return (
+    `router: ${state.model} unavailable since ${state.since || '-'} ` +
+    `(${state.reason || 'not found'}); routing with ${DEFAULT_ONNX_MODEL}`
+  );
+}
+
 export function renderStatus(doc: Record<string, unknown>, offReason: string | null = null): string {
   const lines = [`tryaii monitor -- app: ${String(doc.app)} (last ${String(doc.since)})`, ''];
   const processes = doc.processes as StatusProcess[];
@@ -267,6 +285,8 @@ export function renderStatus(doc: Record<string, unknown>, offReason: string | n
   lines.push(sourceLine(doc.source as Record<string, unknown>));
   if (doc.key_app_mismatch === true) lines.push(`  key app: "${String(doc.key_app)}" (differs from the local name)`);
   lines.push(uploadLine(doc.upload as Record<string, unknown>, offReason));
+  const pending = Number((doc.upload as Record<string, unknown>).pending ?? 0);
+  if (pending) lines.push(`  ${pending} events not uploaded yet`);
   return lines.join('\n') + '\n';
 }
 
@@ -329,6 +349,7 @@ function verbStatus(argv: string[], env: Env, write: Write): void {
       store.readRemote(directory),
       cursor,
       store.uploadedEventCount(directory, cursor),
+      store.pendingEventCount(directory, cursor),
     );
   });
   if (opts.json) {
@@ -342,6 +363,8 @@ function verbStatus(argv: string[], env: Env, write: Write): void {
   }
   const [, offReason] = privacy.uploadDecision(env, store.monitorRoot(dataDir));
   write(docs.map((doc) => renderStatus(doc, offReason)).join('\n'));
+  const router = routerLine(dataDir);
+  if (router !== null) write(`${router}\n`);
   const classification = classificationLine(dataDir);
   if (classification !== null) write(`${classification}\n`);
   write(`${catalogLine()}\n`);

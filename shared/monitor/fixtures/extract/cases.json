@@ -20,7 +20,7 @@
     },
     {
       "name": "system-and-user",
-      "description": "The first system message is joined to the last user message with a blank line.",
+      "description": "A system message is not part of the routing text: the last user message alone is routed (H4).",
       "input": {
         "messages": [
           {
@@ -34,13 +34,13 @@
         ]
       },
       "expected": {
-        "text": "You are a careful code reviewer.\n\nReview this diff.",
-        "prompt_hash": "625c2d0f3277a5da5a5e2c01ba723320484cdb63dadc36a477133b8188a235f0"
+        "text": "Review this diff.",
+        "prompt_hash": "16e670df210ad326a54f5cbdf1b4960f6a2c27544a4476692f901c9fb85ca260"
       }
     },
     {
       "name": "developer-role-counts-as-system",
-      "description": "The Responses-style developer role is a system message.",
+      "description": "The Responses-style developer role is a system message, so it is not routed either.",
       "input": {
         "messages": [
           {
@@ -54,8 +54,8 @@
         ]
       },
       "expected": {
-        "text": "Answer in JSON.\n\nList three fruits.",
-        "prompt_hash": "2ceb23905baf7f4cbc6a83a8c745c08e70bd335f6cedffae334730493f008dd2"
+        "text": "List three fruits.",
+        "prompt_hash": "18e95ccc94f4946fb683ccb0e42b300e1dafe76a798a7a774b1dacb4058e7137"
       }
     },
     {
@@ -91,7 +91,7 @@
     },
     {
       "name": "last-user-turn-wins",
-      "description": "Multi-turn conversations route on the last user message only (the first system message still counts).",
+      "description": "Multi-turn conversations route on the last user message only; system messages never count.",
       "input": {
         "messages": [
           {
@@ -117,8 +117,8 @@
         ]
       },
       "expected": {
-        "text": "Be terse.\n\nTranslate 'good morning' to French.",
-        "prompt_hash": "e80b2bb7534f779be84bed4fd77c3faa6570bf669e510a0b1a1bba0fe9c35755"
+        "text": "Translate 'good morning' to French.",
+        "prompt_hash": "1c9e0d019a6f3722268f9f5dfe5604ae64bfcf0b7c0389322e823db52360e442"
       }
     },
     {

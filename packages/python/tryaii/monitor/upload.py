@@ -54,6 +54,7 @@ INTERVAL_S = 5.0
 BACKOFF_MIN_S = 5.0
 BACKOFF_MAX_S = 300.0
 DRAIN_TIMEOUT_S = 2.0
+DRAIN_LOCK_RETRY_S = 0.1
 LOCK_STALE_S = 60.0
 FORBIDDEN_FIELDS = ("prompt", "messages", "response", "content", "text", "raw")
 
@@ -328,6 +329,9 @@ class Uploader:
         self.validated: Optional[dict] = None if validate else {}
         self.backoff = 0.0
         self.next_at = 0.0
+        #: True after a network error, 5xx, 429 or 403 ``upload_disabled``
+        #: (cleared by a 2xx, 400 or 413): the exit drain then keeps the wait.
+        self.backing_off = False
         self.sent_events = 0
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
@@ -359,6 +363,7 @@ class Uploader:
     # -- one pass --------------------------------------------------------
 
     def _fail(self, now: float) -> None:
+        self.backing_off = True
         self.backoff = BACKOFF_MIN_S if self.backoff <= 0 else min(self.backoff * 2,
                                                                     BACKOFF_MAX_S)
         self.next_at = now + self.backoff
@@ -398,13 +403,23 @@ class Uploader:
             except OSError:
                 logger.debug("monitor: could not record the rejected key", exc_info=True)
 
-    def run_once(self) -> Optional[str]:
+    def run_once(self, deadline: Optional[float] = None) -> Optional[str]:
         """One pass: validate (once), then send at most ONE batch. Returns
-        the outcome (``sent``, ``skipped``, ``idle``, ``wait``, ``disabled``,
-        ``backoff``, ``rejected``) or None on an internal error. Never
-        raises."""
+        the outcome (``sent``, ``skipped``, ``idle``, ``locked``, ``wait``,
+        ``disabled``, ``backoff``, ``rejected``, ``timeout``) or None on an
+        internal error. Never raises.
+
+        ``deadline`` (``time.monotonic()`` seconds; the exit drain) is
+        checked once the pass holds the pass lock: past it the pass sends
+        nothing (``timeout``); before it the 5 s spacing is dropped unless
+        the uploader is backing off."""
         with self._pass_lock:
             try:
+                if deadline is not None:
+                    if time.monotonic() >= deadline:
+                        return "timeout"
+                    if not self.backing_off:
+                        self.next_at = 0.0
                 return self._run_once()
             except Exception:  # noqa: BLE001 - fail-open
                 logger.debug("monitor upload pass failed", exc_info=True)
@@ -418,11 +433,14 @@ class Uploader:
             return "wait"
         if not self._validate(now):
             return "disabled" if self.disabled else "backoff"
+        locked = False
         for directory in self.dirs:
             outcome = self._upload_dir(directory, now)
-            if outcome != "idle":
+            if outcome == "locked":
+                locked = True
+            elif outcome != "idle":
                 return outcome
-        return "idle"
+        return "locked" if locked else "idle"
 
     def _paused(self, directory: Path, cursor: dict) -> bool:
         """True (and ``last_error`` set) while the local setting or the
@@ -454,8 +472,10 @@ class Uploader:
 
     def _upload_dir(self, directory: Path, now: float) -> str:
         lock = _DirLock(directory)
-        if not directory.is_dir() or not lock.acquire():
+        if not directory.is_dir():
             return "idle"
+        if not lock.acquire():
+            return "locked"  # another process is uploading this directory
         try:
             cursor = store.read_upload_cursor(directory) or store.empty_upload_cursor()
             if self._paused(directory, cursor):
@@ -479,7 +499,8 @@ class Uploader:
             self._first_upload_notice(directory.parent)
             try:
                 resp = api.request("POST", f"{self.base_url}/v1/monitor/events",
-                                   bearer=self.key, opener=self._opener, raw_body=body)
+                                   bearer=self.key, opener=self._opener, raw_body=body,
+                                   headers={"X-Request-ID": batch_id})
             except api.ApiNetworkError:
                 cursor["last_error"] = "network"
                 store.write_upload_cursor(directory, cursor)
@@ -500,6 +521,7 @@ class Uploader:
             store.write_upload_cursor(directory, cursor)
             self.sent_events += len(batch.lines)
             self.backoff = 0.0
+            self.backing_off = False
             self.next_at = now + INTERVAL_S
             return "sent"
         if status in (400, 413):
@@ -508,12 +530,14 @@ class Uploader:
             error = resp.error or ("bad_batch" if status == 400 else "too_large")
             cursor["last_error"] = f"{error}: {resp.detail}" if resp.detail else error
             store.write_upload_cursor(directory, cursor)
+            self.backing_off = False
             self.next_at = now + INTERVAL_S
             return "skipped"
         if status == 403 and resp.error == "upload_disabled":
             # The account switch is off: retry rarely; remote.json says when it is on.
             cursor["last_error"] = "upload_disabled"
             store.write_upload_cursor(directory, cursor)
+            self.backing_off = True
             self.next_at = now + BACKOFF_MAX_S
             return "backoff"
         if status == 401:
@@ -558,10 +582,31 @@ class Uploader:
             self._wake.clear()
 
     def drain(self, timeout: float = DRAIN_TIMEOUT_S) -> None:
-        """At exit: one last pass within ``timeout`` seconds (best effort)."""
+        """At exit: passes until nothing is left, within ``timeout`` seconds
+        (best effort; whatever is not sent stays on disk for the next run).
+
+        The background loop is told to stop after its current pass but never
+        joined (a POST can take 10 s); ``_pass_lock`` keeps the passes apart,
+        so no line is sent twice. Each drain pass checks the deadline before
+        it starts and keeps the wait while backing off (429, 403
+        ``upload_disabled``, network or 5xx errors); a directory locked by
+        another process is retried every 100 ms."""
         if self._thread is None or self.disabled:
             return
-        worker = threading.Thread(target=self.run_once, name="tryaii-monitor-upload-drain",
+        self._stop.set()
+        self._wake.set()
+        deadline = time.monotonic() + timeout
+
+        def passes() -> None:
+            while True:
+                outcome = self.run_once(deadline)
+                if outcome in ("sent", "skipped"):
+                    continue
+                if outcome != "locked":
+                    return
+                time.sleep(max(min(DRAIN_LOCK_RETRY_S, deadline - time.monotonic()), 0.0))
+
+        worker = threading.Thread(target=passes, name="tryaii-monitor-upload-drain",
                                   daemon=True)
         worker.start()
         worker.join(timeout)

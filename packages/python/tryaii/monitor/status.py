@@ -51,21 +51,24 @@ def key_app_info(app: str, remote: Optional[dict]) -> dict:
     return {"key_app": name, "key_app_mismatch": name != app}
 
 
-def upload_info(cursor: Optional[dict], uploaded_events: int = 0) -> dict:
-    """``{"state", "events", "last_ok", "last_error"}`` from upload.json:
-    ``off`` without a cursor; ``error`` while ``last_error`` is set;
-    else ``ok``. ``events`` = the event lines the cursor covers."""
+def upload_info(cursor: Optional[dict], uploaded_events: int = 0,
+                pending_events: int = 0) -> dict:
+    """``{"state", "events", "pending", "last_ok", "last_error"}`` from
+    upload.json: ``off`` without a cursor; ``error`` while ``last_error`` is
+    set; else ``ok``. ``events`` = the event lines the cursor covers;
+    ``pending`` = the lines after it (not uploaded yet)."""
     if not isinstance(cursor, dict):
-        return {"state": "off", "events": 0, "last_ok": None, "last_error": None}
+        return {"state": "off", "events": 0, "pending": 0, "last_ok": None,
+                "last_error": None}
     state = "error" if cursor.get("last_error") else "ok"
-    return {"state": state, "events": int(uploaded_events),
+    return {"state": state, "events": int(uploaded_events), "pending": int(pending_events),
             "last_ok": cursor.get("last_ok"), "last_error": cursor.get("last_error")}
 
 
 def aggregate(app: str, events, pins: Optional[dict], config: Optional[dict],
               now: str, since: str = "24h", env: Optional[dict] = None,
               remote: Optional[dict] = None, upload_cursor: Optional[dict] = None,
-              uploaded_events: int = 0) -> dict:
+              uploaded_events: int = 0, pending_events: int = 0) -> dict:
     """Per-process roll-up of ``events`` within ``since`` of ``now``.
 
     Processes = those with events in the window ∪ those named in
@@ -188,7 +191,7 @@ def aggregate(app: str, events, pins: Optional[dict], config: Optional[dict],
         "since": since,
         "source": source_info(remote),
         **key_app_info(app, remote),
-        "upload": upload_info(upload_cursor, uploaded_events),
+        "upload": upload_info(upload_cursor, uploaded_events, pending_events),
         "processes": processes,
         "totals": {
             "calls": total_calls,

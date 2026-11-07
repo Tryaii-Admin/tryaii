@@ -48,6 +48,7 @@ from tryaii.monitor.events import (
     classification_from_wire,
     estimate_cost,
     format_ts,
+    router_from_wire,
     usage_from_provider,
 )
 from tryaii.monitor.extract import routing_text
@@ -547,13 +548,16 @@ class Monitor:
         winner = None
         winner_reachable = False
         classification = None
+        router = None
         if outcome.ok:
             winner = pick_winner(outcome.scores, plan.anchor, registry,
                                  allowed=plan.policy)["winner"]
             winner_reachable = reachable(plan.provider, winner, plan.anchor)
             classification = classification_from_wire(outcome.classification)
+            router = router_from_wire(outcome.classification)
         elif plan.routed_outcome is not None and plan.routed_outcome.ok:
             classification = classification_from_wire(plan.routed_outcome.classification)
+            router = router_from_wire(plan.routed_outcome.classification)
         used_catalog = plan.target or plan.anchor
         embedding = outcome.embedding
         if not isinstance(embedding, dict) and plan.routed_outcome is not None:
@@ -581,6 +585,7 @@ class Monitor:
             latency_ms=latency_ms, stream=plan.stream, error=error,
             prompt_hash=plan.prompt_hash, vector=vector_written,
             taxonomy_version=self._transport.taxonomy_version(),
+            router=router,
             cache_ttl_policy=plan.cache_ttl_policy,
             cache=self._cache_block(plan),
             otel=plan.otel,

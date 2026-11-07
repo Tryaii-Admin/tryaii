@@ -11,6 +11,7 @@
   "upload": {
     "state": "off",
     "events": 0,
+    "pending": 0,
     "last_ok": null,
     "last_error": null
   },

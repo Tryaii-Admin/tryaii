@@ -1,8 +1,10 @@
 """Tests for the main Router class.
 
-The router is embedding-only. Tests use deterministic fake encoders (for the
-default ONNX build and for sentence-transformers) so they run instantly in CI
-without model weights, onnxruntime sessions or PyTorch.
+These tests cover the MiniLM centroid path (TRYAII_ROUTER=minilm, the
+fallback; the default H4 router is tested in test_router_h4.py). They use
+deterministic fake encoders (for the ONNX build and for
+sentence-transformers) so they run instantly in CI without model weights,
+onnxruntime sessions or PyTorch.
 """
 
 import hashlib
@@ -54,15 +56,18 @@ def _fake_onnx_encode(self, texts):
 
 @pytest.fixture
 def router(monkeypatch):
-    """A Router on the default (ONNX) embedding model, with a fake encoder."""
+    """A Router on the MiniLM fallback (TRYAII_ROUTER=minilm; H4 is the
+    default, see test_router_h4.py): the default ONNX embedding model with a
+    fake encoder."""
     from tryaii.embeddings.onnx_provider import OnnxEmbeddingProvider
 
+    monkeypatch.setenv("TRYAII_ROUTER", "minilm")
     monkeypatch.setattr(OnnxEmbeddingProvider, "_encode", _fake_onnx_encode)
     return Router(catalog="starter")
 
 
 class TestRouter:
-    """Default embedding-based routing path (the advertised README flow)."""
+    """MiniLM centroid routing path (TRYAII_ROUTER=minilm, the fallback)."""
 
     def test_route_returns_result(self, router):
         result = router.route("Write a Python function to merge sorted arrays")

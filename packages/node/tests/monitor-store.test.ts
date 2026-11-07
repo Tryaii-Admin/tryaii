@@ -328,11 +328,36 @@ describe('slice 2 engine', () => {
     expect(store.uploadedEventCount(dir, null)).toBe(0);
   });
 
+  it('counts the non-blank lines after the cursor (SCRUM-227)', () => {
+    // Complete non-blank lines after the offset; a file not in the cursor
+    // counts whole; a partial last line waits; a file shorter than its
+    // offset counts from 0.
+    writeFileSync(join(dir, 'events-2026-10-12.jsonl'), '{"a":1}\n{"b":2}\n\n  \n{"c":3}\n{"d"');
+    writeFileSync(join(dir, 'events-2026-10-13.jsonl'), '{"e":5}\n');
+    writeFileSync(join(dir, 'events-2026-10-14.jsonl'), '{"f":6}\n');
+    const cursor = {
+      schema: store.UPLOAD_CURSOR_SCHEMA,
+      files: { 'events-2026-10-12.jsonl': 8, 'events-2026-10-14.jsonl': 99 },
+      last_ok: null,
+      last_error: null,
+    };
+    expect(store.pendingEventCount(dir, cursor)).toBe(4);
+    expect(store.pendingEventCount(dir, { ...cursor, files: {} })).toBe(5);
+    expect(store.pendingEventCount(dir, null)).toBe(0);
+  });
+
   it('status source and upload blocks', () => {
     expect(sourceInfo(null)).toEqual({ kind: 'local', etag: null, fetched_at: null });
     expect(sourceInfo({ etag: 'e', fetched_at: 't' })).toEqual({ kind: 'remote', etag: 'e', fetched_at: 't' });
-    expect(uploadInfo(null)).toEqual({ state: 'off', events: 0, last_ok: null, last_error: null });
+    expect(uploadInfo(null)).toEqual({ state: 'off', events: 0, pending: 0, last_ok: null, last_error: null });
     expect(uploadInfo({ last_ok: 't', last_error: null }, 7).state).toBe('ok');
+    expect(uploadInfo({ last_ok: 't', last_error: null }, 7, 3)).toEqual({
+      state: 'ok',
+      events: 7,
+      pending: 3,
+      last_ok: 't',
+      last_error: null,
+    });
     expect(uploadInfo({ last_ok: 't', last_error: 'http 503' }, 7).state).toBe('error');
   });
 });

@@ -1,0 +1,42 @@
+{
+ "router_id": "h4-he-en",
+ "version": "1.0.0",
+ "kind": "model2vec-static+mlp-head",
+ "dim": 256,
+ "vocab_size": 40000,
+ "max_tokens": 700,
+ "median_token_length": 5,
+ "char_cap": 3500,
+ "unk_id": 1,
+ "add_special_tokens": false,
+ "normalize": true,
+ "vectors": {
+  "tensor": "embeddings",
+  "dtype": "int8",
+  "scale": null,
+  "note": "mean of int8 rows then L2-normalised; a scale would cancel"
+ },
+ "head": {
+  "layers": [
+   [
+    "W0",
+    "b0",
+    "relu"
+   ],
+   [
+    "W1",
+    "b1",
+    null
+   ]
+  ]
+ },
+ "temperature": 2.0,
+ "num_classes": 33,
+ "normalizer": "nfkc",
+ "source": {
+  "setup": "H4-int8",
+  "cfg": "a1.0_cw1",
+  "seed": 0,
+  "epochs": 8
+ }
+}

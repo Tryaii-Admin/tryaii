@@ -72,15 +72,17 @@ export function keyAppInfo(app: string, remote: unknown): Record<string, unknown
 }
 
 /**
- * `{state, events, last_ok, last_error}` from upload.json: `off` without a
- * cursor; `error` while `last_error` is set; else `ok`. `events` = the event
- * lines the cursor covers.
+ * `{state, events, pending, last_ok, last_error}` from upload.json: `off`
+ * without a cursor; `error` while `last_error` is set; else `ok`. `events` =
+ * the event lines the cursor covers; `pending` = the lines after it (not
+ * uploaded yet).
  */
-export function uploadInfo(cursor: unknown, uploadedEvents = 0): Record<string, unknown> {
-  if (!isRecord(cursor)) return { state: 'off', events: 0, last_ok: null, last_error: null };
+export function uploadInfo(cursor: unknown, uploadedEvents = 0, pendingEvents = 0): Record<string, unknown> {
+  if (!isRecord(cursor)) return { state: 'off', events: 0, pending: 0, last_ok: null, last_error: null };
   return {
     state: truthy(cursor.last_error) ? 'error' : 'ok',
     events: Math.trunc(uploadedEvents),
+    pending: Math.trunc(pendingEvents),
     last_ok: cursor.last_ok ?? null,
     last_error: cursor.last_error ?? null,
   };
@@ -104,6 +106,7 @@ export function aggregate(
   remote: unknown = null,
   uploadCursor: unknown = null,
   uploadedEvents = 0,
+  pendingEvents = 0,
 ): Record<string, unknown> {
   const end = parseTs(now);
   if (!(since in WINDOWS)) throw new Error('since must be 24h, 7d or 30d');
@@ -250,7 +253,7 @@ export function aggregate(
     since,
     source: sourceInfo(remote),
     ...keyAppInfo(app, remote),
-    upload: uploadInfo(uploadCursor, uploadedEvents),
+    upload: uploadInfo(uploadCursor, uploadedEvents, pendingEvents),
     processes,
     totals: {
       calls: totalCalls,

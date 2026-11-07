@@ -270,11 +270,12 @@ Pass `{ summaryHref, resultsHref }` as the third argument to override the footer
 
 ## Data and privacy
 
-The monitor classifies prompts in your process (no Python, no daemon) once
-its two optional peer dependencies are installed:
-`npm install onnxruntime-node tryaii-minilm-int8` (the same int8 ONNX model as
-the Python SDK). Without them, calls are still recorded, without a
-classification.
+The monitor classifies prompts in your process (no Python, no daemon) with
+the H4 router once its optional peer dependency is installed:
+`npm install tryaii-router-h4` (the same model as the Python SDK, pure
+TypeScript). Without it, it falls back to MiniLM:
+`npm install onnxruntime-node tryaii-minilm-int8`. Without either, calls are
+still recorded, without a classification.
 
 Without an app key, nothing leaves your machine: the monitor writes its
 records under `~/.tryaii/monitor/` and that is all. With `TRYAII_API_KEY`

@@ -28,8 +28,8 @@
  *
  * Node specifics: the loop's timers and sockets are unref'd, so a pending
  * upload never keeps the process alive (Python runs it on a daemon thread);
- * the exit pass (`drain`) keeps the process alive only through its own 2 s
- * timer, like Python's `join(timeout)` on a daemon thread.
+ * the exit passes (`drain`) keep the process alive only through their own
+ * 2 s timer, like Python's `join(timeout)` on a daemon thread.
  */
 
 import { closeSync, openSync, readSync, statSync, unlinkSync, writeSync } from 'node:fs';
@@ -52,6 +52,7 @@ export const INTERVAL_MS = 5000;
 export const BACKOFF_MIN_MS = 5000;
 export const BACKOFF_MAX_MS = 300_000;
 export const DRAIN_TIMEOUT_MS = 2000;
+export const DRAIN_LOCK_RETRY_MS = 100;
 export const LOCK_STALE_MS = 60_000;
 export const FORBIDDEN_FIELDS = ['prompt', 'messages', 'response', 'content', 'text', 'raw'] as const;
 /** Mirrors `tryaii.monitor.NOTICE_VERSION` (monitor/index.ts re-exports it). */
@@ -387,7 +388,16 @@ function isDir(path: string): boolean {
   }
 }
 
-export type UploadOutcome = 'sent' | 'skipped' | 'idle' | 'wait' | 'disabled' | 'backoff' | 'rejected';
+export type UploadOutcome =
+  | 'sent'
+  | 'skipped'
+  | 'idle'
+  | 'locked'
+  | 'wait'
+  | 'disabled'
+  | 'backoff'
+  | 'rejected'
+  | 'timeout';
 
 export interface UploaderOptions {
   /** Injected fetch (tests); otherwise the fixture seam or the network. */
@@ -405,6 +415,12 @@ export interface UploaderOptions {
 interface PassOptions {
   /** Unref the pass's sockets (the loop and the exit pass; tests leave them ref'd). */
   unref: boolean;
+  /**
+   * The exit drain's deadline (`performance.now()` ms), checked when the pass
+   * starts: past it the pass sends nothing (`timeout`); before it the 5 s
+   * spacing is dropped unless the uploader is backing off.
+   */
+  deadline?: number;
 }
 
 /**
@@ -423,6 +439,11 @@ export class Uploader {
   backoff = 0;
   /** Monotonic ms before which no pass sends. */
   nextAt = 0;
+  /**
+   * True after a network error, 5xx, 429 or 403 `upload_disabled` (cleared by
+   * a 2xx, 400 or 413): the exit drain then keeps the wait.
+   */
+  backingOff = false;
   sentEvents = 0;
   private readonly fetchFn: typeof fetch | undefined;
   private readonly clock: () => number;
@@ -469,15 +490,23 @@ export class Uploader {
   // -- one pass --------------------------------------------------------
 
   private fail(now: number): void {
+    this.backingOff = true;
     this.backoff = this.backoff <= 0 ? BACKOFF_MIN_MS : Math.min(this.backoff * 2, BACKOFF_MAX_MS);
     this.nextAt = now + this.backoff;
   }
 
-  private request(method: string, path: string, pass: PassOptions, rawBody?: Buffer): Promise<api.ApiResponse> {
+  private request(
+    method: string,
+    path: string,
+    pass: PassOptions,
+    rawBody?: Buffer,
+    headers?: Record<string, string>,
+  ): Promise<api.ApiResponse> {
     return api.request(method, `${this.baseUrl}${path}`, null, {
       bearer: this.key,
       fetchFn: this.fetchFn,
       rawBody: rawBody ?? null,
+      headers,
       unref: pass.unref,
       env: this.env,
     });
@@ -527,9 +556,9 @@ export class Uploader {
 
   /**
    * One pass: validate (once), then send at most ONE batch. Resolves to the
-   * outcome (`sent`, `skipped`, `idle`, `wait`, `disabled`, `backoff`,
-   * `rejected`) or null on an internal error. Never rejects. Passes never
-   * overlap.
+   * outcome (`sent`, `skipped`, `idle`, `locked`, `wait`, `disabled`,
+   * `backoff`, `rejected`, `timeout`) or null on an internal error. Never
+   * rejects. Passes never overlap.
    */
   runOnce(pass: PassOptions = { unref: false }): Promise<UploadOutcome | null> {
     const run = this.passChain.then(async () => {
@@ -544,15 +573,21 @@ export class Uploader {
   }
 
   private async pass(pass: PassOptions): Promise<UploadOutcome> {
+    if (pass.deadline !== undefined) {
+      if (performance.now() >= pass.deadline) return 'timeout';
+      if (!this.backingOff) this.nextAt = 0;
+    }
     if (this.disabled) return 'disabled';
     const now = this.clock();
     if (now < this.nextAt) return 'wait';
     if (!(await this.validateKey(now, pass))) return this.disabled ? 'disabled' : 'backoff';
+    let locked = false;
     for (const directory of this.dirs) {
       const outcome = await this.uploadDir(directory, now, pass);
-      if (outcome !== 'idle') return outcome;
+      if (outcome === 'locked') locked = true;
+      else if (outcome !== 'idle') return outcome;
     }
-    return 'idle';
+    return locked ? 'locked' : 'idle';
   }
 
   /**
@@ -586,11 +621,13 @@ export class Uploader {
 
   private async uploadDir(directory: string, now: number, pass: PassOptions): Promise<UploadOutcome> {
     const lock = new DirLock(directory);
-    if (!isDir(directory) || !lock.acquire()) return 'idle';
+    if (!isDir(directory)) return 'idle';
+    if (!lock.acquire()) return 'locked'; // another process is uploading this directory
     try {
       const cursor = store.readUploadCursor(directory) ?? store.emptyUploadCursor();
       if (this.paused(directory, cursor)) return 'idle';
-      const head = envelopeHead(randomUUID(), this.version, batchIntegrations(this.env ?? process.env));
+      const batchId = randomUUID();
+      const head = envelopeHead(batchId, this.version, batchIntegrations(this.env ?? process.env));
       const batch = nextBatch(directory, cursor, {
         headBytes: head.length,
         hashKey: privacy.hashKey(dirname(directory)),
@@ -606,7 +643,7 @@ export class Uploader {
       this.firstUploadNotice(dirname(directory));
       let resp: api.ApiResponse;
       try {
-        resp = await this.request('POST', '/v1/monitor/events', pass, body);
+        resp = await this.request('POST', '/v1/monitor/events', pass, body, { 'X-Request-ID': batchId });
       } catch (err) {
         if (!(err instanceof api.ApiNetworkError)) throw err;
         cursor.last_error = 'network';
@@ -635,6 +672,7 @@ export class Uploader {
       store.writeUploadCursor(directory, cursor);
       this.sentEvents += batch.lines.length;
       this.backoff = 0;
+      this.backingOff = false;
       this.nextAt = now + INTERVAL_MS;
       return 'sent';
     }
@@ -644,6 +682,7 @@ export class Uploader {
       const error = resp.error || (status === 400 ? 'bad_batch' : 'too_large');
       cursor.last_error = resp.detail ? `${error}: ${resp.detail}` : error;
       store.writeUploadCursor(directory, cursor);
+      this.backingOff = false;
       this.nextAt = now + INTERVAL_MS;
       return 'skipped';
     }
@@ -651,6 +690,7 @@ export class Uploader {
       // The account switch is off: retry rarely; remote.json says when it is on.
       cursor.last_error = 'upload_disabled';
       store.writeUploadCursor(directory, cursor);
+      this.backingOff = true;
       this.nextAt = now + BACKOFF_MAX_MS;
       return 'backoff';
     }
@@ -714,12 +754,33 @@ export class Uploader {
     }
   }
 
-  /** At exit: one last pass within `timeoutMs` (best effort; only the timer holds the process). */
+  /**
+   * At exit: passes until nothing is left, within `timeoutMs` (best effort;
+   * only the timer holds the process; whatever is not sent stays on disk for
+   * the next run).
+   *
+   * The loop is told to stop after its current pass but never awaited (a POST
+   * can take 10 s); `passChain` keeps the passes apart, so no line is sent
+   * twice. Each drain pass checks the deadline when it starts and keeps the
+   * wait while backing off (429, 403 `upload_disabled`, network or 5xx
+   * errors); a directory locked by another process is retried every 100 ms.
+   */
   async drain(timeoutMs: number = DRAIN_TIMEOUT_MS): Promise<void> {
     if (!this.running || this.disabled) return;
+    this.stop();
+    const deadline = performance.now() + timeoutMs;
+    const passes = async (): Promise<void> => {
+      for (;;) {
+        const outcome = await this.runOnce({ unref: true, deadline });
+        if (outcome === 'sent' || outcome === 'skipped') continue;
+        if (outcome !== 'locked') return;
+        const wait = Math.max(Math.min(DRAIN_LOCK_RETRY_MS, deadline - performance.now()), 0);
+        await new Promise<void>((resolve) => setTimeout(resolve, wait).unref?.());
+      }
+    };
     let timer: NodeJS.Timeout | undefined;
     await Promise.race([
-      this.runOnce({ unref: true }),
+      passes(),
       new Promise<void>((resolve) => {
         timer = setTimeout(resolve, timeoutMs);
       }),

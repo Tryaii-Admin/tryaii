@@ -3,6 +3,7 @@ from tryaii.embeddings.local import LocalEmbeddingProvider
 from tryaii.embeddings.onnx_provider import OnnxEmbeddingProvider
 from tryaii.embeddings.openai_provider import OpenAIEmbeddingProvider
 from tryaii.embeddings.sentence_transformers_provider import SentenceTransformerEmbeddingProvider
+from tryaii.embeddings.static_provider import StaticEmbeddingProvider
 
 __all__ = [
     "BaseEmbeddingProvider",
@@ -10,4 +11,5 @@ __all__ = [
     "OnnxEmbeddingProvider",
     "OpenAIEmbeddingProvider",
     "SentenceTransformerEmbeddingProvider",
+    "StaticEmbeddingProvider",
 ]

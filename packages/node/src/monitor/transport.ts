@@ -2,8 +2,9 @@
  * Routing transport for the monitor wrapper. Mirrors monitor/transport.py.
  *
  * TS-253: the warm-up first builds the in-process engine (`./engine.js`: the
- * int8 ONNX embedding model on onnxruntime-node, the same model file,
- * tokenizer and centroids as the Python SDK). With it, routes run in this
+ * H4 router by default -- `tryaii-router-h4`, pure TypeScript -- else the int8
+ * ONNX embedding model on onnxruntime-node, the same model file, tokenizer
+ * and centroids as the Python SDK). With it, routes run in this
  * process and need no Python and no daemon. When onnxruntime-node or the
  * model file (`tryaii-minilm-int8`, or TRYAII_EMBEDDING_MODEL_PATH) is
  * missing, the daemon below is the fallback for one release; when neither

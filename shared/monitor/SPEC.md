@@ -109,12 +109,10 @@ Input: the native `messages` list of a chat-completions call.
 - `message_text(content)`: a string as is; a list of content parts → the
   `text` of the parts whose `type == "text"`, joined with `\n`; anything
   else (None, image/audio parts, tool payloads) → `""`.
-- `system` = the text of the **first** message whose role is `system` or
-  `developer`; `user` = the text of the **last** message whose role is
-  `user`. Non-object messages are ignored.
-- `text` = `system + "\n\n" + user` when both are non-empty; `user` alone
-  when there is no system text; `""` when there is no user text (a call
-  without a user turn is not routed — `route_status: "skipped"`).
+- `text` = the text of the **last** message whose role is `user` (since
+  the H4 router: system / developer messages are not part of the routing
+  text); `""` when there is no user text (a call without a user turn is not
+  routed — `route_status: "skipped"`). Non-object messages are ignored.
 - `text` is truncated to `MAX_PROMPT_LENGTH` code points
   (`classifiers/base.py`, the router's own limit).
 - `prompt_hash` = lowercase sha256 hex of the UTF-8 bytes of `text` (`""`
@@ -343,10 +341,14 @@ now` (`since` ∈ `24h|7d|30d`):
   "etag", "fetched_at"}`; else `{"kind": "local", "etag": null,
   "fetched_at": null}`.
 - `upload` from `upload.json` (§3.4): no cursor → `{"state": "off",
-  "events": 0, "last_ok": null, "last_error": null}`; `last_error` set →
-  `"error"`; else `"ok"`. `events` = the number of `\n` inside the uploaded
-  byte prefix of each cursor file (files that are gone count 0) — every
-  line the cursor covers, skipped ones included.
+  "events": 0, "pending": 0, "last_ok": null, "last_error": null}`;
+  `last_error` set → `"error"`; else `"ok"`. `events` = the number of `\n`
+  inside the uploaded byte prefix of each cursor file (files that are gone
+  count 0) — every line the cursor covers, skipped ones included.
+  `pending` = the non-blank complete lines of every `events-*.jsonl` after
+  its cursor offset (a file not in the cursor, or shorter than its offset,
+  counts from 0): the lines not uploaded yet. Computed at status time;
+  nothing new is stored.
 - `swapped_calls` = events with `model_used != model_requested` (both
   non-empty). `est_cost_anchor_usd` sums the events' `est_cost_anchor_usd`;
   `realised_savings_usd` = Σ max(0, `est_cost_anchor_usd` − `est_cost_usd`)
@@ -479,6 +481,20 @@ unknown and tolerate missing keys, so slice-1 lines stay readable):
   `version` is the catalog release, not the taxonomy), so every event
   records `null` until the bench server publishes one (TS-179). Right after
   `classification`.
+- `router` (H4, optional) — the router that classified this call's prompt,
+  a flat string `"<id>@<version>"`: `"h4-he-en@1.0.0"` when the H4 router
+  routed (id and `version` from the loaded payload's `meta.json`, i.e. the
+  model-store pin actually used, never the config), `"minilm@<embedding model
+  id>"` (e.g. `"minilm@all-MiniLM-L6-v2-onnx-int8"`) when the MiniLM centroids
+  path routed (`TRYAII_ROUTER=minilm`, or the H4 fallback). Taken from the
+  same route result as `classification` (the daemon's / in-process engine's
+  `classification.router` wire key). **Left out** when no routing happened
+  (`route_status` other than `ok` and no in-path route; metadata-only events,
+  Claude Code imports) and when the daemon predates the field; a reader
+  treats a missing key as `null`. Right after `taxonomy_version`. Not in
+  API.md yet: the server drops unknown event fields, so the key is
+  forward-compatible; its name and value never use the server's forbidden
+  keys (`prompt`, `messages`, `response`, `content`, `text`, `raw`).
 - `est_cost_anchor_usd` (API.md v1.1) — the call's usage priced at the
   anchor (`model_resolved`), 6 dp; equal to `est_cost_usd` when nothing was
   swapped; `null` for an unknown/unpriced anchor or missing usage. After a
@@ -529,7 +545,9 @@ unknown and tolerate missing keys, so slice-1 lines stay readable):
 - `error` = `{"status": <int|null>, "class": "<exception class name>"}`
   or `null`. Never message text.
 - `prompt_hash` per §2.1; `vector` = whether a vectors line was written for
-  this call (false when deduplicated, disabled, or no embedding).
+  this call (false when deduplicated, disabled, or no embedding). Always a
+  JSON boolean, never the embedding itself (the server rejects a non-boolean
+  `vector`); the embedding goes only to the local vectors file (§3.2).
 
 v1.4 fields (API.md §3.2.1 is normative for shape, limits and redaction):
 
@@ -820,8 +838,17 @@ when `TRYAII_API_KEY` is set and `TRYAII_MONITOR_REMOTE` is not `"0"`:
     (`last_error = "http <status>"`); network failure → backoff
     (`last_error = "network"`). Backoff: 5 s, doubling, capped at 5 min;
 - never deletes or rewrites local files;
-- at process exit gets one last pass bounded by **2 s** (after the routing
-  worker's own ≤ 2 s drain).
+- sends `X-Request-ID: <batch_id>` with each upload POST;
+- a directory whose `upload.lock` another process holds is a `locked` pass
+  (not `idle`);
+- at process exit drains within **2 s** (after the routing worker's own
+  ≤ 2 s drain): the background loop is told to stop after its current pass
+  (never waited for), then passes run one after another until nothing is
+  left. Each pass checks the deadline before it starts and drops the 5 s
+  spacing unless the uploader is backing off (set by a network error, 5xx,
+  429 or 403 `upload_disabled`; cleared by 2xx, 400 or 413); a `locked`
+  pass is retried every 100 ms. Lines not sent by the deadline stay on
+  disk for the next run.
 
 Every failure is swallowed: upload and remote config never affect the
 application's calls.
@@ -908,7 +935,8 @@ saved <realised_savings_usd>` (money format, `-` for null); every block
 (including the `no calls in this window` one) then ends with the source
 line — `source: local` or `source: remote etag <etag> fetched
 <fetched_at>` — and the upload line — `upload: off`, `upload: ok <events>
-events at <last_ok|->` or `upload: error <last_error>` (§2.7).
+events at <last_ok|->` or `upload: error <last_error>` (§2.7) — then, when
+`upload.pending` > 0, `  <pending> events not uploaded yet`.
 
 Blocks are separated by one blank line. The table has the columns
 `process  mode  pinned  calls  tokens  est cost  at winner  savings  top winner share`

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tryaii"
-version = "0.8.3"
+version = "0.9.0"
 description = "TryAii Diff Routing Engine -- Embedding-based AI model router. Understands your prompt semantically and routes to the best model based on benchmarks, cost, speed, and quality."
 readme = "README.md"
 license = "Apache-2.0"
@@ -40,6 +40,12 @@ dependencies = [
     # The model file itself (22.8 MB), pinned to the sha256 in
     # tryaii.embeddings.model_store; built from packages/python-model.
     "tryaii-minilm-int8==1.0.0",
+    # The default router (H4, h4-he-en): static Hebrew + English embeddings and
+    # a classification head (12.9 MB, numpy + tokenizers only), pinned to the
+    # payload hash in tryaii.embeddings.model_store; built from
+    # packages/python-router-h4-model. MiniLM above stays as the fallback
+    # (TRYAII_ROUTER=minilm, or H4 missing/broken).
+    "tryaii-router-h4==1.0.0",
 ]
 
 [project.optional-dependencies]

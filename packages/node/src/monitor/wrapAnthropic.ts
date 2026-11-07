@@ -11,8 +11,8 @@
  *
  * Differences from the openai wrapper:
  *
- * - Routing text: the top-level `system` (a string or text blocks) is read as
- *   the system message, then the last `user` message.
+ * - Routing text: the last `user` message only (the top-level `system` is
+ *   not routed, as for chat completions since the H4 router).
  * - The event's `provider` is `anthropic` (Bedrock and Vertex clients too:
  *   they answer with the same Messages-API usage). It is not a SPEC.md §2.2
  *   class; routing treats it like `other`, so the label only tells the server
@@ -119,8 +119,9 @@ export function mergeStreamUsage(
 
 /**
  * The request's `messages` with its top-level `system` (a string or text
- * blocks) put first as a `system` message, so routing text and the cache lint
- * read the Messages API like a chat-completions request.
+ * blocks) put first as a `system` message, so the cache lint reads the
+ * Messages API like a chat-completions request (routing text uses the last
+ * `user` message only).
  */
 export function routingMessages(params: Record<string, unknown>): unknown {
   const messages = params.messages;

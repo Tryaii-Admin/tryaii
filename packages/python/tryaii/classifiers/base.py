@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import Optional
 
 # Maximum allowed prompt length (characters).  Prompts longer than this are
 # silently truncated to avoid OOM in the embedding model.
@@ -39,6 +40,15 @@ class ClassificationResult:
     # Intrinsic task difficulty in [0, 1] from the easy/hard centroids
     # (0 = trivial, 1 = complex). 0.0 when difficulty centroids are unavailable.
     difficulty: float = 0.0
+    # H4 router only: how many of the head's classes were dropped because
+    # their benchmark is not in the loaded catalog (the rest are renormalised
+    # to sum to 1). 0 for the embedding classifier.
+    masked_classes: int = 0
+    # The router that classified the prompt, "<id>@<version>": e.g.
+    # "h4-he-en@1.0.0" (the H4 payload's meta.json) or
+    # "minilm@all-MiniLM-L6-v2-onnx-int8" (the MiniLM centroids path). Set by
+    # the Router; None when unknown (custom classifiers, old daemons).
+    router: Optional[str] = None
 
     @property
     def top_benchmarks(self) -> list[tuple[str, float]]:

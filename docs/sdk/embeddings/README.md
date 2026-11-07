@@ -28,7 +28,22 @@ TypeScript port, frozen against Python by `shared/embeddings/tokenizer_parity.js
 truncation to 256 tokens, mean pooling and L2 normalisation. It is async-only.
 It needs the optional peers `onnxruntime-node` and `tryaii-minilm-int8`, or
 `TRYAII_EMBEDDING_MODEL_PATH`; without them it throws `ModelUnavailableError`.
-The monitor uses it in-process; `Router` still defaults to `LocalEmbeddingProvider`.
+The monitor uses it in-process when H4 is unavailable or `TRYAII_ROUTER=minilm`;
+the `Router`'s MiniLM fallback is `LocalEmbeddingProvider`.
+
+## StaticEmbeddingProvider (the H4 router)
+
+`StaticEmbeddingProvider` (Python `tryaii.embeddings`, Node package root) is
+the encoder of the default H4 router (`h4-he-en`): a Model2Vec static model
+from the `tryaii-router-h4` package (or `TRYAII_ROUTER_MODEL_PATH`). A text's
+vector is the mean of its token vectors: the text is cut to 3,500 code
+points, tokenized without special tokens (SentencePiece Unigram; Node runs a
+TypeScript port frozen by `shared/embeddings/unigram_parity.json`), cut to
+700 tokens, the unknown token dropped, the int8 rows summed as exact
+integers, divided once and L2-normalised (256 dimensions, float32). It is
+sync in both SDKs. The `HeadClassifier` puts the vector through the head
+(`softmax(logits / 2)`, masked to the catalog's benchmarks); a custom
+provider passed to `Router` always means centroid routing instead.
 
 ## OpenAIEmbeddingProvider (Python only)
 

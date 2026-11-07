@@ -1,6 +1,6 @@
 {
   "name": "tryaii",
-  "version": "0.8.3",
+  "version": "0.9.0",
   "description": "AI model router for Node.js and TypeScript with benchmark, cost, and speed-based ranking",
   "type": "module",
   "main": "dist/index.js",
@@ -80,7 +80,8 @@
     "@typescript-eslint/eslint-plugin": "^6.19.0",
     "@typescript-eslint/parser": "^6.19.0",
     "onnxruntime-node": "^1.30.0",
-    "tryaii-minilm-int8": "file:../node-model"
+    "tryaii-minilm-int8": "file:../node-model",
+    "tryaii-router-h4": "file:../router-h4-model"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -88,7 +89,8 @@
   "peerDependencies": {
     "typescript": ">=4.7",
     "onnxruntime-node": ">=1.17.0",
-    "tryaii-minilm-int8": "1.0.0"
+    "tryaii-minilm-int8": "1.0.0",
+    "tryaii-router-h4": "1.0.0"
   },
   "peerDependenciesMeta": {
     "typescript": {
@@ -98,6 +100,9 @@
       "optional": true
     },
     "tryaii-minilm-int8": {
+      "optional": true
+    },
+    "tryaii-router-h4": {
       "optional": true
     }
   }

@@ -989,7 +989,8 @@ describe('finding 4: daemon replacement races and mid-request failures', () => {
     await new Promise<void>((ok) => fake.listen(0, '127.0.0.1', () => ok()));
     try {
       base = {
-        runtime: 'node', version: '0', embeddingModel: config.embeddingModel, catalog: 'starter:x',
+        runtime: 'node', version: '0', embeddingModel: config.embeddingModel, router: config.router,
+        catalog: 'starter:x',
         host: '127.0.0.1', port: (fake.address() as AddressInfo).port, token: 't', pid: 0,
         startedAtMs: 0,
       };

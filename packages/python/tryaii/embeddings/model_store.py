@@ -25,6 +25,20 @@ kept in ``<data dir>/embedding-model.json`` (shown by ``tryaii monitor
 status``), and the warning is logged at most once per machine per day for the
 same reason -- every other time at debug level -- so a long-lived fleet does
 not repeat it on every process start. The library never prints.
+
+The router payload (H4, ``h4-he-en``)
+-------------------------------------
+
+The default router since H4 is a static embedding model plus a classification
+head, shipped as a directory of five files in its own package,
+``tryaii-router-h4`` (:data:`ROUTERS`). It resolves the same way:
+``TRYAII_ROUTER_MODEL_PATH`` (a directory holding the payload) first, else the
+installed package; every payload must match the pinned hash -- the sha256 of
+its ``SHA256SUMS`` text (one ``<sha256>  <file>`` line per payload file,
+sorted by name), recomputed here from the files themselves -- and total size.
+When H4 is unavailable the router falls back to the MiniLM path above; that is
+recorded in ``<data dir>/router-model.json`` (:data:`ROUTER_STATE_FILE`) with
+the same once-a-day warning, so ``tryaii monitor status`` can say so.
 """
 
 from __future__ import annotations
@@ -45,6 +59,9 @@ logger = logging.getLogger("tryaii.embeddings")
 ENV_MODEL_PATH = "TRYAII_EMBEDDING_MODEL_PATH"
 MODEL_FILE = "model.onnx"
 STATE_FILE = "embedding-model.json"
+
+ENV_ROUTER_MODEL_PATH = "TRYAII_ROUTER_MODEL_PATH"
+ROUTER_STATE_FILE = "router-model.json"
 
 DATA_DIR = Path(__file__).parent / "data"
 
@@ -83,6 +100,41 @@ MODELS: dict[str, ModelSpec] = {
 }
 
 DEFAULT_ONNX_MODEL = "all-MiniLM-L6-v2-onnx-int8"
+
+
+@dataclass(frozen=True)
+class RouterSpec:
+    """A router payload (static embedding model + classification head) and
+    the package that ships it (scripts/export-h4-model.py)."""
+
+    router_id: str
+    #: sha256 of the payload's SHA256SUMS text (see the module docstring).
+    sha256: str
+    #: Sum of the payload file sizes.
+    size_bytes: int
+    #: The payload files (SHA256SUMS order).
+    files: tuple
+    dimension: int
+    #: Import name of the package that ships it (exposes ``model_dir()``).
+    package: str
+    #: Its distribution name, for messages (``pip install ...``).
+    distribution: str
+
+
+ROUTERS: dict[str, RouterSpec] = {
+    "h4-he-en": RouterSpec(
+        router_id="h4-he-en",
+        sha256="b85b07c215479dce26cd283e3220e47924b08944f53b450e477e1d13a8cb9675",
+        size_bytes=12892408,
+        files=("classes.json", "head.safetensors", "meta.json", "tokenizer.json",
+               "vectors.safetensors"),
+        dimension=256,
+        package="tryaii_router_h4",
+        distribution="tryaii-router-h4",
+    ),
+}
+
+DEFAULT_ROUTER_MODEL = "h4-he-en"
 
 
 class ModelUnavailableError(RuntimeError):
@@ -190,6 +242,112 @@ def resolve_model_path(model_id: str) -> Optional[Path]:
     return path
 
 
+# -- router payloads ------------------------------------------------------------
+_ROUTER_ERROR: dict[str, Optional[str]] = {"error": None}
+
+
+def last_router_error() -> Optional[str]:
+    """Why the last :func:`resolve_router_dir` returned None (or None)."""
+    return _ROUTER_ERROR["error"]
+
+
+def payload_manifest(directory: Path, files) -> tuple[str, int]:
+    """``(SHA256SUMS text, total size)`` computed from the files in
+    ``directory``. Raises OSError for a missing file."""
+    lines, size = [], 0
+    for name in sorted(files):
+        path = Path(directory) / name
+        size += path.stat().st_size
+        lines.append(f"{sha256_file(path)}  {name}\n")
+    return "".join(lines), size
+
+
+def payload_sha256(directory: Path, files) -> tuple[str, int]:
+    """``(payload hash, total size)`` of the files in ``directory``."""
+    text, size = payload_manifest(directory, files)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest(), size
+
+
+def _router_verified(directory: Path, spec: RouterSpec) -> bool:
+    try:
+        stats = [(name, (Path(directory) / name).stat()) for name in spec.files]
+    except OSError:
+        return False
+    key = ("router", str(directory)) + tuple(
+        (name, st.st_size, st.st_mtime_ns) for name, st in stats)
+    with _LOCK:
+        hit = _VERIFIED.get(key)
+    if hit is None:
+        if sum(st.st_size for _, st in stats) != spec.size_bytes:
+            hit = False
+        else:
+            try:
+                digest, _size = payload_sha256(directory, spec.files)
+            except OSError:
+                digest = ""
+            hit = digest == spec.sha256
+        with _LOCK:
+            _VERIFIED[key] = hit
+    return hit
+
+
+def package_router_dir(spec: RouterSpec) -> Optional[Path]:
+    """The payload directory of the installed router package, or None."""
+    try:
+        module = importlib.import_module(spec.package)
+    except ImportError:
+        return None
+    return Path(module.model_dir())
+
+
+def resolve_router_dir(router_id: str = DEFAULT_ROUTER_MODEL) -> Optional[Path]:
+    """A verified payload directory for ``router_id``, or None
+    (``TRYAII_ROUTER_MODEL_PATH`` first, else the installed package). Never
+    raises; :func:`last_router_error` says why."""
+    spec = ROUTERS.get(router_id)
+    if spec is None:
+        _ROUTER_ERROR["error"] = f"unknown router {router_id}"
+        return None
+    override = os.environ.get(ENV_ROUTER_MODEL_PATH)
+    if override:
+        path = Path(override).expanduser()
+        if _router_verified(path, spec):
+            _ROUTER_ERROR["error"] = None
+            return path
+        _ROUTER_ERROR["error"] = (f"{ENV_ROUTER_MODEL_PATH} points at a missing directory "
+                                  f"or one that does not match")
+        return None
+    try:
+        path = package_router_dir(spec)
+    except Exception:  # noqa: BLE001 - a broken package is "not installed"
+        path = None
+    if path is None:
+        _ROUTER_ERROR["error"] = f"package {spec.distribution} is not installed"
+        return None
+    if not _router_verified(path, spec):
+        _ROUTER_ERROR["error"] = (f"the installed {spec.distribution} does not match "
+                                  f"the expected sha256")
+        return None
+    _ROUTER_ERROR["error"] = None
+    return path
+
+
+class RouterUnavailableError(RuntimeError):
+    """No verified router payload is installed or placed."""
+
+    def __init__(self, router_id: str, reason: Optional[str] = None):
+        reason = reason or last_router_error() or "not found"
+        spec = ROUTERS.get(router_id)
+        fix = (f"reinstall it (pip install --force-reinstall {spec.distribution}) or "
+               if spec else "")
+        super().__init__(
+            f"router model {router_id} is not available ({reason}); {fix}"
+            f"set {ENV_ROUTER_MODEL_PATH} to a copy of its directory"
+        )
+        self.router_id = router_id
+        self.reason = reason
+
+
 # -- reporting a missing model (throttled) ------------------------------------
 _WARNED_THIS_PROCESS: set = set()
 
@@ -201,25 +359,28 @@ def _data_dir(data_dir: Optional[Path]) -> Path:
     return Path(env) if env else Path.home() / ".tryaii"
 
 
-def state_path(data_dir: Optional[Path] = None) -> Path:
-    return _data_dir(data_dir) / STATE_FILE
+def state_path(data_dir: Optional[Path] = None, state_file: str = STATE_FILE) -> Path:
+    return _data_dir(data_dir) / state_file
 
 
-def read_state(data_dir: Optional[Path] = None) -> Optional[dict]:
-    """``embedding-model.json`` when the model was last found unavailable,
+def read_state(data_dir: Optional[Path] = None,
+               state_file: str = STATE_FILE) -> Optional[dict]:
+    """``embedding-model.json`` (or ``state_file``, e.g.
+    :data:`ROUTER_STATE_FILE`) when the model was last found unavailable,
     else None: ``{"model", "reason", "since", "last_warned"}``."""
     try:
-        doc = json.loads(state_path(data_dir).read_text(encoding="utf-8"))
+        doc = json.loads(state_path(data_dir, state_file).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     return doc if isinstance(doc, dict) and doc.get("model") else None
 
 
-def _write_state(data_dir: Optional[Path], doc: dict) -> None:
+def _write_state(data_dir: Optional[Path], doc: dict, state_file: str = STATE_FILE) -> None:
     from tryaii.auth.store import write_atomic
 
-    write_atomic(state_path(data_dir), (json.dumps(doc) + "\n").encode("utf-8"),
-                 prefix=".embedding-model-")
+    prefix = "." + state_file.rsplit(".", 1)[0] + "-"
+    write_atomic(state_path(data_dir, state_file), (json.dumps(doc) + "\n").encode("utf-8"),
+                 prefix=prefix)
 
 
 def _now_iso() -> str:
@@ -228,7 +389,7 @@ def _now_iso() -> str:
 
 def report_unavailable(model_id: str, reason: str, *, data_dir: Optional[Path] = None,
                        log: Optional[logging.Logger] = None, message: str = "",
-                       today: Optional[str] = None) -> bool:
+                       today: Optional[str] = None, state_file: str = STATE_FILE) -> bool:
     """Record that ``model_id`` is unavailable and log it -- as a warning at
     most once per machine per local day for the same reason (once per process
     when the data dir is not writable), at debug level otherwise. Returns True
@@ -236,7 +397,7 @@ def report_unavailable(model_id: str, reason: str, *, data_dir: Optional[Path] =
     log = log or logger
     today = today or _dt.date.today().isoformat()
     text = message or f"embedding model {model_id} is not available ({reason})"
-    previous = read_state(data_dir) or {}
+    previous = read_state(data_dir, state_file) or {}
     same = previous.get("model") == model_id and previous.get("reason") == reason
     doc = {
         "model": model_id,
@@ -245,17 +406,17 @@ def report_unavailable(model_id: str, reason: str, *, data_dir: Optional[Path] =
         "last_warned": previous.get("last_warned") if same else None,
     }
     warn = doc["last_warned"] != today
-    key = (model_id, reason)
+    key = (state_file, model_id, reason)
     if warn:
         doc["last_warned"] = today
         try:
-            _write_state(data_dir, doc)
+            _write_state(data_dir, doc, state_file)
         except OSError:
             # Read-only data dir: still never more than once per process.
             warn = key not in _WARNED_THIS_PROCESS
     elif not same:
         try:
-            _write_state(data_dir, doc)
+            _write_state(data_dir, doc, state_file)
         except OSError:
             pass
     if warn:
@@ -267,16 +428,20 @@ def report_unavailable(model_id: str, reason: str, *, data_dir: Optional[Path] =
 
 
 def clear_unavailable(data_dir: Optional[Path] = None,
-                      log: Optional[logging.Logger] = None) -> None:
+                      log: Optional[logging.Logger] = None,
+                      state_file: str = STATE_FILE) -> None:
     """The model is available (again): drop the state file, saying so once."""
-    path = state_path(data_dir)
+    path = state_path(data_dir, state_file)
     if not path.exists():
         return
     try:
         path.unlink()
     except OSError:
         return
-    (log or logger).info("embedding model available again; classification is back on")
+    if state_file == ROUTER_STATE_FILE:
+        (log or logger).info("router model available again; routing with it")
+    else:
+        (log or logger).info("embedding model available again; classification is back on")
 
 
 def reset_cache() -> None:
@@ -285,3 +450,4 @@ def reset_cache() -> None:
         _VERIFIED.clear()
     _WARNED_THIS_PROCESS.clear()
     _LAST_ERROR["error"] = None
+    _ROUTER_ERROR["error"] = None

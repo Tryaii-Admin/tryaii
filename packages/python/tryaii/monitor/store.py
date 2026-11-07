@@ -388,3 +388,25 @@ def uploaded_event_count(directory, cursor: Optional[dict]) -> int:
         except OSError:
             continue
     return total
+
+
+def pending_event_count(directory, cursor: Optional[dict]) -> int:
+    """The number of non-blank complete lines of every ``events-*.jsonl``
+    after the cursor's offset: the lines not uploaded yet (a file shorter
+    than its offset counts from 0, as the uploader restarts it). 0 without
+    a cursor. Computed when asked; nothing is stored."""
+    if not cursor:
+        return 0
+    files = cursor.get("files") or {}
+    total = 0
+    for path in event_files(directory):
+        try:
+            data = path.read_bytes()
+        except OSError:
+            continue
+        offset = files.get(path.name, 0)
+        if not isinstance(offset, int) or offset > len(data):
+            offset = 0
+        complete = data[offset:data.rfind(b"\n") + 1]
+        total += sum(1 for line in complete.split(b"\n") if line.strip())
+    return total

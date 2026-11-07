@@ -52,30 +52,19 @@ function truncateCodePoints(text: string, limit: number): string {
 /**
  * `[text, prompt_hash]` for a chat-completions `messages` list.
  *
- * `text` = the FIRST system/developer message's text, a blank line, then
- * the LAST user message's text; the user text alone when there is no
- * system text; `""` when there is no user text at all (a call without a
- * user turn is not routed). Truncated to MAX_PROMPT_LENGTH code points.
- * Non-object messages are ignored.
+ * `text` = the text of the LAST user message (the H4 router classifies the
+ * user's request alone; system/developer messages are not part of it); `""`
+ * when there is no user text at all (a call without a user turn is not
+ * routed). Truncated to MAX_PROMPT_LENGTH code points (the router's own
+ * limit). Non-object messages are ignored.
  */
 export function routingText(messages: unknown): [string, string] {
-  let systemText: string | null = null;
   let userText: string | null = null;
   if (Array.isArray(messages)) {
     for (const msg of messages) {
-      if (!isRecord(msg)) continue;
-      const role = msg.role;
-      if (typeof role === 'string' && SYSTEM_ROLES.includes(role) && systemText === null) {
-        systemText = messageText(msg.content);
-      } else if (role === USER_ROLE) {
-        userText = messageText(msg.content);
-      }
+      if (isRecord(msg) && msg.role === USER_ROLE) userText = messageText(msg.content);
     }
   }
-  let text: string;
-  if (!userText) text = '';
-  else if (systemText) text = systemText + '\n\n' + userText;
-  else text = userText;
-  text = truncateCodePoints(text, MAX_PROMPT_LENGTH);
+  const text = truncateCodePoints(userText || '', MAX_PROMPT_LENGTH);
   return [text, promptHash(text)];
 }

@@ -322,6 +322,61 @@ def test_route_failures_are_recorded_as_status():
         [event] = events_of(monitor)
         assert event["route_status"] == status
         assert event["winner"] is None and event["est_cost_usd"] == 0.002
+        assert "router" not in event   # no routing: the key is left out
+
+
+FORBIDDEN_KEYS = {"prompt", "messages", "response", "content", "text", "raw"}
+
+
+def _keys_deep(value):
+    if isinstance(value, dict):
+        for k, v in value.items():
+            yield k
+            yield from _keys_deep(v)
+    elif isinstance(value, list):
+        for v in value:
+            yield from _keys_deep(v)
+
+
+@pytest.mark.parametrize("tag", ["h4-he-en@1.0.0", "minilm@all-MiniLM-L6-v2-onnx-int8"])
+def test_router_identity_recorded_after_taxonomy_version(tag):
+    def route_fn(text):
+        return SCORES_MINI_WINS, {**CLASSIFICATION, "router": tag}, EMBEDDING
+
+    client = FakeClient()
+    monitor = wrap(client, app="shop", route_fn=route_fn)
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    [event] = events_of(monitor)
+    keys = list(event)
+    assert keys[keys.index("taxonomy_version") + 1] == "router"
+    assert event["router"] == tag
+    # The server rejects the whole batch on these names and a non-bool vector.
+    assert not FORBIDDEN_KEYS & set(_keys_deep(event))
+    assert event["vector"] is True and isinstance(event["vector"], bool)
+
+
+def test_router_identity_from_a_route_result_object():
+    from tryaii.classifiers.base import ClassificationResult
+
+    cls = ClassificationResult(broad_category="coding", subcategory="debugging",
+                               confidence=0.8, router="h4-he-en@1.0.0")
+    client = FakeClient()
+    monitor = wrap(client, app="shop", route_fn=lambda text: (SCORES_MINI_WINS, cls, None))
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    [event] = events_of(monitor)
+    assert event["router"] == "h4-he-en@1.0.0" and event["vector"] is False
+
+
+@pytest.mark.parametrize("bad", [None, "", "h4-he-en", "a@b@c", 7, ["h4-he-en@1.0.0"]])
+def test_router_identity_missing_or_malformed_is_left_out(bad):
+    def route_fn(text):
+        return SCORES_MINI_WINS, {**CLASSIFICATION, "router": bad}, EMBEDDING
+
+    client = FakeClient()
+    monitor = wrap(client, app="shop", route_fn=route_fn)
+    client.chat.completions.create(model="gpt-5.5", messages=MESSAGES)
+    [event] = events_of(monitor)
+    assert "router" not in event
 
 
 # --- dynamic ----------------------------------------------------------------
@@ -966,11 +1021,15 @@ def test_exit_records_calls_still_waiting_for_the_warm_up(monkeypatch):
 
 
 def _no_model_package(monkeypatch):
+    """Neither the H4 router package nor the MiniLM fallback is installed."""
     from tryaii.embeddings import model_store
 
     monkeypatch.delenv(model_store.ENV_MODEL_PATH, raising=False)
+    monkeypatch.delenv(model_store.ENV_ROUTER_MODEL_PATH, raising=False)
     monkeypatch.setitem(sys.modules,
                         model_store.MODELS[model_store.DEFAULT_ONNX_MODEL].package, None)
+    monkeypatch.setitem(sys.modules,
+                        model_store.ROUTERS[model_store.DEFAULT_ROUTER_MODEL].package, None)
     model_store.reset_cache()
 
 
@@ -1017,9 +1076,11 @@ def test_missing_embedding_model_fails_open_without_a_daemon(monkeypatch, tmp_pa
         assert event["route_status"] == "unavailable" and event["winner"] is None
         assert event["classification"] is None and event["vector"] is False
         assert event["model_used"] == "gpt-5.5" and event["mode"] == mode
-    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
-    assert len(warnings) == 1
-    text = warnings[0].getMessage()
+    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    # One line per model: the H4 router (falling back) and MiniLM (off).
+    assert len(warnings) == 2
+    assert "router model h4-he-en is not available" in warnings[0]
+    text = warnings[1]
     assert "all-MiniLM-L6-v2-onnx-int8 is not available" in text
     assert "package tryaii-minilm-int8 is not installed" in text
     assert "pip install --force-reinstall tryaii-minilm-int8" in text
@@ -1040,7 +1101,8 @@ def test_missing_model_warning_is_not_repeated_by_every_process(monkeypatch, tmp
     for _ in range(3):                    # three process starts
         model_store.reset_cache()
         Transport(TryaiiDreConfig(data_dir=tmp_path))._warm_up()
-    assert len([r for r in caplog.records if r.levelno >= logging.WARNING]) == 1
+    # Once per machine per day for each model (H4 router + MiniLM fallback).
+    assert len([r for r in caplog.records if r.levelno >= logging.WARNING]) == 2
     line = _classification_line(tmp_path)
     assert line.startswith("classification: off since ")
     assert line.endswith("(package tryaii-minilm-int8 is not installed)")

@@ -11,6 +11,7 @@
   "upload": {
     "state": "ok",
     "events": 2,
+    "pending": 1,
     "last_ok": "2026-10-12T08:25:00.000Z",
     "last_error": null
   },

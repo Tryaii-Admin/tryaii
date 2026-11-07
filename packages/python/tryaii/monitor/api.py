@@ -169,8 +169,10 @@ def reset_fixture_state() -> None:
 
 def request(method: str, url: str, body=None, *, bearer: Optional[str] = None,
             opener=None, timeout: float = TIMEOUT_SECONDS,
-            raw_body: Optional[bytes] = None) -> ApiResponse:
-    """Send one request; JSON ``body`` (or the exact ``raw_body`` bytes).
+            raw_body: Optional[bytes] = None,
+            headers: Optional[dict] = None) -> ApiResponse:
+    """Send one request; JSON ``body`` (or the exact ``raw_body`` bytes);
+    ``headers`` are added to the defaults (the upload's ``X-Request-ID``).
 
     Returns the answer for EVERY HTTP status; raises ApiNetworkError for a
     transport failure. Never follows redirects (a 3xx is returned as is).
@@ -182,7 +184,9 @@ def request(method: str, url: str, body=None, *, bearer: Optional[str] = None,
             if raw_body is not None:
                 logged = _decode(raw_body)
             return _fixture_request(fixture, method, url, logged, bearer)
+    extra = headers
     headers = {"Accept": "application/json", "User-Agent": f"tryaii/{_version()}"}
+    headers.update(extra or {})
     data = raw_body
     if data is None and body is not None:
         data = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")

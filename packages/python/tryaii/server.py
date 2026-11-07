@@ -55,6 +55,7 @@ def _serialize_classification(classification) -> Optional[dict]:
         "cacheHit": classification.cache_hit,
         "processingTimeMs": classification.processing_time_ms,
         "difficulty": classification.difficulty,
+        "router": getattr(classification, "router", None),
     }
 
 
@@ -90,6 +91,7 @@ def _handle(req: dict, router, token: str, state: dict) -> dict:
             "runtime": state["runtime"],
             "version": state["version"],
             "embeddingModel": state["embeddingModel"],
+            "router": state.get("router"),
             "catalog": state.get("catalog"),
             "pid": state["pid"],
             "uptimeMs": int(time.time() * 1000) - state["startedAtMs"],
@@ -127,8 +129,12 @@ def _handle(req: dict, router, token: str, state: dict) -> dict:
                                   allowed_models=allowed)
         payload = serialize_route_result(result)
         if include_embedding:
+            # The vector's own model: h4-he-en (256-d) under H4, else the
+            # embedding model.
+            model = getattr(router, "router_id", None)
             payload["embedding"] = serialize_embedding(
-                router.embed_prompt(prompt), state["embeddingModel"])
+                router.embed_prompt(prompt),
+                model if isinstance(model, str) and model else state["embeddingModel"])
         return {"ok": True, "result": payload}
 
     return {"ok": False, "error": f"unknown command: {cmd}"}
@@ -173,7 +179,8 @@ def serve(
         from tryaii import Priorities, Router
 
         router = Router(config=config, bundle=bundle, policy=None)
-        emit(f"[daemon] loading embedding model '{config.embedding_model}' (one-time)...")
+        emit(f"[daemon] loading router '{config.router}' "
+             f"(embedding model '{config.embedding_model}') (one-time)...")
         started = time.time()
         router.route("warmup", priorities=Priorities(), top_k=1)
         emit(f"[daemon] model warm in {time.time() - started:.1f}s")
@@ -185,6 +192,9 @@ def serve(
         "runtime": _daemon.RUNTIME,
         "version": __version__,
         "embeddingModel": config.embedding_model,
+        # The requested router ("h4" | "minilm"); a client reuses only a
+        # daemon whose router matches its own TRYAII_ROUTER.
+        "router": config.router,
         "catalog": _daemon.catalog_key(bundle),
         "host": host,
         "port": port,

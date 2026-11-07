@@ -221,6 +221,8 @@ export interface RequestOptions {
   env?: NodeJS.ProcessEnv;
   /** Unref the socket so a pending request never keeps the process alive. */
   unref?: boolean;
+  /** Added to the default headers (the upload's `X-Request-ID`). */
+  headers?: Record<string, string>;
 }
 
 interface RawAnswer {
@@ -340,6 +342,7 @@ export async function request(
   const headers: Record<string, string> = {
     Accept: 'application/json',
     'User-Agent': `tryaii/${sdkVersion()}`,
+    ...(opts.headers ?? {}),
   };
   let data: Uint8Array | string | null = rawBody;
   if (data === null && body !== null && body !== undefined) data = JSON.stringify(body);
