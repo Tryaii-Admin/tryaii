@@ -235,6 +235,23 @@ def _classification_line(data_dir) -> Optional[str]:
             f"({state.get('reason') or 'embedding model not available'})")
 
 
+def _router_line(data_dir) -> Optional[str]:
+    """``router: h4-he-en unavailable since <ts> (<reason>); routing with
+    <MiniLM id>`` when the H4 router was last found unavailable on this
+    machine (it falls back to MiniLM), else None. Machine-wide."""
+    from tryaii.embeddings.model_store import (
+        DEFAULT_ONNX_MODEL,
+        ROUTER_STATE_FILE,
+        read_state,
+    )
+
+    state = read_state(Path(data_dir), ROUTER_STATE_FILE)
+    if not state:
+        return None
+    return (f"router: {state.get('model')} unavailable since {state.get('since') or '-'} "
+            f"({state.get('reason') or 'not found'}); routing with {DEFAULT_ONNX_MODEL}")
+
+
 def render_status(doc: dict, off_reason: Optional[str] = None) -> str:
     lines = [f"tryaii monitor -- app: {doc['app']} (last {doc['since']})", ""]
     if not doc["processes"]:
@@ -258,6 +275,9 @@ def render_status(doc: dict, off_reason: Optional[str] = None) -> str:
     if doc.get("key_app_mismatch"):
         lines.append(f'  key app: "{doc["key_app"]}" (differs from the local name)')
     lines.append(_upload_line(doc["upload"], off_reason))
+    pending = doc["upload"].get("pending") or 0
+    if pending:
+        lines.append(f"  {pending} events not uploaded yet")
     return "\n".join(lines) + "\n"
 
 
@@ -312,7 +332,8 @@ def _verb_status(argv: list, env: dict) -> None:
         docs.append(aggregate(app, events, store.read_pins(directory),
                               store.read_config(directory), now, since, env=env,
                               remote=store.read_remote(directory), upload_cursor=cursor,
-                              uploaded_events=store.uploaded_event_count(directory, cursor)))
+                              uploaded_events=store.uploaded_event_count(directory, cursor),
+                              pending_events=store.pending_event_count(directory, cursor)))
     if opts.get("json"):
         payload = docs[0] if opts.get("app") else docs
         print(json.dumps(payload, indent=2, ensure_ascii=False))
@@ -324,6 +345,9 @@ def _verb_status(argv: list, env: dict) -> None:
 
     _enabled, off_reason = upload_decision(env, store.monitor_root(data_dir))
     print("\n".join(render_status(doc, off_reason) for doc in docs), end="")
+    line = _router_line(data_dir)
+    if line:
+        print(line)
     line = _classification_line(data_dir)
     if line:
         print(line)

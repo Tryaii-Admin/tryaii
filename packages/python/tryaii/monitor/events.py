@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -354,6 +355,24 @@ def classification_from_wire(cls: Any) -> Optional[dict]:
     }
 
 
+#: ``"<id>@<version>"``: e.g. ``h4-he-en@1.0.0``, ``minilm@all-MiniLM-L6-v2-onnx-int8``.
+_ROUTER_TAG = re.compile(r"^[^@\s]+@[^@\s]+$")
+
+
+def _router_tag(value: Any) -> Optional[str]:
+    return value if isinstance(value, str) and _ROUTER_TAG.match(value) else None
+
+
+def router_from_wire(cls: Any) -> Optional[str]:
+    """The router that classified the prompt (``"<id>@<version>"``, SPEC.md
+    §3.1) from a daemon classification or a ClassificationResult; None when
+    it is missing or malformed (no routing, an older daemon)."""
+    if cls is None:
+        return None
+    value = cls.get("router") if isinstance(cls, dict) else getattr(cls, "router", None)
+    return _router_tag(value)
+
+
 def build_event(*, ts: str, app: str, process: str, call_site: Optional[dict],
                 provider: str, model_requested: Optional[str],
                 model_resolved: Optional[str], model_used: Optional[str],
@@ -364,6 +383,7 @@ def build_event(*, ts: str, app: str, process: str, call_site: Optional[dict],
                 stream: bool, error: Optional[dict], prompt_hash: str,
                 vector: bool, event_id: Optional[str] = None,
                 taxonomy_version: Optional[str] = None,
+                router: Optional[str] = None,
                 est_cost_anchor_usd: Optional[float] = None,
                 cache_ttl_policy: Optional[str] = None,
                 cache: Optional[dict] = None,
@@ -378,7 +398,9 @@ def build_event(*, ts: str, app: str, process: str, call_site: Optional[dict],
     the runtime cache lint. ``cache_cold`` (API.md v1.6, Claude Code imports
     only) follows ``cache_ttl_policy`` when given: true / false for a
     main-thread call (a cold cache restart or not), null otherwise; without
-    it the key is left out (a missing key reads as null)."""
+    it the key is left out (a missing key reads as null). ``router`` (SPEC.md
+    §3.1) is the router that classified the prompt, ``"<id>@<version>"``; it
+    follows ``taxonomy_version`` and is left out when None (no routing)."""
     site = None
     if call_site:
         site = {
@@ -403,9 +425,13 @@ def build_event(*, ts: str, app: str, process: str, call_site: Optional[dict],
         "route_status": route_status,
         "classification": classification,
         "taxonomy_version": taxonomy_version,
+    }
+    if _router_tag(router) is not None:
+        event["router"] = router
+    event.update({
         "usage": normalize_usage(usage),
         "cache_ttl_policy": normalize_cache_ttl_policy(cache_ttl_policy),
-    }
+    })
     if cache_cold is not _OMIT:
         event["cache_cold"] = cache_cold if isinstance(cache_cold, bool) else None
     event.update({

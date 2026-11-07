@@ -117,8 +117,8 @@ apply. What differs:
   decision and send the model in your code; `managed` with another model is
   recorded as `unreachable_managed`, a dashboard `stable` pin to another
   model as `unreachable_pin`.
-- **Routing text**: the top-level `system` (string or text blocks) is the
-  system message, then the last `user` message.
+- **Routing text**: the last `user` message only (the top-level `system`
+  is not routed, as for chat completions since the H4 router).
 - **Usage** (contract v1.5, SPEC.md §3.1b, `anthropic` row):
   `prompt_tokens` = `input_tokens` as reported (Anthropic's `input_tokens`
   **excludes** cached and written tokens), `completion_tokens` =
@@ -276,6 +276,30 @@ written, so the local file holds no prompt text either.
 In Node the lint engine loads in the background on the first call (its
 tokenizer data is several MB); a call recorded before it has loaded (an
 error recorded at once, a full queue) has no `cache` block.
+### The router model (H4)
+
+Prompts are classified by the H4 router (`h4-he-en`) by default in both
+SDKs: a static embedding model and a classification head, 12.9 MB in the
+`tryaii-router-h4` package (`pip install tryaii` installs it; in Node it is
+an optional peer dependency, `npm install tryaii-router-h4`). It needs no
+`onnxruntime`. `TRYAII_ROUTER_MODEL_PATH` (a directory with the five
+payload files) overrides the package; the payload must match the pinned
+hash. The router's probabilities are kept only for the benchmarks the
+loaded catalog has, renormalised to sum to 1.
+
+`TRYAII_ROUTER=minilm` routes with the embedding model below instead. When
+the H4 payload is missing or broken, routing falls back to it by itself:
+one warning a day (with the fix), and `tryaii monitor status` prints
+`router: h4-he-en unavailable since <time> (<reason>); routing with
+all-MiniLM-L6-v2-onnx-int8` while `<data dir>/router-model.json` exists.
+Vector lines written under H4 carry `"model": "h4-he-en"` (256 dimensions).
+
+Each routed event names the router that classified its prompt in a flat
+`router` field, `"<id>@<version>"`: `"h4-he-en@1.0.0"` (the id and version of
+the H4 payload actually loaded, from its `meta.json`) or
+`"minilm@all-MiniLM-L6-v2-onnx-int8"` when the MiniLM path routed (by choice
+or as the fallback). Events with no routing (metadata-only) leave the key out.
+
 ### The embedding model
 
 The daemon embeds with `all-MiniLM-L6-v2-onnx-int8`: all-MiniLM-L6-v2 as an
@@ -306,7 +330,9 @@ flooding your logs:
   `<data dir>/embedding-model.json`, and it is removed as soon as a process
   finds the model again.
 
-**Node** (TS-253) embeds in the application's process, with the same model
+**Node** (TS-253) routes in the application's process: with H4 (above) when
+`tryaii-router-h4` is installed, else with the MiniLM engine below. It
+embeds with the same model
 file, tokenizer, pooling and centroids as Python, so both SDKs classify a
 prompt identically (similarities equal to 4 decimals). No Python and no daemon
 are needed. The engine needs two optional peer dependencies:
@@ -384,7 +410,7 @@ Each uploaded event is the local event line (`shared/monitor/SPEC.md`
 absolute path, line, function), provider class, the model requested / resolved / used, mode, the
 shadow-routing winner and whether it was reachable, route status, the
 prompt's classification (category, subcategory, confidence), the taxonomy
-version, token counts (including the prompt-cache usage below), the
+version, the router that classified it (`router`, e.g. `h4-he-en@1.0.0`), token counts (including the prompt-cache usage below), the
 estimated costs (at the model used, at the winner, at the anchor), latency,
 stream flag, the error status and class,
 a keyed hash of the routing text (HMAC-SHA256 of its sha256 with a secret

@@ -35,8 +35,18 @@ export { OpenRouterIntegration, MODEL_ID_TO_OPENROUTER } from './integrations/in
 export type { OpenRouterResponse, OpenRouterChatOptions } from './integrations/index.js';
 
 // Configuration
-export { createDefaultConfig, DEFAULT_DATA_DIR, DEFAULT_EMBEDDING_MODEL } from './config.js';
-export type { TryaiiDreConfig, CacheConfig } from './config.js';
+export {
+  createDefaultConfig,
+  DEFAULT_DATA_DIR,
+  DEFAULT_EMBEDDING_MODEL,
+  DEFAULT_ROUTER,
+  ROUTER_ENV,
+  ROUTER_H4,
+  ROUTER_MINILM,
+  normalizeRouter,
+  usesH4,
+} from './config.js';
+export type { TryaiiDreConfig, CacheConfig, RouterChoice } from './config.js';
 
 // Registry
 export {
@@ -88,18 +98,26 @@ export {
 export { BaseClassifier, emptyClassificationResult, topBenchmarks } from './classifiers/base.js';
 export type { ClassificationResult } from './classifiers/base.js';
 export { EmbeddingClassifier } from './classifiers/embedding.js';
+export { HeadClassifier, RouterHead } from './classifiers/head.js';
 
 // Embeddings
 export { BaseEmbeddingProvider } from './embeddings/base.js';
 export { LocalEmbeddingProvider } from './embeddings/local.js';
 export { OnnxEmbeddingProvider } from './embeddings/onnx.js';
 export { WordPieceTokenizer } from './embeddings/wordpiece.js';
+export { StaticEmbeddingProvider } from './embeddings/static.js';
+export { UnigramTokenizer } from './embeddings/unigram.js';
 export {
   DEFAULT_ONNX_MODEL,
+  DEFAULT_ROUTER_MODEL,
   ENV_MODEL_PATH,
+  ENV_ROUTER_MODEL_PATH,
   MODELS as EMBEDDING_MODELS,
+  ROUTERS,
   ModelUnavailableError,
+  RouterUnavailableError,
   resolveModelPath,
+  resolveRouterDir,
 } from './embeddings/modelStore.js';
 
 // Centroids

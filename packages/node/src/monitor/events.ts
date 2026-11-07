@@ -405,6 +405,20 @@ export function classificationFromWire(cls: unknown): Classification | null {
   };
 }
 
+/** "<id>@<version>": e.g. "h4-he-en@1.0.0", "minilm@all-MiniLM-L6-v2-onnx-int8". */
+const ROUTER_TAG = /^[^@\s]+@[^@\s]+$/;
+
+/**
+ * The router that classified the prompt ("<id>@<version>", SPEC.md §3.1) from a
+ * daemon classification or a ClassificationResult-like object; null when it
+ * is missing or malformed (no routing, an older daemon).
+ */
+export function routerFromWire(cls: unknown): string | null {
+  if (cls === null || cls === undefined || typeof cls !== 'object') return null;
+  const tag = (cls as Record<string, unknown>).router;
+  return typeof tag === 'string' && ROUTER_TAG.test(tag) ? tag : null;
+}
+
 export interface EventFields {
   ts: string;
   app: string;
@@ -431,6 +445,11 @@ export interface EventFields {
   /** Defaults to a fresh uuid4. */
   event_id?: string | null;
   taxonomy_version?: string | null;
+  /**
+   * SPEC.md §3.1: the router that classified this call's prompt ("<id>@<version>");
+   * the key follows `taxonomy_version` and is left out when null (no routing).
+   */
+  router?: string | null;
   /** The usage priced at the anchor (equal to est_cost_usd when nothing was swapped). */
   est_cost_anchor_usd?: number | null;
   /** API.md v1.4: the last key, present only when the call ran the runtime cache lint. */
@@ -468,6 +487,9 @@ export function buildEvent(f: EventFields): Record<string, unknown> {
     route_status: f.route_status,
     classification: f.classification,
     taxonomy_version: f.taxonomy_version ?? null,
+  };
+  if (typeof f.router === 'string' && ROUTER_TAG.test(f.router)) event.router = f.router;
+  Object.assign(event, {
     usage: normalizeUsage(f.usage),
     cache_ttl_policy: normalizeCacheTtlPolicy(f.cache_ttl_policy),
     est_cost_usd: roundCost(f.est_cost_usd),
@@ -478,7 +500,7 @@ export function buildEvent(f: EventFields): Record<string, unknown> {
     error: f.error,
     prompt_hash: f.prompt_hash,
     vector: Boolean(f.vector),
-  };
+  });
   if (f.otel !== null && f.otel !== undefined) {
     const otel: Record<string, unknown> = { trace_id: f.otel.trace_id, span_id: f.otel.span_id };
     if (f.otel.origin !== undefined && f.otel.origin !== null) otel.origin = f.otel.origin;

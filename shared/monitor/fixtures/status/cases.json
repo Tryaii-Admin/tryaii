@@ -23,6 +23,7 @@
         "upload": {
           "state": "off",
           "events": 0,
+          "pending": 0,
           "last_ok": null,
           "last_error": null
         },
@@ -143,6 +144,7 @@
         "upload": {
           "state": "off",
           "events": 0,
+          "pending": 0,
           "last_ok": null,
           "last_error": null
         },
@@ -266,6 +268,7 @@
         "upload": {
           "state": "off",
           "events": 0,
+          "pending": 0,
           "last_ok": null,
           "last_error": null
         },
@@ -386,6 +389,7 @@
         "upload": {
           "state": "off",
           "events": 0,
+          "pending": 0,
           "last_ok": null,
           "last_error": null
         },
@@ -493,6 +497,7 @@
         "upload": {
           "state": "off",
           "events": 0,
+          "pending": 0,
           "last_ok": null,
           "last_error": null
         },
@@ -532,6 +537,7 @@
         "upload": {
           "state": "ok",
           "events": 2,
+          "pending": 1,
           "last_ok": "2026-10-12T08:25:00.000Z",
           "last_error": null
         },
@@ -653,6 +659,7 @@
         "upload": {
           "state": "error",
           "events": 0,
+          "pending": 0,
           "last_ok": null,
           "last_error": "http 503"
         },
@@ -692,6 +699,7 @@
         "upload": {
           "state": "off",
           "events": 0,
+          "pending": 0,
           "last_ok": null,
           "last_error": null
         },
@@ -788,6 +796,7 @@
         "upload": {
           "state": "off",
           "events": 0,
+          "pending": 0,
           "last_ok": null,
           "last_error": null
         },

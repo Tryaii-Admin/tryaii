@@ -36,6 +36,8 @@ export interface RouterLike {
   route(prompt: string, opts?: RouteOptions): Promise<RouteResult>;
   /** The prompt's embedding vector; needed for `includeEmbedding` requests. */
   embedPrompt?(prompt: string): Promise<number[]>;
+  /** The model that classifies prompts (labels the embedding). */
+  readonly routerId?: string;
 }
 
 export interface ServeOptions {
@@ -83,6 +85,7 @@ function serializeClassification(
     cacheHit: classification.cacheHit,
     processingTimeMs: classification.processingTimeMs,
     difficulty: classification.difficulty ?? 0,
+    router: classification.router ?? null,
   };
 }
 
@@ -147,6 +150,7 @@ async function handle(
         runtime: state.runtime,
         version: state.version,
         embeddingModel: state.embeddingModel,
+        router: state.router,
         catalog: state.catalog,
         pid: state.pid,
         uptimeMs: Date.now() - state.startedAtMs,
@@ -184,7 +188,13 @@ async function handle(
       const payload = serializeRouteResult(result);
       if (includeEmbedding) {
         if (!router.embedPrompt) return { ok: false, error: 'daemon router cannot embed' };
-        payload.embedding = serializeEmbedding(await router.embedPrompt(prompt), state.embeddingModel);
+        // The vector's own model: h4-he-en (256-d) under H4, else the
+        // embedding model.
+        const model = router.routerId;
+        payload.embedding = serializeEmbedding(
+          await router.embedPrompt(prompt),
+          typeof model === 'string' && model ? model : state.embeddingModel,
+        );
       }
       return { ok: true, result: payload };
     }
@@ -211,12 +221,12 @@ export async function serve(
   let router = opts.router;
   if (!router) {
     const real = new Router({
-      config: { embeddingModel: cfg.embeddingModel, dataDir: cfg.dataDir },
+      config: { embeddingModel: cfg.embeddingModel, dataDir: cfg.dataDir, router: cfg.router },
       bundle,
       // The CLI sends the allowed model ids per request (allowedModels).
       policy: null,
     });
-    log(`[daemon] loading embedding model '${cfg.embeddingModel}' (one-time)...`);
+    log(`[daemon] loading router '${cfg.router}' (embedding model '${cfg.embeddingModel}') (one-time)...`);
     const started = Date.now();
     await real.route('warmup', { topK: 1 });
     log(`[daemon] model warm in ${((Date.now() - started) / 1000).toFixed(1)}s`);
@@ -306,6 +316,8 @@ export async function serve(
         runtime: RUNTIME,
         version: version(),
         embeddingModel: cfg.embeddingModel,
+        // The requested router; a client reuses only a matching daemon.
+        router: cfg.router,
         catalog: catalogKey(bundle),
         host: addr.address,
         port: addr.port,

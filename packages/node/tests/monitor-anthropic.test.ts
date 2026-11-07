@@ -259,7 +259,8 @@ describe('create', () => {
     expect(event.error).toBeNull();
     const site = event.call_site as Record<string, unknown>;
     expect(String(site.file).replace(/\\/g, '/')).toMatch(/monitor-anthropic\.test\.ts$/);
-    expect(routed).toEqual([`${SYSTEM}\n\n${MESSAGES[0].content}`]);
+    // The top-level system is not routed (H4: last user message only).
+    expect(routed).toEqual([MESSAGES[0].content]);
   });
 
   it('never swaps the model in dynamic or managed mode', async () => {

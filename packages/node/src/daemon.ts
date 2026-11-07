@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 
 import { CatalogBundle, loadBundle, starterBundle } from './catalog/bundle.js';
 import { fullDir } from './catalog/client.js';
-import type { TryaiiDreConfig } from './config.js';
+import { ROUTER_ENV, normalizeRouter, type TryaiiDreConfig } from './config.js';
 import type { ClassificationResult } from './classifiers/base.js';
 import type { RouteResult } from './router.js';
 import type { ModelScore } from './scoring/engine.js';
@@ -43,6 +43,12 @@ export interface DaemonState {
   runtime: string;
   version: string;
   embeddingModel: string;
+  /**
+   * The requested router ("h4" | "minilm"); a client reuses only a daemon
+   * whose router matches its own TRYAII_ROUTER. Absent on a daemon from
+   * before H4 (it routes with MiniLM).
+   */
+  router?: string;
   /** "<kind>:<version>" of the catalog the daemon routes on. */
   catalog?: string;
   host: string;
@@ -255,6 +261,10 @@ export async function liveState(
   if (!state) return null;
   if (state.runtime !== RUNTIME) return null;
   if (state.embeddingModel !== config.embeddingModel) return null;
+  // Daemons from before H4 carry no "router": they route with MiniLM.
+  if ((state.router ?? 'minilm') !== (config.router ?? normalizeRouter(process.env[ROUTER_ENV]))) {
+    return null;
+  }
   if (catalog !== undefined && state.catalog !== catalog) return null;
   try {
     const resp = await request(state, { cmd: 'ping' }, 5000);
@@ -321,6 +331,7 @@ function spawnServe(config: TryaiiDreConfig, catalogSpecValue = 'starter'): Chil
       env: {
         ...process.env,
         TRYAII_DRE_EMBEDDING_MODEL: config.embeddingModel,
+        [ROUTER_ENV]: config.router ?? normalizeRouter(process.env[ROUTER_ENV]),
         TRYAII_DRE_DATA_DIR: config.dataDir,
         [CATALOG_ENV]: catalogSpecValue,
         TRYAII_NO_DAEMON: '1',
@@ -498,6 +509,8 @@ export function deserializeRouteResult(data: SerializedResult): RouteResult {
         cacheHit: cls.cacheHit,
         processingTimeMs: cls.processingTimeMs,
         difficulty: cls.difficulty,
+        // Daemons from before this field send none: unknown.
+        router: typeof cls.router === 'string' && cls.router ? cls.router : null,
       }
     : null;
 

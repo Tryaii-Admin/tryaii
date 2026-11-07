@@ -1,7 +1,10 @@
 /**
- * The in-process routing engine of the Node monitor (TS-253): the int8 ONNX
- * embedding model on onnxruntime-node, a Router over the catalog bundle with
- * that model's own centroids, in this process -- no Python, no daemon.
+ * The in-process routing engine of the Node monitor (TS-253): a Router over
+ * the catalog bundle, in this process -- no Python, no daemon. Since H4 it
+ * routes with the H4 router (`tryaii-router-h4`: a static model + head, pure
+ * TypeScript) when `TRYAII_ROUTER` is `h4` (the default) and its payload
+ * loads; otherwise with the int8 ONNX embedding model on onnxruntime-node and
+ * that model's own centroids (the MiniLM fallback, as the Python SDK).
  *
  * It answers in the daemon's wire shape (`serializeRouteResult` +
  * `serializeEmbedding`), so the transport handles its results exactly like
@@ -12,8 +15,12 @@
  */
 
 import type { CatalogBundle } from '../catalog/bundle.js';
-import type { TryaiiDreConfig } from '../config.js';
-import { DEFAULT_ONNX_MODEL, ModelUnavailableError } from '../embeddings/modelStore.js';
+import { usesH4, type TryaiiDreConfig } from '../config.js';
+import {
+  DEFAULT_ONNX_MODEL,
+  DEFAULT_ROUTER_MODEL,
+  ModelUnavailableError,
+} from '../embeddings/modelStore.js';
 import { OnnxEmbeddingProvider } from '../embeddings/onnx.js';
 import type { Router } from '../router.js';
 import { DEFAULT_PRIORITIES } from '../scoring/priorities.js';
@@ -37,7 +44,9 @@ export class InProcessEngine {
   /**
    * Build and warm the engine (loads the model, the centroids and the
    * difficulty exemplars). `{engine}` on success, `{reason}` otherwise;
-   * never throws.
+   * never throws. H4 first when it applies (`modelId` is then the MiniLM
+   * fallback); its unavailability is recorded in router-model.json by the
+   * Router's selection.
    */
   static async create(
     config: TryaiiDreConfig,
@@ -45,6 +54,24 @@ export class InProcessEngine {
     topK: number,
     modelId: string = DEFAULT_ONNX_MODEL,
   ): Promise<{ engine: InProcessEngine | null; reason: string | null }> {
+    if (usesH4({ router: config.router, embeddingModel: modelId })) {
+      try {
+        const { Router } = await import('../router.js');
+        const router = new Router({
+          config: { ...config, embeddingModel: modelId },
+          bundle,
+          policy: null,
+        });
+        // Builds the classifier: H4, or (missing / broken payload, or a
+        // catalog without its classes) the MiniLM centroid path below.
+        if (router.routerId === DEFAULT_ROUTER_MODEL) {
+          await router.route('warmup', { priorities: DEFAULT_PRIORITIES, topK: 1 });
+          return { engine: new InProcessEngine(router, DEFAULT_ROUTER_MODEL, topK), reason: null };
+        }
+      } catch {
+        /* fall back to MiniLM */
+      }
+    }
     try {
       const provider = new OnnxEmbeddingProvider(modelId);
       await provider.init();

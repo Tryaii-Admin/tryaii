@@ -1,0 +1,22 @@
+{
+  "name": "tryaii-router-h4",
+  "version": "1.0.0",
+  "description": "The prompt router of the tryaii SDK: H4, a Hebrew + English static embedding model with a classification head.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": { "types": "./index.d.ts", "default": "./index.js" },
+    "./vectors.safetensors": "./vectors.safetensors",
+    "./head.safetensors": "./head.safetensors",
+    "./tokenizer.json": "./tokenizer.json",
+    "./classes.json": "./classes.json",
+    "./meta.json": "./meta.json",
+    "./SHA256SUMS": "./SHA256SUMS",
+    "./package.json": "./package.json"
+  },
+  "files": ["index.js", "index.d.ts", "vectors.safetensors", "head.safetensors", "tokenizer.json", "classes.json", "meta.json", "SHA256SUMS", "README.md"],
+  "repository": { "type": "git", "url": "git+https://github.com/Tryaii-Admin/tryaii.git", "directory": "packages/router-h4-model" },
+  "homepage": "https://github.com/Tryaii-Admin/tryaii"
+}

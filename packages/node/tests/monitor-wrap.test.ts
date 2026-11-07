@@ -305,8 +305,47 @@ describe('off', () => {
       expect(event.route_status).toBe(status);
       expect(event.winner).toBeNull();
       expect(event.est_cost_usd).toBe(0.002);
+      expect('router' in event).toBe(false); // no routing: the key is left out
     }
   });
+
+  const FORBIDDEN_KEYS = new Set(['prompt', 'messages', 'response', 'content', 'text', 'raw']);
+  const keysDeep = (value: unknown): string[] => {
+    if (Array.isArray(value)) return value.flatMap(keysDeep);
+    if (value !== null && typeof value === 'object') {
+      return Object.entries(value).flatMap(([k, v]) => [k, ...keysDeep(v)]);
+    }
+    return [];
+  };
+
+  for (const tag of ['h4-he-en@1.0.0', 'minilm@all-MiniLM-L6-v2-onnx-int8']) {
+    it(`records the router identity ${tag} after taxonomy_version`, async () => {
+      const client = new FakeClient();
+      const routeFn = (): RouteFnResult => [SCORES_MINI_WINS, { ...CLASSIFICATION, router: tag }, EMBEDDING];
+      const monitor = wrap(client, { app: 'shop', routeFn });
+      await call(client, { model: 'gpt-5.5', messages: MESSAGES });
+      await monitor.drain();
+      const [event] = eventsOf(monitor);
+      const keys = Object.keys(event);
+      expect(keys[keys.indexOf('taxonomy_version') + 1]).toBe('router');
+      expect(event.router).toBe(tag);
+      // The server rejects the whole batch on these names and a non-bool vector.
+      expect(keysDeep(event).filter((k) => FORBIDDEN_KEYS.has(k))).toEqual([]);
+      expect(event.vector).toBe(true);
+    });
+  }
+
+  for (const bad of [null, '', 'h4-he-en', 'a@b@c', 7, ['h4-he-en@1.0.0']]) {
+    it(`leaves out a missing or malformed router (${JSON.stringify(bad)})`, async () => {
+      const client = new FakeClient();
+      const routeFn = (): RouteFnResult => [SCORES_MINI_WINS, { ...CLASSIFICATION, router: bad }, EMBEDDING];
+      const monitor = wrap(client, { app: 'shop', routeFn });
+      await call(client, { model: 'gpt-5.5', messages: MESSAGES });
+      await monitor.drain();
+      const [event] = eventsOf(monitor);
+      expect('router' in event).toBe(false);
+    });
+  }
 });
 
 // --- dynamic ----------------------------------------------------------------

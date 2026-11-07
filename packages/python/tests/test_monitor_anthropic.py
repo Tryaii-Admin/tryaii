@@ -316,7 +316,8 @@ def test_off_records_event_without_touching_the_call():
     assert event["stream"] is False and event["error"] is None
     assert event["call_site"]["file"].endswith("test_monitor_anthropic.py")
     assert event["call_site"]["function"] == "call"
-    assert routed == [SYSTEM + "\n\n" + MESSAGES[0]["content"]]
+    # The top-level system is not routed (H4: last user message only).
+    assert routed == [MESSAGES[0]["content"]]
     assert event["vector"] is True
 
 

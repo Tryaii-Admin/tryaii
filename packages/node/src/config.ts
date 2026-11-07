@@ -16,6 +16,68 @@ export const DEFAULT_EMBEDDING_MODEL = 'all-MiniLM-L6-v2';
 /** Default embedding dimension for all-MiniLM-L6-v2. */
 export const DEFAULT_EMBEDDING_DIMENSION = 384;
 
+/** The int8 ONNX MiniLM (the monitor's in-process MiniLM; modelStore.ts). */
+const ONNX_MINILM_MODEL = 'all-MiniLM-L6-v2-onnx-int8';
+
+/**
+ * Which router classifies prompts (TRYAII_ROUTER): "h4" (default) -- the H4
+ * static model + classification head (package tryaii-router-h4), Hebrew and
+ * English; "minilm" -- the embedding model above against catalog centroids.
+ * H4 falls back to MiniLM by itself when its package is missing or broken,
+ * and applies only while embeddingModel is a default MiniLM (a custom
+ * embedding model or provider means centroid routing). Same values as the
+ * Python SDK's TryaiiDreConfig.router.
+ */
+export const ROUTER_ENV = 'TRYAII_ROUTER';
+export const ROUTER_H4 = 'h4';
+export const ROUTER_MINILM = 'minilm';
+export type RouterChoice = typeof ROUTER_H4 | typeof ROUTER_MINILM;
+export const DEFAULT_ROUTER: RouterChoice = ROUTER_H4;
+
+const ROUTER_ALIASES: Record<string, RouterChoice> = {
+  h4: ROUTER_H4,
+  'h4-he-en': ROUTER_H4,
+  minilm: ROUTER_MINILM,
+  embedding: ROUTER_MINILM,
+  centroids: ROUTER_MINILM,
+  [ONNX_MINILM_MODEL.toLowerCase()]: ROUTER_MINILM,
+};
+
+const warnedRouterValues = new Set<string>();
+
+/**
+ * "h4" or "minilm" for a TRYAII_ROUTER value; empty -> the default; anything
+ * unknown -> the default, with a warning (once per value per process).
+ */
+export function normalizeRouter(value: string | null | undefined): RouterChoice {
+  const raw = (value ?? '').trim().toLowerCase();
+  if (!raw) return DEFAULT_ROUTER;
+  const router = ROUTER_ALIASES[raw];
+  if (router === undefined) {
+    if (!warnedRouterValues.has(raw)) {
+      warnedRouterValues.add(raw);
+      process.stderr.write(
+        `tryaii: ${ROUTER_ENV}=${JSON.stringify(value)} is not a known router (h4, minilm); using ${DEFAULT_ROUTER}\n`,
+      );
+    }
+    return DEFAULT_ROUTER;
+  }
+  return router;
+}
+
+/**
+ * True when H4 is the requested router and applies: the default MiniLM
+ * embedding model (the Router's `all-MiniLM-L6-v2` or the monitor's int8
+ * ONNX copy), as Python's `TryaiiDreConfig.uses_h4`.
+ */
+export function usesH4(config: Pick<TryaiiDreConfig, 'router' | 'embeddingModel'>): boolean {
+  const router = config.router ?? normalizeRouter(process.env[ROUTER_ENV]);
+  return (
+    router === ROUTER_H4 &&
+    (config.embeddingModel === DEFAULT_EMBEDDING_MODEL || config.embeddingModel === ONNX_MINILM_MODEL)
+  );
+}
+
 /** Cache configuration. */
 export interface CacheConfig {
   /** Max number of cached embedding vectors. */
@@ -49,6 +111,12 @@ export interface TryaiiDreConfig {
 
   /** OpenRouter API key (only needed for active routing integration). */
   openrouterApiKey: string | undefined;
+
+  /**
+   * The router: "h4" (default) or "minilm" -- see ROUTER_ENV. Default:
+   * TRYAII_ROUTER, else "h4".
+   */
+  router?: RouterChoice;
 }
 
 /** Create a TryaiiDreConfig with safe defaults. */
@@ -65,6 +133,7 @@ export function createDefaultConfig(overrides?: Partial<TryaiiDreConfig>): Tryai
     openaiApiKey: undefined,
     openrouterApiKey: undefined,
     ...overrides,
+    router: normalizeRouter(overrides?.router ?? process.env[ROUTER_ENV]),
   };
 }
 

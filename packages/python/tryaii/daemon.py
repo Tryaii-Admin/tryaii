@@ -200,6 +200,9 @@ def _live_state(config, catalog: Optional[str] = None) -> Optional[dict]:
         return None
     if state.get("embeddingModel") != config.embedding_model:
         return None
+    # Daemons from before H4 carry no "router": they route with MiniLM.
+    if state.get("router", "minilm") != getattr(config, "router", "minilm"):
+        return None
     if catalog is not None and state.get("catalog") != catalog:
         return None
     try:
@@ -266,6 +269,7 @@ def _spawn_serve(config, catalog_spec_value: str = "starter") -> subprocess.Pope
     args = [sys.executable, "-m", "tryaii.server"]
     env = os.environ.copy()
     env["TRYAII_DRE_EMBEDDING_MODEL"] = config.embedding_model
+    env["TRYAII_ROUTER"] = config.router
     env["TRYAII_DRE_DATA_DIR"] = str(config.data_dir)
     env[CATALOG_ENV] = catalog_spec_value
     # The serve process must never try to start a daemon of its own.
@@ -440,6 +444,9 @@ def _deserialize_route_result(data: dict):
             cache_hit=cls.get("cacheHit", False),
             processing_time_ms=cls.get("processingTimeMs", 0.0),
             difficulty=cls.get("difficulty", 0.0),
+            # Daemons from before this field send none: unknown.
+            router=cls.get("router") if isinstance(cls.get("router"), str) and cls.get("router")
+            else None,
         )
 
     pr = data.get("priorities") or {}

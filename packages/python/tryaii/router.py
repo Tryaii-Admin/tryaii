@@ -12,6 +12,7 @@ Usage:
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import threading
 from collections.abc import Collection
@@ -94,8 +95,13 @@ class Router:
         registry: Model registry. If None, the catalog bundle's models.
         benchmark_registry: Benchmark definitions. If None, the catalog
                             bundle's benchmarks.
-        embedding_provider: Custom embedding provider. If None, uses local
-                           sentence-transformers (all-MiniLM-L6-v2).
+        embedding_provider: Custom embedding provider. If None, the router
+                           is H4 (``TRYAII_ROUTER``, default ``h4``): a static
+                           model + classification head, no centroids; with
+                           ``TRYAII_ROUTER=minilm``, or when the H4 package
+                           is missing or broken, the local ONNX MiniLM
+                           against catalog centroids. A custom provider
+                           always means centroid routing.
         bundle: The catalog bundle to route on (a CatalogBundle or a bundle
                 directory). If None, the default catalog -- see
                 :func:`tryaii.catalog.resolve_bundle`. Models, benchmark
@@ -159,7 +165,7 @@ class Router:
 
         # Embedding provider (lazy -- only initialized when needed)
         self._embedding_provider = embedding_provider
-        self._classifier: Optional[EmbeddingClassifier] = None
+        self._classifier = None  # EmbeddingClassifier or HeadClassifier
         # The live centroid loader, shared between the classifier and
         # add_benchmark so mutations are visible to classification.
         self._centroid_loader: Optional[CentroidLoader] = None
@@ -167,8 +173,10 @@ class Router:
         # workers don't each build a classifier / load the model.
         self._classifier_lock = threading.Lock()
 
-    def _ensure_classifier(self) -> EmbeddingClassifier:
-        """Lazy-initialize the embedding classifier on first use."""
+    def _ensure_classifier(self):
+        """Lazy-initialize the classifier on first use: H4 when it applies and
+        loads (see :mod:`tryaii.classifiers.selection`), else the embedding
+        classifier on centroids."""
         # Double-checked locking: fast path without the lock, then re-check
         # under the lock so only one thread builds the classifier.
         if self._classifier is not None:
@@ -177,6 +185,14 @@ class Router:
         with self._classifier_lock:
             if self._classifier is not None:
                 return self._classifier
+
+            if self._embedding_provider is None and self._config.uses_h4:
+                from tryaii.classifiers.selection import load_h4_classifier
+
+                head = load_h4_classifier(self._config, self._bundle, log=logger)
+                if head is not None:
+                    self._classifier = head
+                    return head
 
             # Initialize embedding provider
             if self._embedding_provider is None:
@@ -236,6 +252,9 @@ class Router:
         # 1. Classify the prompt
         classifier = self._ensure_classifier()
         classification = classifier.classify(prompt)
+        if isinstance(classification, ClassificationResult):
+            # A copy: the classifier may hand back its cached object.
+            classification = dataclasses.replace(classification, router=self.router_tag)
 
         # 2. Get available models (with optional filters)
         models = self._registry.all_models
@@ -286,6 +305,33 @@ class Router:
             classification=classification,
             priorities=priorities,
         )
+
+    @property
+    def router_id(self) -> str:
+        """The model that classifies prompts: ``h4-he-en`` for H4, else the
+        embedding model id (loads the classifier)."""
+        classifier = self._ensure_classifier()
+        if isinstance(classifier, EmbeddingClassifier):
+            return self._embedding_provider.model_name
+        return classifier.model_id
+
+    @property
+    def router_tag(self) -> Optional[str]:
+        """The router that classifies prompts as ``"<id>@<version>"``:
+        ``h4-he-en@<meta.json version>`` for H4 (the loaded payload, not the
+        config), ``minilm@<embedding model id>`` for the MiniLM centroids
+        path; None when neither applies. Recorded on monitor events."""
+        from tryaii.classifiers.head import HeadClassifier
+
+        classifier = self._ensure_classifier()
+        if isinstance(classifier, HeadClassifier):
+            version = classifier.provider.meta.get("version")
+            version = version if isinstance(version, str) and version else "unknown"
+            return f"{classifier.model_id}@{version}"
+        if isinstance(classifier, EmbeddingClassifier):
+            model = getattr(self._embedding_provider, "model_name", None)
+            return f"minilm@{model}" if isinstance(model, str) and model else None
+        return None
 
     @property
     def policy(self) -> ModelPolicy:
@@ -354,6 +400,13 @@ class Router:
         if self._classifier is not None and self._centroid_loader is not None:
             self._centroid_loader.add_benchmark_centroid(name, queries)
             self._classifier._classification_cache.clear()
+        elif not isinstance(self._classifier, EmbeddingClassifier) and (
+                self._classifier is not None
+                or (self._embedding_provider is None and self._config.uses_h4)):
+            # The H4 head has a fixed set of classes: a custom benchmark gets
+            # no score from it (route with TRYAII_ROUTER=minilm to use one).
+            logger.warning("custom benchmark %s is not scored by the H4 router; "
+                           "set TRYAII_ROUTER=minilm to route on custom benchmarks", name)
 
         logger.info(f"Added custom benchmark: {name} ({len(queries)} queries)")
 

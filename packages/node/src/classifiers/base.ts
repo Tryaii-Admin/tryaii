@@ -34,6 +34,21 @@ export interface ClassificationResult {
    * path; undefined when difficulty centroids aren't available (sync path).
    */
   difficulty?: number;
+
+  /**
+   * H4 router only: how many of the head's classes were dropped because their
+   * benchmark is not in the loaded catalog (the rest are renormalised to sum
+   * to 1). Undefined (0) for the embedding classifier.
+   */
+  maskedClasses?: number;
+
+  /**
+   * The router that classified the prompt, as "<id>@<version>": e.g.
+   * "h4-he-en@1.0.0" (the H4 payload's meta.json) or
+   * "minilm@all-MiniLM-L6-v2-onnx-int8" (the MiniLM centroids path). Set by
+   * the Router; null / undefined when unknown (custom classifiers, old daemons).
+   */
+  router?: string | null;
 }
 
 /** Create a default (empty) ClassificationResult. */

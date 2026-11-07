@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 import time
 import urllib.error
 
@@ -54,6 +55,7 @@ class Opener:
         path = urlparse(request.full_url).path
         self.calls.append({"method": request.get_method(), "path": path,
                            "auth": request.get_header("Authorization"),
+                           "request_id": request.get_header("X-request-id"),
                            "data": request.data, "timeout": timeout})
         queue = self.routes[path]
         answer = queue.pop(0) if len(queue) > 1 else queue[0]
@@ -147,6 +149,9 @@ def test_validates_once_then_uploads_the_unread_lines(tmp_path, monkeypatch):
                       "files": {path.name: path.stat().st_size},
                       "last_ok": "2026-10-12T09:00:00.000Z", "last_error": None}
     assert up.validated == VALID and up.sent_events == 2
+    # SCRUM-227: the batch id doubles as the request id (server logs).
+    assert post["request_id"] == body["batch_id"]
+    assert opener.calls[0]["request_id"] is None  # the key check has none
 
     # At most one batch every 5 s; nothing new afterwards.
     write_events(tmp_path, [event(3)])
@@ -430,7 +435,7 @@ def test_a_held_lock_skips_the_directory(tmp_path):
                                     "/v1/monitor/events": [(202, {})]})
     held = upload._DirLock(tmp_path)
     assert held.acquire()
-    assert up.run_once() == "idle"
+    assert up.run_once() == "locked"  # not "idle": another process is uploading
     assert opener.posts() == []
     held.release()
 
@@ -483,6 +488,155 @@ def test_drain_without_a_thread_is_a_no_op(tmp_path):
     up, opener, _ = make(tmp_path, {"/v1/apps/keys/validate": [(200, VALID)]})
     up.drain(0.1)
     assert opener.calls == []
+
+
+# --- the exit drain (SCRUM-227) ---------------------------------------------------
+
+def sent_ids(opener) -> list:
+    return [e["event_id"][-3:] for c in opener.posts() if c["data"]
+            for e in json.loads(c["data"])["events"]]
+
+
+def end_of_file(directory, path) -> bool:
+    return store.read_upload_cursor(directory)["files"].get(path.name) == path.stat().st_size
+
+
+def started(up):
+    """The background loop running (its first pass waits on the fake clock)."""
+    up.start()
+    return up
+
+
+def test_drain_sends_an_event_added_less_than_5_s_after_an_upload(tmp_path):
+    write_events(tmp_path, [event(1)])
+    up, opener, _ = make(tmp_path, {"/v1/apps/keys/validate": [(200, VALID)],
+                                    "/v1/monitor/events": [(202, {})]})
+    assert up.run_once() == "sent"
+    path = write_events(tmp_path, [event(2)])
+    assert up.run_once() == "wait"  # the 5 s spacing
+    started(up).drain(2.0)
+    assert sent_ids(opener) == ["001", "002"]
+    assert end_of_file(tmp_path, path)
+    assert up._stop.is_set()  # the loop ends after its current pass
+
+
+def test_drain_sends_every_waiting_batch(tmp_path):
+    path = write_events(tmp_path, [event(i) for i in range(600)])
+    up, opener, _ = make(tmp_path, {"/v1/apps/keys/validate": [(200, VALID)],
+                                    "/v1/monitor/events": [(202, {})]})
+    started(up).drain(2.0)
+    assert [len(json.loads(c["data"])["events"]) for c in opener.posts()] == [500, 100]
+    assert end_of_file(tmp_path, path)
+
+
+@pytest.mark.parametrize("answer", [(429, {"error": "rate_limited"}),
+                                    (403, {"error": "upload_disabled"}),
+                                    (503, {}), urllib.error.URLError("down")])
+def test_drain_keeps_the_wait_while_backing_off(tmp_path, answer):
+    directory = app_dir(tmp_path)
+    write_events(directory, [event(1)])
+    up, opener, _ = make(directory, {"/v1/apps/keys/validate": [(200, VALID)],
+                                     "/v1/monitor/events": [answer, (202, {})]})
+    assert up.run_once() == "backoff" and up.backing_off
+    started(up).drain(0.5)
+    assert len(opener.posts()) == 1  # nothing sent early
+    assert store.read_upload_cursor(directory)["files"] == {}
+
+
+def test_backing_off_is_cleared_by_2xx_400_and_413(tmp_path):
+    write_events(tmp_path, [event(i) for i in range(1, 4)])
+    up, _, clock = make(tmp_path, {"/v1/apps/keys/validate": [(200, VALID)],
+                                   "/v1/monitor/events": [
+                                       (429, {}), (202, {}),
+                                       (403, {"error": "upload_disabled"}), (400, {}),
+                                       urllib.error.URLError("down"), (413, {})]})
+    for outcome, backing_off in (("backoff", True), ("sent", False), ("backoff", True),
+                                 ("skipped", False), ("backoff", True), ("skipped", False)):
+        clock.t = max(clock.t, up.next_at)
+        write_events(tmp_path, [event(9)])
+        assert (up.run_once(), up.backing_off) == (outcome, backing_off)
+
+
+class SlowOpener(Opener):
+    """Every POST takes ``delay`` real seconds."""
+
+    def __init__(self, routes, delay):
+        super().__init__(routes)
+        self.delay = delay
+        self.starts = []
+
+    def __call__(self, request, timeout=None):
+        if request.get_method() == "POST":
+            self.starts.append(time.monotonic())
+            time.sleep(self.delay)
+        return super().__call__(request, timeout)
+
+
+def test_drain_never_runs_past_its_deadline(tmp_path):
+    write_events(tmp_path, [event(i) for i in range(1500)])  # 3 batches
+    opener = SlowOpener({"/v1/apps/keys/validate": [(200, VALID)],
+                         "/v1/monitor/events": [(202, {})]}, 0.3)
+    up = upload.Uploader(KEY, BASE, opener=opener, clock=Clock(), version="0.7.0",
+                         validate=False)
+    up.register(tmp_path)
+    up.next_at = float("inf")  # the loop's own pass waits
+    started(up)
+    t0 = time.monotonic()
+    up.drain(0.5)
+    deadline = t0 + 0.5
+    assert time.monotonic() - t0 < 0.5 + 0.2
+    time.sleep(0.8)  # the cut-off worker finishes its POST, then stops
+    assert len(opener.starts) == 2 and all(at < deadline for at in opener.starts)
+
+
+def test_a_background_pass_in_flight_and_the_drain_send_each_line_once(tmp_path):
+    write_events(tmp_path, [event(1)])
+    gate, entered = threading.Event(), threading.Event()
+
+    class GatedOpener(Opener):
+        def __call__(self, request, timeout=None):
+            if request.get_method() == "POST" and not entered.is_set():
+                entered.set()
+                gate.wait(5)
+            return super().__call__(request, timeout)
+
+    opener = GatedOpener({"/v1/apps/keys/validate": [(200, VALID)],
+                          "/v1/monitor/events": [(202, {})]})
+    up = upload.Uploader(KEY, BASE, opener=opener, clock=Clock(), version="0.7.0")
+    up.register(tmp_path)
+    up.start()
+    assert entered.wait(5)  # the loop's POST is in flight
+    path = write_events(tmp_path, [event(2), event(3)])
+    threading.Timer(0.2, gate.set).start()
+    up.drain(2.0)
+    assert sent_ids(opener) == ["001", "002", "003"]
+    assert end_of_file(tmp_path, path)
+
+
+def test_drain_retries_a_directory_locked_by_another_process(tmp_path):
+    path = write_events(tmp_path, [event(1)])
+    up, opener, _ = make(tmp_path, {"/v1/apps/keys/validate": [(200, VALID)],
+                                    "/v1/monitor/events": [(202, {})]})
+    held = upload._DirLock(tmp_path)
+    assert held.acquire()
+    threading.Timer(0.3, held.release).start()
+    started(up).drain(2.0)
+    assert sent_ids(opener) == ["001"] and end_of_file(tmp_path, path)
+
+
+def test_drain_gives_up_on_a_held_lock_at_the_deadline(tmp_path):
+    write_events(tmp_path, [event(1)])
+    up, opener, _ = make(tmp_path, {"/v1/apps/keys/validate": [(200, VALID)],
+                                    "/v1/monitor/events": [(202, {})]})
+    held = upload._DirLock(tmp_path)
+    assert held.acquire()
+    t0 = time.monotonic()
+    started(up).drain(0.4)
+    assert 0.35 < time.monotonic() - t0 < 0.4 + 0.2
+    time.sleep(0.2)
+    held.release()
+    time.sleep(0.2)
+    assert opener.posts() == []  # the worker stopped at the deadline
 
 
 def test_absolute_call_site_path_never_leaves_the_machine(tmp_path):

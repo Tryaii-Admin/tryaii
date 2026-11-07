@@ -10,6 +10,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSy
 import { createHmac } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { performance } from 'node:perf_hooks';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -36,13 +37,18 @@ interface Call {
   method: string;
   path: string;
   auth: string | null;
+  requestId: string | null;
   data: Buffer | null;
+  /** performance.now() when the request started. */
+  at: number;
 }
 
 /** Answers by path; each path's list is served in order (last repeats). */
 class FakeFetch {
   readonly routes: Map<string, Answer[]>;
   readonly calls: Call[] = [];
+  /** Awaited before a POST is answered (a slow or gated server). */
+  beforePost: (() => Promise<void>) | null = null;
   constructor(routes: Record<string, Answer[]>) {
     this.routes = new Map(Object.entries(routes).map(([k, v]) => [k, [...v]]));
   }
@@ -55,8 +61,11 @@ class FakeFetch {
       method: String(init.method),
       path,
       auth: headers.Authorization ?? null,
+      requestId: headers['X-Request-ID'] ?? null,
       data: body === undefined || body === null ? null : Buffer.from(body as Uint8Array),
+      at: performance.now(),
     });
+    if (init.method === 'POST' && this.beforePost) await this.beforePost();
     const queue = this.routes.get(path);
     if (!queue) throw new TypeError('fetch failed');
     const answer = queue.length > 1 ? (queue.shift() as Answer) : queue[0];
@@ -232,6 +241,9 @@ describe('happy path', () => {
     });
     expect(up.validated).toEqual(VALID);
     expect(up.sentEvents).toBe(2);
+    // SCRUM-227: the batch id doubles as the request id (server logs).
+    expect(post.requestId).toBe(body.batch_id);
+    expect(fake.calls[0].requestId).toBeNull(); // the key check has none
 
     // At most one batch every 5 s; nothing new afterwards.
     writeEvents([event(3)]);
@@ -496,7 +508,7 @@ describe('lock and wiring', () => {
     const { up, fake } = make({ '/v1/apps/keys/validate': [[200, VALID]], '/v1/monitor/events': [[202, {}]] });
     const held = new upload.DirLock(dir);
     expect(held.acquire()).toBe(true);
-    expect(await up.runOnce()).toBe('idle');
+    expect(await up.runOnce()).toBe('locked'); // not 'idle': another process is uploading
     expect(fake.posts()).toEqual([]);
     held.release();
   });
@@ -753,5 +765,152 @@ describe('privacy', () => {
     expect(privacy.canShowNotice({})).toBe(false);
     expect(privacy.canShowNotice({ isTTY: true }, { CI: '1' })).toBe(false);
     expect(privacy.canShowNotice({ isTTY: true }, {})).toBe(true);
+  });
+});
+
+// --- the exit drain (SCRUM-227) -------------------------------------------------
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+function sentIds(fake: FakeFetch): string[] {
+  return fake
+    .posts()
+    .flatMap((c) => JSON.parse(String(c.data)).events.map((e: Record<string, unknown>) => String(e.event_id).slice(-3)));
+}
+
+function atEndOfFile(path: string): boolean {
+  return store.readUploadCursor(dir)?.files[path.split(/[\\/]/).pop() as string] === statSync(path).size;
+}
+
+/** The background loop running; its first pass is over (it waits on the fake clock). */
+async function started(up: upload.Uploader): Promise<upload.Uploader> {
+  up.start();
+  await sleep(0);
+  return up;
+}
+
+describe('exit drain', () => {
+  it('sends an event added less than 5 s after an upload', async () => {
+    writeEvents([event(1)]);
+    const { up, fake } = make({ '/v1/apps/keys/validate': [[200, VALID]], '/v1/monitor/events': [[202, {}]] });
+    expect(await up.runOnce()).toBe('sent');
+    const path = writeEvents([event(2)]);
+    expect(await up.runOnce()).toBe('wait'); // the 5 s spacing
+    await (await started(up)).drain(2000);
+    expect(sentIds(fake)).toEqual(['001', '002']);
+    expect(atEndOfFile(path)).toBe(true);
+  });
+
+  it('sends every waiting batch', async () => {
+    const path = writeEvents(Array.from({ length: 600 }, (_, i) => event(i)));
+    const { up, fake } = make({ '/v1/apps/keys/validate': [[200, VALID]], '/v1/monitor/events': [[202, {}]] });
+    await (await started(up)).drain(2000);
+    expect(fake.posts().map((c) => JSON.parse(String(c.data)).events.length)).toEqual([500, 100]);
+    expect(atEndOfFile(path)).toBe(true);
+  });
+
+  const BACKOFFS: [string, Answer][] = [
+    ['429', [429, { error: 'rate_limited' }]],
+    ['403 upload_disabled', [403, { error: 'upload_disabled' }]],
+    ['503', [503, {}]],
+    ['network', new TypeError('down')],
+  ];
+  for (const [name, answer] of BACKOFFS) {
+    it(`keeps the wait while backing off: ${name}`, async () => {
+      writeEvents([event(1)]);
+      const { up, fake } = make({ '/v1/apps/keys/validate': [[200, VALID]], '/v1/monitor/events': [answer, [202, {}]] });
+      expect(await up.runOnce()).toBe('backoff');
+      expect(up.backingOff).toBe(true);
+      await (await started(up)).drain(500);
+      expect(fake.posts().length).toBe(1); // nothing sent early
+      expect(store.readUploadCursor(dir)?.files).toEqual({});
+    });
+  }
+
+  it('backingOff is cleared by 2xx, 400 and 413', async () => {
+    writeEvents([event(1), event(2), event(3)]);
+    const { up, clock } = make({
+      '/v1/apps/keys/validate': [[200, VALID]],
+      '/v1/monitor/events': [
+        [429, {}],
+        [202, {}],
+        [403, { error: 'upload_disabled' }],
+        [400, {}],
+        new TypeError('down'),
+        [413, {}],
+      ],
+    });
+    const expected: [string, boolean][] = [
+      ['backoff', true], ['sent', false], ['backoff', true],
+      ['skipped', false], ['backoff', true], ['skipped', false],
+    ];
+    for (const [outcome, backingOff] of expected) {
+      clock.t = Math.max(clock.t, up.nextAt);
+      writeEvents([event(9)]);
+      expect([await up.runOnce(), up.backingOff]).toEqual([outcome, backingOff]);
+    }
+  });
+
+  it('never runs past its deadline (slow server)', async () => {
+    writeEvents(Array.from({ length: 1500 }, (_, i) => event(i))); // 3 batches
+    const { up, fake } = make({ '/v1/apps/keys/validate': [[200, VALID]], '/v1/monitor/events': [[202, {}]] }, { validate: false });
+    fake.beforePost = () => sleep(300);
+    up.nextAt = Infinity; // the loop's own pass waits
+    await started(up);
+    const t0 = performance.now();
+    await up.drain(500);
+    expect(performance.now() - t0).toBeLessThan(500 + 200);
+    await sleep(800); // the cut-off pass finishes its POST, then stops
+    const starts = fake.posts().map((c) => c.at);
+    expect(starts.length).toBe(2);
+    for (const at of starts) expect(at).toBeLessThan(t0 + 500);
+  });
+
+  it('a background pass in flight and the drain send each line once', async () => {
+    writeEvents([event(1)]);
+    const { up, fake } = make({ '/v1/apps/keys/validate': [[200, VALID]], '/v1/monitor/events': [[202, {}]] });
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fake.beforePost = () => {
+      fake.beforePost = null;
+      return gate;
+    };
+    up.start();
+    for (let i = 0; i < 100 && fake.posts().length === 0; i++) await sleep(5);
+    expect(fake.posts().length).toBe(1); // the loop's POST is in flight
+    const path = writeEvents([event(2), event(3)]);
+    setTimeout(release, 200);
+    await up.drain(2000);
+    expect(sentIds(fake)).toEqual(['001', '002', '003']);
+    expect(atEndOfFile(path)).toBe(true);
+  });
+
+  it('retries a directory locked by another process', async () => {
+    const path = writeEvents([event(1)]);
+    const { up, fake } = make({ '/v1/apps/keys/validate': [[200, VALID]], '/v1/monitor/events': [[202, {}]] });
+    const held = new upload.DirLock(dir);
+    expect(held.acquire()).toBe(true);
+    setTimeout(() => held.release(), 300);
+    await (await started(up)).drain(2000);
+    expect(sentIds(fake)).toEqual(['001']);
+    expect(atEndOfFile(path)).toBe(true);
+  });
+
+  it('gives up on a held lock at the deadline', async () => {
+    writeEvents([event(1)]);
+    const { up, fake } = make({ '/v1/apps/keys/validate': [[200, VALID]], '/v1/monitor/events': [[202, {}]] });
+    const held = new upload.DirLock(dir);
+    expect(held.acquire()).toBe(true);
+    const t0 = performance.now();
+    await (await started(up)).drain(400);
+    const elapsed = performance.now() - t0;
+    expect(elapsed).toBeGreaterThan(350);
+    expect(elapsed).toBeLessThan(400 + 200);
+    await sleep(200);
+    held.release();
+    await sleep(200);
+    expect(fake.posts()).toEqual([]); // the drain passes stopped at the deadline
   });
 });

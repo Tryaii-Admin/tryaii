@@ -21,6 +21,7 @@ on:
     paths:
       - "packages/node/**"
       - "packages/node-model/**"
+      - "packages/router-h4-model/**"
       - "shared/**"
       - ".github/workflows/node-ci.yml"
       # Prose-only changes run nothing...

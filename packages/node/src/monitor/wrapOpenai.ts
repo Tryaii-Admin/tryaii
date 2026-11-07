@@ -40,6 +40,7 @@ import {
   classificationFromWire,
   estimateCost,
   formatTs,
+  routerFromWire,
   usageFromProvider,
   type CallSiteRecord,
   type ErrorRecord,
@@ -693,12 +694,15 @@ export class Monitor {
     let winner: string | null = null;
     let winnerReachable = false;
     let classification = null;
+    let router: string | null = null;
     if (outcomeOk(o)) {
       winner = pickWinner(o.scores, plan.anchor, registry, plan.policy).winner;
       winnerReachable = reachable(plan.provider, winner, plan.anchor);
       classification = classificationFromWire(o.classification);
+      router = routerFromWire(o.classification);
     } else if (plan.routedOutcome !== null && outcomeOk(plan.routedOutcome)) {
       classification = classificationFromWire(plan.routedOutcome.classification);
+      router = routerFromWire(plan.routedOutcome.classification);
     }
     const usedCatalog = plan.target ?? plan.anchor;
     let embedding: unknown = o.embedding;
@@ -743,6 +747,7 @@ export class Monitor {
       prompt_hash: plan.promptHash,
       vector: vectorWritten,
       taxonomy_version: this.transportRef.taxonomyVersion(),
+      router,
       cache_ttl_policy: plan.cacheTtlPolicy ?? null,
       cache: this.cacheBlock(plan),
       otel: plan.otel ?? null,

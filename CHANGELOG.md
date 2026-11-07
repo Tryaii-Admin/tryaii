@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.9.0 (2026-11-07)
+
+- **Monitor events carry `router`.** Each routed event adds a flat
+  `router` string (`h4-he-en@1.0.0`, or `minilm@<model id>` on the
+  fallback), so the server can tell which router produced class,
+  subclass and confidence (H4: a probability; MiniLM: a cosine). Servers
+  that do not know the field drop it.
+
+- **H4 is the default router (Python and Node).** Prompts are classified
+  by H4 (`h4-he-en`, Hebrew + English): a Model2Vec static model and a
+  classification head from the new `tryaii-router-h4` package (12.9 MB,
+  hash-checked; or `TRYAII_ROUTER_MODEL_PATH`) -- on numpy + `tokenizers`
+  in Python, in plain TypeScript in Node (sync, no native dependency; an
+  optional peer dependency like `tryaii-minilm-int8`). The scoring engine
+  gets softmax(logits / 2) per benchmark, **masked to the loaded catalog**:
+  classes whose benchmark the catalog does not have are dropped and the
+  rest renormalised to sum to 1 (`masked_classes` / `maskedClasses` on the
+  classification says how many; the starter catalog has 15 of the 33).
+  Confidence is the top kept probability. MiniLM on centroids stays as the
+  fallback: `TRYAII_ROUTER=minilm`, automatically when H4 is missing or
+  broken (`tryaii monitor status` shows a `router:` line), and, with a
+  warning, for a catalog that has none of H4's benchmarks. Both SDKs return
+  the same probabilities (shared/router/h4_cases.json, within 1e-6). The
+  monitor routes on the last user message only (SPEC.md §2.1); the prompt
+  hash changes accordingly. Monitor vectors are labelled `h4-he-en`
+  (256-d); daemons record their router and are reused only by clients
+  with the same `TRYAII_ROUTER`.
+
+- **Monitor: the last events of a short script are uploaded at exit.** The
+  exit upload ran one pass, which waited out the 5 s spacing after an
+  earlier upload, so events recorded in a script's last seconds stayed on
+  disk without an error. It now sends every waiting batch within its 2 s
+  limit, keeps the wait after a 429, a 403 `upload_disabled`, a 5xx or a
+  network error, and retries for that time while another process holds the
+  directory's upload lock. Events not sent in time are uploaded by the next
+  run, as before. Each upload carries `X-Request-ID: <batch_id>`. Python and
+  Node.
+
+- **Monitor: `tryaii monitor status` shows events not uploaded yet.** Each
+  app's block adds `  N events not uploaded yet` after the upload line when
+  lines wait after the upload cursor; `--json` adds `upload.pending`.
+  Counted when status runs; `upload.json` is unchanged.
+
 ## 0.8.3 (2026-10-25)
 
 - **Claude Code: task profiles for imported calls.** `connect` uploads the

@@ -33,6 +33,37 @@ DEFAULT_EMBEDDING_DIMENSION = 384
 # (``pip install "tryaii[centroids]"``); still the catalog's primary model.
 FP32_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
+# Which router classifies prompts (TRYAII_ROUTER): "h4" (default) -- the H4
+# static model + classification head (package tryaii-router-h4), Hebrew and
+# English; "minilm" -- the embedding model above against catalog centroids.
+# H4 falls back to MiniLM by itself when its package is missing or broken, and
+# applies only while embedding_model is the default (a custom embedding model
+# or provider means centroid routing).
+ROUTER_ENV = "TRYAII_ROUTER"
+ROUTER_H4 = "h4"
+ROUTER_MINILM = "minilm"
+DEFAULT_ROUTER = ROUTER_H4
+_ROUTER_ALIASES = {
+    "h4": ROUTER_H4, "h4-he-en": ROUTER_H4,
+    "minilm": ROUTER_MINILM, "embedding": ROUTER_MINILM, "centroids": ROUTER_MINILM,
+    # Keys are lower-case: normalize_router lower-cases the value first.
+    DEFAULT_EMBEDDING_MODEL.lower(): ROUTER_MINILM,
+}
+
+
+def normalize_router(value: Optional[str]) -> str:
+    """``"h4"`` or ``"minilm"`` for a TRYAII_ROUTER value; empty -> the
+    default; anything unknown -> the default, with a warning."""
+    raw = (value or "").strip().lower()
+    if not raw:
+        return DEFAULT_ROUTER
+    router = _ROUTER_ALIASES.get(raw)
+    if router is None:
+        logger.warning("%s=%r is not a known router (h4, minilm); using %s",
+                       ROUTER_ENV, value, DEFAULT_ROUTER)
+        return DEFAULT_ROUTER
+    return router
+
 
 @dataclass
 class CacheConfig:
@@ -93,8 +124,20 @@ class TryaiiDreConfig:
         default_factory=lambda: os.environ.get("OPENROUTER_API_KEY")
     )
 
+    # The router: "h4" (default) or "minilm" -- see ROUTER_ENV above.
+    router: str = field(
+        default_factory=lambda: normalize_router(os.environ.get(ROUTER_ENV))
+    )
+
     def __post_init__(self):
         self.data_dir = Path(self.data_dir)
+        self.router = normalize_router(self.router)
+
+    @property
+    def uses_h4(self) -> bool:
+        """True when H4 is the requested router and applies (the default
+        embedding model; see ROUTER_ENV)."""
+        return self.router == ROUTER_H4 and self.embedding_model == DEFAULT_EMBEDDING_MODEL
 
     @property
     def centroids_dir(self) -> Path:

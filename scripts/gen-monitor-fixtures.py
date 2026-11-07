@@ -104,7 +104,8 @@ def _store_upload(name: str) -> tuple:
     from tryaii.monitor import store
 
     cursor = store.read_upload_cursor(_store_dir(name))
-    return cursor, store.uploaded_event_count(_store_dir(name), cursor)
+    return (cursor, store.uploaded_event_count(_store_dir(name), cursor),
+            store.pending_event_count(_store_dir(name), cursor))
 
 
 def _policy_allowed(inp: dict, registry):
@@ -323,11 +324,11 @@ def gen_status(inp):
 
     since = inp.get("since", "24h")
     events = _store_events(inp["store"], inp["now"], window_seconds(since))
-    cursor, uploaded = _store_upload(inp["store"])
+    cursor, uploaded, pending = _store_upload(inp["store"])
     return aggregate(inp.get("app", inp["store"]), events, _store_pins(inp["store"]),
                      _store_config(inp["store"]), inp["now"], since, env=inp.get("env"),
                      remote=_store_remote(inp["store"]), upload_cursor=cursor,
-                     uploaded_events=uploaded)
+                     uploaded_events=uploaded, pending_events=pending)
 
 
 def gen_cache_usage(inp):

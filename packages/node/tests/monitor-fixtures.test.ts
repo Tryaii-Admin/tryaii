@@ -241,6 +241,7 @@ function genStatus(inp: Record<string, any>): unknown {
     store.readRemote(dir),
     cursor,
     store.uploadedEventCount(dir, cursor),
+    store.pendingEventCount(dir, cursor),
   );
 }
 

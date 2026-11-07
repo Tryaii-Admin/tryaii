@@ -7,7 +7,7 @@
  */
 
 import { appendFileSync, closeSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, statSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 import { dataDir, writeFileAtomic } from '../auth/store.js';
 import { emptyConfig, REMOTE_SCHEMA, type ConfigDoc } from './config.js';
@@ -392,6 +392,32 @@ export function uploadedEventCount(directory: string, cursor: UploadCursor | nul
     } catch {
       continue;
     }
+  }
+  return total;
+}
+
+/**
+ * The number of non-blank complete lines of every `events-*.jsonl` after the
+ * cursor's offset: the lines not uploaded yet (a file shorter than its offset
+ * counts from 0, as the uploader restarts it). 0 without a cursor. Computed
+ * when asked; nothing is stored.
+ */
+export function pendingEventCount(directory: string, cursor: UploadCursor | null | undefined): number {
+  if (!cursor) return 0;
+  const files = cursor.files ?? {};
+  let total = 0;
+  for (const path of eventFiles(directory)) {
+    let data: Buffer;
+    try {
+      data = readFileSync(path);
+    } catch {
+      continue;
+    }
+    let offset = files[basename(path)] ?? 0;
+    if (!Number.isInteger(offset) || offset > data.length) offset = 0;
+    const complete = data.subarray(offset, data.lastIndexOf(0x0a) + 1);
+    // Non-blank = any byte other than ASCII whitespace (Python's bytes.strip()).
+    for (const line of complete.toString('latin1').split('\n')) if (/[^ \t\r\n\v\f]/.test(line)) total++;
   }
   return total;
 }

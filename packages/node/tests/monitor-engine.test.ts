@@ -48,6 +48,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  delete process.env.TRYAII_ROUTER;
   modelStore.setPackageLocator(null);
   delete process.env[modelStore.ENV_MODEL_PATH];
   rmSync(dataDir, { recursive: true, force: true });
@@ -57,8 +58,29 @@ function transport(): Transport {
   return new Transport({ embeddingModel: 'x', dataDir } as never);
 }
 
+describe('in-process engine (H4, the default router)', () => {
+  it('routes in this process with H4: classification, ranking, 256-d vector; no daemon', async () => {
+    const ensure = vi.spyOn(daemon, 'ensureDaemon');
+    const t = transport();
+    t.start();
+    await t.drain(60_000);
+    expect(t.inProcess).toBe(true);
+    expect(ensure).not.toHaveBeenCalled();
+    const out = await t.route('Write a Python function that merges two sorted lists.', {
+      includeEmbedding: true,
+    });
+    expect(out.status).toBe('ok');
+    expect((out.classification as { classifierUsed: string }).classifierUsed).toBe('head');
+    expect(out.scores.length).toBeGreaterThan(10);
+    expect(out.embedding?.model).toBe('h4-he-en');
+    expect(out.embedding?.dim).toBe(256);
+    expect(stderr.join('')).toBe('');
+  });
+});
+
 describe.skipIf(!realModel)('in-process engine (real model)', () => {
   it('routes in this process: classification, ranking, embedding; no daemon', async () => {
+    process.env.TRYAII_ROUTER = 'minilm';
     const ensure = vi.spyOn(daemon, 'ensureDaemon');
     const t = transport();
     t.start();

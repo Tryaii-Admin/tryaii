@@ -1,0 +1,5 @@
+# Model weights are binary: never touch line endings.
+*.safetensors binary
+# Hashed byte for byte (SHA256SUMS, the pinned payload sha256): keep LF on every OS.
+*.json text eol=lf
+SHA256SUMS text eol=lf
